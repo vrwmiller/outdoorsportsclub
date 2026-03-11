@@ -151,8 +151,8 @@ The `dev` environment is a separate CloudFormation stack with an `Environment: d
 
 | Setting | `dev` value | `prod` value |
 | :--- | :--- | :--- |
-| Aurora `MinCapacity` | `0.5` | `2` |
-| Aurora `MaxCapacity` | `2` | `16` |
+| Aurora `MinCapacity` | `0.5` | `1` |
+| Aurora `MaxCapacity` | `4` | `16` |
 | S3 Object Lock mode | `GOVERNANCE` | `COMPLIANCE` |
 | S3 Object Lock retention | 7 days | 2557 days (7 years) |
 | Backup Vault Lock | Off | Compliance mode |

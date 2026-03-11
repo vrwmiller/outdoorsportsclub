@@ -190,7 +190,7 @@ The `dev` stack uses the same CloudFormation templates as `prod`, with `Environm
 
 * **Aurora PITR:** 35-day continuous backup window; restore to any second
 * **AWS Backup:** Daily snapshot at 02:00 UTC; 35-day retention; cross-region copy to every region in `RegionList`
-* **AWS Backup Vault Lock:** Compliance mode on all vaults — snapshots cannot be deleted before retention expires
+* **AWS Backup Vault Lock:** Compliance mode on `prod` vaults only — snapshots cannot be deleted before retention expires; Vault Lock is **not** enabled on `dev`
 
 ### The "Red Button" procedure
 
