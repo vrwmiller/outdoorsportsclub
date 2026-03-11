@@ -8,6 +8,7 @@ applyTo: "**"
 
 - Never commit directly to `main` — all changes go on a feature branch
 - Branch names must be descriptive: `feat/<topic>`, `fix/<topic>`, `chore/<topic>`
+- `<topic>` uses only lowercase letters, numbers, and hyphens — never a username, org name, or repo name prefix
 - Open a PR to merge into `main`
 
 ## PR title format
