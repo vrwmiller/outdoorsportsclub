@@ -21,7 +21,7 @@ applyTo: "infra/**/*.yaml, infra/**/*.json, amplify/**/*.ts, amplify/**/*.yaml"
 | **Amazon Route 53** | Latency-based or failover routing across regional API Gateway endpoints |
 | **Amazon SNS** | SMS alerts topic |
 | **Amazon CloudWatch** | Lambda logs, API Gateway access logs |
-| **AWS Backup** | Aurora PITR (35-day) + daily cross-region replication to `us-west-2` |
+| **AWS Backup** | Aurora PITR (35-day) + daily cross-region copy to all regions in `RegionList` |
 
 ## File Layout
 
@@ -166,7 +166,7 @@ Use `!Select [0, !Ref RegionList]` to reference the primary region. Use `Conditi
 
 ```yaml
 Conditions:
-  IsMultiRegion: !Not [!Equals [!Select [1, !Split [",", !Join [",", [!Join [",", !Ref RegionList], ",SENTINEL"]]]], "SENTINEL"]]
+  IsMultiRegion: !Not [!Equals [!Select [1, !Split [",", !Join [",", [!Join [",", !Ref RegionList], "SENTINEL"]]]], "SENTINEL"]]
 ```
 
 Only provision cross-region resources (Aurora Global Database secondary clusters, KMS replica keys, S3 CRR rules, Secrets Manager replicas, Route 53 failover records) when `IsMultiRegion` is true.

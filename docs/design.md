@@ -159,9 +159,9 @@ Each active region runs a complete, independent copy of:
 
 | Phase | Region count | Configuration |
 | :--- | :--- | :--- |
-| Development / staging | 1 (primary only) | `RegionList: [us-east-1]` |
-| Production launch | 1 (primary) | `RegionList: [us-east-1]` |
-| Multi-region active-active | 2+ | `RegionList: [us-east-1, us-west-2]` |
+| Development / staging | 1 (primary only) | `RegionList: us-east-1` |
+| Production launch | 1 (primary) | `RegionList: us-east-1` |
+| Multi-region active-active | 2+ | `RegionList: us-east-1,us-west-2` |
 
 All CloudFormation stacks accept a `RegionList` parameter. Cross-region resources (Aurora Global Database secondary clusters, KMS replica keys, S3 CRR rules, Secrets Manager replicas) are conditionally created: if `RegionList` has only one entry, none of the replication resources are provisioned.
 
@@ -173,7 +173,7 @@ All CloudFormation stacks accept a `RegionList` parameter. Cross-region resource
 
 ### The "Red Button" procedure
 
-In a full primary-region failure with active-active enabled: Route 53 automatically promotes a reader region. In single-region mode: the Webmaster deploys the stack to a new region using the IaC parameters and the latest Aurora Global Database snapshot. Target RTO: under 60 minutes from a cold start.
+In a full primary-region failure with active-active enabled: **Aurora Global Database** fails over and promotes a reader cluster in a secondary region to writer, and **Route 53** updates DNS to route traffic to the healthy regional endpoint. In single-region mode: the **Webmaster** deploys the stack to a new region using the IaC parameters and restores Aurora from **AWS Backup** or an Aurora point-in-time restore/snapshot. Target RTO: under 60 minutes from a cold start.
 
 ## 9. Open Design Questions
 
