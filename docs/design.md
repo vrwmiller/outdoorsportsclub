@@ -161,9 +161,9 @@ Each active region runs a complete, independent copy of:
 
 | Phase | Region count | Configuration |
 | :--- | :--- | :--- |
-| Development / staging | 1 (primary only) | `RegionList: us-east-1` |
+| Dev (`dev` stack, `us-east-1`) | 1 | `RegionList: us-east-1` — separate stack from prod, no PII |
 | Production launch | 1 (primary) | `RegionList: us-east-1` |
-| Multi-region active-active | 2+ | `RegionList: us-east-1,us-west-2` |
+| Multi-region active-active | 2 | `RegionList: us-east-1,us-east-2` — N. Virginia (primary) + Ohio (secondary) |
 
 All CloudFormation stacks accept a `RegionList` parameter. Cross-region resources (Aurora Global Database secondary clusters, KMS replica keys, S3 CRR rules, Secrets Manager replicas) are conditionally created: if `RegionList` has only one entry, none of the replication resources are provisioned.
 
