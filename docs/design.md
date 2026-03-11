@@ -59,7 +59,7 @@ The database utilizes a relational model (PostgreSQL) with **Row-Level Security 
 | `waiver_signed_at` | TIMESTAMP | Used to calculate the 1-year automated expiration. |
 | `dues_paid_until` | DATE | Date-based flag for membership standing. |
 | `home_phone` | TEXT (Nullable) | Home telephone number. |
-| `mobile_phone` | TEXT (Nullable) | Mobile number; used by **Amazon SNS** to deliver SMS range alerts. |
+| `mobile_phone` | TEXT (Nullable) | Mobile number in E.164 format (e.g., `+15551234567`); validated/normalized for **Amazon SNS** delivery of SMS range alerts. |
 
 ### **5.2 Table: `devices` (Kiosks)**
 
