@@ -179,7 +179,7 @@ Parameters:
     Description: >-
       Ordered list of active regions. First entry is the primary (writer) region.
       Add a region here to enable active-active multi-region deployment.
-      Example multi-region value: "us-east-1,us-west-2"
+      Example multi-region value: "us-east-1,us-east-2"
 ```
 
 Use `!Select [0, !Ref RegionList]` to reference the primary region. Use `Conditions` to gate replication resources:
