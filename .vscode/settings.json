@@ -1,0 +1,8 @@
+{
+  "markdownlint.ignore": [
+    "**/LICENSE"
+  ],
+  "files.associations": {
+    "LICENSE": "plaintext"
+  }
+}
