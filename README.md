@@ -24,7 +24,10 @@ A cloud-native membership communication platform for a ~2,200-member outdoor spo
 ## Repository layout
 
 ```
+.github/       Agents, instructions, and workflow config
 docs/          Design docs and architecture diagram
+
+# Planned (to be added during implementation)
 functions/     Python Lambda handlers (one file per endpoint)
 src/           Next.js frontend
 db/migrations/ PostgreSQL migrations
