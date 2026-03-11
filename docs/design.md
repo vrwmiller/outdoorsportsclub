@@ -196,7 +196,36 @@ The `dev` stack uses the same CloudFormation templates as `prod`, with `Environm
 
 In a full primary-region failure with active-active enabled: **Aurora Global Database** fails over and promotes a reader cluster in a secondary region to writer, and **Route 53** updates DNS to route traffic to the healthy regional endpoint. In single-region mode: the **Webmaster** deploys the stack to a new region using the IaC parameters and restores Aurora from **AWS Backup** or an Aurora point-in-time restore/snapshot. Target RTO: under 60 minutes from a cold start.
 
-## 9. Open Design Questions
+## 9. Architecture Decisions — Frontend Framework
+
+**Outdoor Sports Club** uses **Next.js** for the frontend. The short rationale and guidance below explain why Next.js was chosen, why a full Django monolith was not selected, and when each option is appropriate.
+
+Why Next.js was chosen:
+
+* **Developer experience:** First-class TypeScript + React support, component re-use, and fast iteration for UI-focused teams.
+* **Performance & SEO:** Built-in SSR/SSG/ISR options enable fast first paint and SEO for public/member pages.
+* **Global distribution:** Static assets and pre-rendered pages are CDN-friendly via **AWS Amplify Gen 2** hosting and **Amazon CloudFront** with minimal infra overhead.
+* **Incremental adoption:** Pages can be static, client-rendered, or server-rendered as needed without a large rewrite.
+* **Serverless alignment:** Keeps the backend as small Lambda functions while letting the frontend be optimized for the edge/CDN.
+
+Why Django was not chosen:
+
+* **Monolithic pattern:** Django favors a server-rendered, monolithic architecture (templates, ORM, admin) that would couple frontend and backend lifecycle.
+* **Operational weight:** Running a full Django app for a mostly static or CDN-served frontend increases operational complexity compared with static/SSR hosting.
+* **Developer mismatch:** For a team centered on React/TypeScript, Django adds a cross-language integration surface and reduces frontend DX.
+
+When to prefer Next.js:
+
+* Teams focused on React/TypeScript who want component-driven development and CDN-first performance.
+* Sites needing SEO or mixed static/dynamic rendering with simple serverless APIs.
+
+When to prefer Django on other projects:
+
+* For Outdoor Sports Club, the frontend framework is a locked decision: **Next.js** hosted via **AWS Amplify Gen 2** — Django is not an option for this implementation.
+* For other projects, Django may be preferred for a Python-first monolith with deep server-side business logic, complex DB transactions, or where the built-in Django Admin is required for model management.
+* For other projects, Django may also suit teams that prefer a single-language (Python) stack and where server-side rendering is the primary rendering model.
+
+## 10. Open Design Questions
 
 The following are unresolved before implementation begins. Each requires a deliberate decision — do not implement with assumed behaviour.
 
