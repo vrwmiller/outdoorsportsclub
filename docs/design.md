@@ -167,11 +167,30 @@ Each active region runs a complete, independent copy of:
 
 All CloudFormation stacks accept a `RegionList` parameter. Cross-region resources (Aurora Global Database secondary clusters, KMS replica keys, S3 CRR rules, Secrets Manager replicas) are conditionally created: if `RegionList` has only one entry, none of the replication resources are provisioned.
 
+### Non-production environment
+
+The `dev` environment is a **completely separate CloudFormation stack** from `prod`. It shares no AWS resources, no data, and no secrets with production.
+
+**Privacy compliance requirement:** The `dev` database must never contain real member data. This is required for compliance with GDPR (EU) and CCPA (California). All test data must be synthetically generated. If a production data restore is ever needed for debugging, it must be anonymised before import — names, email addresses, phone numbers, and `social_provider_id` values must be replaced with synthetic values.
+
+| Setting | `dev` | `prod` |
+| :--- | :--- | :--- |
+| Aurora min/max ACU | 0.5 / 2 | 2 / 16 |
+| S3 Object Lock mode | Governance (deletable by admin) | Compliance (7-year, locked) |
+| AWS Backup Vault Lock | Off | Compliance mode |
+| Backup retention | 7 days | 35 days |
+| Stripe keys | Test-mode secret (`osc/dev/stripe-key`) | Live-mode secret (`osc/prod/stripe-key`) |
+| Cognito User Pool | Separate pool; no real member accounts | Production pool |
+| `RegionList` | `us-east-1` only | `us-east-1` (or more) |
+| Real PII permitted | **Never** | Yes — protected by RLS and KMS |
+
+The `dev` stack uses the same CloudFormation templates as `prod`, with `Environment: dev` passed as a parameter to select reduced-cost resource tiers and relaxed retention settings.
+
 ### Backup & point-in-time recovery
 
 * **Aurora PITR:** 35-day continuous backup window; restore to any second
 * **AWS Backup:** Daily snapshot at 02:00 UTC; 35-day retention; cross-region copy to every region in `RegionList`
-* **AWS Backup Vault Lock:** Compliance mode on all vaults — snapshots cannot be deleted before retention expires
+* **AWS Backup Vault Lock:** Compliance mode on `prod` vaults only — snapshots cannot be deleted before retention expires; Vault Lock is **not** enabled on `dev`
 
 ### The "Red Button" procedure
 

@@ -116,7 +116,8 @@ CheckInLambdaRole:
 ## S3 — Waiver Bucket
 
 * Enable **S3 Object Lock at bucket creation** — it cannot be enabled after the fact
-* Use Compliance Mode with a 7-year (2557-day) default retention period
+* `prod`: Use **Compliance Mode** with a 7-year (2557-day) default retention period — objects cannot be deleted or shortened
+* `dev`: Use **Governance Mode** with a 7-day default retention period — objects can be deleted by an admin; allows test data cleanup
 * Enable **KMS server-side encryption** (`SSEAlgorithm: aws:kms`) using the `osc-kms-s3-prod` key
 * Block all public access — no public bucket policies, no ACLs
 * Set `DeletionPolicy: Retain` on the bucket resource in CloudFormation
@@ -141,7 +142,26 @@ CheckInLambdaRole:
     * Continuous backup (PITR) on Aurora — 35-day retention window
     * Daily snapshot at 02:00 UTC — 35-day retention in primary region
     * Cross-region copy rule to every region in `RegionList` — 35-day retention
-* Backup vault name: `osc-backup-vault-<env>`; enable AWS Backup Vault Lock in Compliance mode
+* Backup vault name: `osc-backup-vault-<env>`; enable AWS Backup Vault Lock in Compliance mode on `prod` only — do not enable Vault Lock on `dev`
+
+## Non-Production Environment
+
+The `dev` environment is a separate CloudFormation stack with an `Environment: dev` parameter. It uses the same templates as `prod` with reduced-cost, relaxed-retention settings.
+
+**Privacy rule — enforced, not advisory:** The `dev` Aurora cluster must never contain real member PII. This applies to all columns in the `members` table: `email`, `home_phone`, `mobile_phone`, `social_provider_id`, and `member_num`. Required for GDPR and CCPA compliance. Use synthetically generated test data only. If a production snapshot must be used for debugging, anonymise it before import.
+
+| Setting | `dev` value | `prod` value |
+| :--- | :--- | :--- |
+| Aurora `MinCapacity` | `0.5` | `1` |
+| Aurora `MaxCapacity` | `4` | `16` |
+| S3 Object Lock mode | `GOVERNANCE` | `COMPLIANCE` |
+| S3 Object Lock retention | 7 days | 2557 days (7 years) |
+| Backup Vault Lock | Off | Compliance mode |
+| Backup retention | 7 days | 35 days |
+| Stripe secret path | `osc/dev/stripe-key` (test-mode key) | `osc/prod/stripe-key` (live key) |
+| Cognito User Pool | Separate pool — no real member accounts | Production pool |
+
+Naming convention applies: all `dev` resources use the `-dev` suffix (e.g., `osc-aurora-dev`, `osc-backup-vault-dev`).
 
 ## Multi-Region Design
 
