@@ -198,13 +198,13 @@ In a full primary-region failure with active-active enabled: **Aurora Global Dat
 
 ## 9. Architecture Decisions — Frontend Framework
 
-This project uses **Next.js** for the frontend. The short rationale and guidance below explain why Next.js was chosen, why a full Django monolith was not selected, and when each option is appropriate.
+**Outdoor Sports Club** uses **Next.js** for the frontend. The short rationale and guidance below explain why Next.js was chosen, why a full Django monolith was not selected, and when each option is appropriate.
 
 Why Next.js was chosen:
 
 * **Developer experience:** First-class TypeScript + React support, component re-use, and fast iteration for UI-focused teams.
 * **Performance & SEO:** Built-in SSR/SSG/ISR options enable fast first paint and SEO for public/member pages.
-* **Global distribution:** Static assets and pre-rendered pages are CDN-friendly (Amplify/CloudFront) with minimal infra overhead.
+* **Global distribution:** Static assets and pre-rendered pages are CDN-friendly via **AWS Amplify Gen 2** hosting and **Amazon CloudFront** with minimal infra overhead.
 * **Incremental adoption:** Pages can be static, client-rendered, or server-rendered as needed without a large rewrite.
 * **Serverless alignment:** Keeps the backend as small Lambda functions while letting the frontend be optimized for the edge/CDN.
 
@@ -224,7 +224,6 @@ When to prefer Django on other projects:
 * For Outdoor Sports Club, the frontend framework is a locked decision: **Next.js** hosted via **AWS Amplify Gen 2** — Django is not an option for this implementation.
 * For other projects, Django may be preferred for a Python-first monolith with deep server-side business logic, complex DB transactions, or where the built-in Django Admin is required for model management.
 * For other projects, Django may also suit teams that prefer a single-language (Python) stack and where server-side rendering is the primary rendering model.
-
 
 ## 10. Open Design Questions
 
