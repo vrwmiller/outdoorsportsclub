@@ -73,6 +73,13 @@ Why this change is needed — reference the open issue if one exists (`Closes #N
 - [ ] CORS headers are returned on all Lambda responses (including errors)
 - [ ] `training_level` is re-queried from Aurora — not read from the JWT claim
 
+## GitHub tooling
+
+- Use `git` for local branching, commits, and pushing; use the `gh` CLI for GitHub operations such as opening PRs, reading PR comments, checking review status, and managing issues
+- Do **not** use GitKraken, GitLens MCP tools, or any other GUI Git client — `gh` and `git` on the command line are the only approved tools
+- Read PR review comments with: `gh pr view <number> --comments`
+- Read inline code review comments with: `gh api repos/{owner}/{repo}/pulls/<number>/comments`
+
 ## Using the gh CLI
 
 Always use `--body-file` when creating or editing PRs and issues with multi-line descriptions.
