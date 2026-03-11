@@ -116,7 +116,8 @@ CheckInLambdaRole:
 ## S3 — Waiver Bucket
 
 * Enable **S3 Object Lock at bucket creation** — it cannot be enabled after the fact
-* Use Compliance Mode with a 7-year (2557-day) default retention period
+* `prod`: Use **Compliance Mode** with a 7-year (2557-day) default retention period — objects cannot be deleted or shortened
+* `dev`: Use **Governance Mode** with a 7-day default retention period — objects can be deleted by an admin; allows test data cleanup
 * Enable **KMS server-side encryption** (`SSEAlgorithm: aws:kms`) using the `osc-kms-s3-prod` key
 * Block all public access — no public bucket policies, no ACLs
 * Set `DeletionPolicy: Retain` on the bucket resource in CloudFormation
