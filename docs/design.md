@@ -129,11 +129,51 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
 * **`POST /v1/devices/pair`** (**Level 6** **Webmaster** Only)
   * **Logic:** Validates the tablet's **Pairing Code**; promotes device to 'Active' and returns the `device_token`.
 
-## 8. Backup & Disaster Recovery (The "Safe-Keep" Protocol)
+## 8. High Availability, Multi-Region & Disaster Recovery
 
-* **Point-in-Time Recovery (PITR):** **Amazon Aurora** provides continuous backups. The **Webmaster (Level 6)** can restore the database to any specific second within the last 35 days.
-* **Cross-Region Replication:** **AWS Backup** replicates snapshots and S3 objects to a secondary AWS Region (e.g., US-West-2) for 99.999% durability.
-* **The "Red Button" Procedure:** The entire environment is defined via **Infrastructure as Code (IaC)**. In a regional outage, the Webmaster can redeploy the entire stack in a new region using the latest off-site snapshot in under 60 minutes.
+### Design principle: variable region count
+
+The infrastructure is designed from the start to support any number of active regions. Region count is a **deployment-time parameter** — adding or removing a region requires a configuration change, not an architectural change. Initial deployment uses a single primary region. Multi-region active-active is enabled when the system is ready for production.
+
+This principle is especially critical for payment processing: Stripe Terminal transactions must not be lost or duplicated during a regional failure.
+
+### Regional stack
+
+Each active region runs a complete, independent copy of:
+
+* **API Gateway** — regional endpoint (not edge-optimised)
+* **AWS Lambda** — all function code deployed identically per region
+* **Amazon Aurora Serverless v2** — member of a **Global Database** cluster; one writer region, N reader regions; automatic failover promotes a reader to writer in under 60 seconds
+* **Amazon S3** — waiver bucket with **Multi-Region Access Point (MRAP)** and **S3 Cross-Region Replication (CRR)** to all active region buckets; Object Lock preserved across replicas
+* **AWS KMS** — multi-region keys (`mrk-` prefix) replicated to each active region; same key material, independent key ARNs per region
+* **AWS Secrets Manager** — secrets replicated to each active region via Secrets Manager multi-region replication
+* **AWS Cognito** — single User Pool in the primary region; regional Lambda@Edge or API Gateway endpoints proxy auth to the primary pool
+
+### Traffic routing
+
+* **Amazon Route 53** with **latency-based routing** or **failover routing** directs traffic to the nearest healthy regional API Gateway endpoint
+* **Route 53 Health Checks** monitor each regional endpoint; unhealthy regions are automatically removed from DNS within ~30 seconds
+* The Next.js frontend (Amplify hosting) is globally distributed via CloudFront — no change needed per region
+
+### Deployment model
+
+| Phase | Region count | Configuration |
+| :--- | :--- | :--- |
+| Development / staging | 1 (primary only) | `RegionList: [us-east-1]` |
+| Production launch | 1 (primary) | `RegionList: [us-east-1]` |
+| Multi-region active-active | 2+ | `RegionList: [us-east-1, us-west-2]` |
+
+All CloudFormation stacks accept a `RegionList` parameter. Cross-region resources (Aurora Global Database secondary clusters, KMS replica keys, S3 CRR rules, Secrets Manager replicas) are conditionally created: if `RegionList` has only one entry, none of the replication resources are provisioned.
+
+### Backup & point-in-time recovery
+
+* **Aurora PITR:** 35-day continuous backup window; restore to any second
+* **AWS Backup:** Daily snapshot at 02:00 UTC; 35-day retention; cross-region copy to every region in `RegionList`
+* **AWS Backup Vault Lock:** Compliance mode on all vaults — snapshots cannot be deleted before retention expires
+
+### The "Red Button" procedure
+
+In a full primary-region failure with active-active enabled: Route 53 automatically promotes a reader region. In single-region mode: the Webmaster deploys the stack to a new region using the IaC parameters and the latest Aurora Global Database snapshot. Target RTO: under 60 minutes from a cold start.
 
 ## 9. Open Design Questions
 

@@ -12,12 +12,13 @@ applyTo: "infra/**/*.yaml, infra/**/*.json, amplify/**/*.ts, amplify/**/*.yaml"
 | **AWS Amplify Gen 2** | Frontend hosting, CI/CD pipeline, environment variable injection |
 | **AWS CloudFormation** | All backend infrastructure not managed by Amplify |
 | **AWS Lambda** | Backend compute — one function per endpoint; Python 3.12 |
-| **AWS API Gateway** | REST API; Lambda Proxy Integration; Cognito Authorizer on member routes |
+| **AWS API Gateway** | REST API; regional endpoints per active region; Lambda Proxy Integration |
 | **AWS Cognito** | Member auth — User Pool with Social Login; no kiosk app client |
-| **Amazon Aurora Serverless v2** | PostgreSQL database in a VPC; accessed via RDS Data API |
-| **Amazon S3** | Waiver storage; Object Lock (Compliance Mode, 7-year retention) |
-| **AWS KMS** | Customer-managed keys for S3 and Aurora encryption at rest |
-| **AWS Secrets Manager** | DB credentials, Stripe key, device token salt |
+| **Amazon Aurora Serverless v2** | PostgreSQL in a VPC; **Aurora Global Database** for multi-region |
+| **Amazon S3** | Waiver storage; Object Lock; **Multi-Region Access Point** + Cross-Region Replication |
+| **AWS KMS** | **Multi-region keys** (`mrk-`) replicated to all active regions |
+| **AWS Secrets Manager** | DB credentials, Stripe key, device token salt; multi-region replication |
+| **Amazon Route 53** | Latency-based or failover routing across regional API Gateway endpoints |
 | **Amazon SNS** | SMS alerts topic |
 | **Amazon CloudWatch** | Lambda logs, API Gateway access logs |
 | **AWS Backup** | Aurora PITR (35-day) + daily cross-region replication to `us-west-2` |
@@ -139,8 +140,67 @@ CheckInLambdaRole:
 * Rules:
     * Continuous backup (PITR) on Aurora — 35-day retention window
     * Daily snapshot at 02:00 UTC — 35-day retention in primary region
-    * Cross-region copy rule to `us-west-2` — 35-day retention
-* Backup vault name: `osc-backup-vault-prod`; enable AWS Backup Vault Lock in Compliance mode
+    * Cross-region copy rule to every region in `RegionList` — 35-day retention
+* Backup vault name: `osc-backup-vault-<env>`; enable AWS Backup Vault Lock in Compliance mode
+
+## Multi-Region Design
+
+The infrastructure is parameterized for variable region count. Region count is a deployment-time decision, not an architectural one.
+
+### RegionList parameter
+
+All stacks that provision replicatable resources accept a `RegionList` parameter (ordered list of AWS region names). The first entry is always the primary (writer) region.
+
+```yaml
+Parameters:
+  RegionList:
+    Type: CommaDelimitedList
+    Default: "us-east-1"
+    Description: >-
+      Ordered list of active regions. First entry is the primary (writer) region.
+      Add a region here to enable active-active multi-region deployment.
+      Example multi-region value: "us-east-1,us-west-2"
+```
+
+Use `!Select [0, !Ref RegionList]` to reference the primary region. Use `Conditions` to gate replication resources:
+
+```yaml
+Conditions:
+  IsMultiRegion: !Not [!Equals [!Select [1, !Split [",", !Join [",", [!Join [",", !Ref RegionList], ",SENTINEL"]]]], "SENTINEL"]]
+```
+
+Only provision cross-region resources (Aurora Global Database secondary clusters, KMS replica keys, S3 CRR rules, Secrets Manager replicas, Route 53 failover records) when `IsMultiRegion` is true.
+
+### Per-region resources
+
+Each region in `RegionList` must have an identical deployment of:
+
+| Resource | Multi-region mechanism |
+| :--- | :--- |
+| Aurora Serverless v2 | **Aurora Global Database** — one writer, N readers; auto-failover <60s |
+| S3 waiver bucket | **Multi-Region Access Point (MRAP)** + **S3 Cross-Region Replication** |
+| KMS keys | **Multi-Region Keys** (`mrk-` prefix) — same key material, regional ARNs |
+| Secrets Manager | **Multi-region replication** — secrets pushed to each active region |
+| API Gateway | **Regional endpoint** in each region; Route 53 latency/failover routing |
+| Lambda functions | Deployed identically to each region — same code, region-specific env vars |
+
+### Traffic routing
+
+* Use **Amazon Route 53** with latency-based routing (active-active) or failover routing (active-passive) based on `RegionList` length
+* Route 53 Health Checks monitor each regional API Gateway endpoint
+* When `IsMultiRegion` is false, Route 53 records point to the single regional endpoint with no failover policy
+
+### Single-region deployment (default)
+
+With `RegionList: "us-east-1"`:
+
+* Aurora Global Database secondary clusters: **not provisioned**
+* KMS replica keys: **not provisioned**
+* S3 CRR rules: **not provisioned**
+* Secrets Manager replication: **not provisioned**
+* Route 53 failover records: **not provisioned** (single A/ALIAS record only)
+
+This keeps dev and staging costs minimal while preserving the ability to go multi-region with a single parameter change.
 
 ## CloudFormation Conventions
 
