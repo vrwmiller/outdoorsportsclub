@@ -84,8 +84,8 @@ def lambda_env(monkeypatch):
 
 ### Coverage requirement
 
-- Minimum **80% line coverage** per handler file
-- Run with: `pytest tests/ --cov=functions --cov-report=term-missing`
+- Minimum **80% overall line coverage** for Lambda handlers
+- Run with: `pytest tests/ --cov=functions --cov-report=term-missing --cov-fail-under=80`
 
 ---
 
@@ -115,18 +115,33 @@ def lambda_env(monkeypatch):
 ### Mocking patterns
 
 ```typescript
-// Mock Cognito session (unauthenticated)
+// Single module mock — configure behavior per test
 jest.mock('aws-amplify/auth', () => ({
-  getCurrentUser: jest.fn().mockRejectedValue(new Error('Not authenticated')),
+  getCurrentUser: jest.fn(),
+  fetchAuthSession: jest.fn(),
 }));
 
-// Mock Cognito session (authenticated member, training_level 3)
-jest.mock('aws-amplify/auth', () => ({
-  getCurrentUser: jest.fn().mockResolvedValue({ username: 'test-user' }),
-  fetchAuthSession: jest.fn().mockResolvedValue({
-    tokens: { idToken: { payload: { sub: 'uuid-123', training_level: 3 } } },
-  }),
-}));
+import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
+
+describe('auth-gated component', () => {
+  beforeEach(() => {
+    (getCurrentUser as jest.Mock).mockReset();
+    (fetchAuthSession as jest.Mock).mockReset();
+  });
+
+  it('redirects unauthenticated users to /', async () => {
+    (getCurrentUser as jest.Mock).mockRejectedValueOnce(new Error('Not authenticated'));
+    // ...render component and assert redirect to '/'
+  });
+
+  it('renders portal for authenticated member with training_level 3', async () => {
+    (getCurrentUser as jest.Mock).mockResolvedValueOnce({ username: 'test-user' });
+    (fetchAuthSession as jest.Mock).mockResolvedValueOnce({
+      tokens: { idToken: { payload: { sub: 'uuid-123', training_level: 3 } } },
+    });
+    // ...render component and assert portal is visible
+  });
+});
 ```
 
 - Use `msw` handlers in `src/mocks/handlers.ts`; start the server in `jest.setup.ts`
@@ -134,8 +149,8 @@ jest.mock('aws-amplify/auth', () => ({
 
 ### Coverage requirement
 
-- Minimum **70% line coverage** per component file
-- Run with: `npx jest --coverage`
+- Minimum **70% overall line coverage** for frontend components
+- Run with: `npx jest --coverage --coverageThreshold='{"global":{"lines":70}}'`
 
 ---
 
