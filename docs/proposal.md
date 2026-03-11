@@ -25,3 +25,14 @@ To architect a secure, AWS-hosted digital ecosystem for the **Outdoor Sports Clu
 
 * **Automated Rule Enforcement:** System-level validation of membership status and training credentials before granting range access.
 * **Liability Management:** Digitizing the waiver process with automated expiration tracking to ensure 100% legal coverage for all active participants.
+
+## 5. Range Safety
+
+A safe firing line requires an RSO's undivided attention. Under the current paper-based process, RSOs are routinely pulled away from watching the line to collect guest fees, verify paper waivers, and manually log check-ins — each interruption is a window for a safety incident.
+
+The kiosk-first design shifts all of these tasks to the member or guest at the tablet before they step onto the range:
+
+* **Uninterrupted Supervision:** Check-in, waiver verification, and payment are completed at the kiosk. By the time a person reaches the firing line, their credentials and waiver status have already been confirmed by the system — the RSO does not need to leave their post.
+* **Training-Level Gating:** The system refuses check-in for a range that exceeds a member's verified training level, removing a class of safety decisions that currently relies on an RSO recognizing a member by face or badge.
+* **Real-Time Range Status:** RSOs (Level 4+) can open and close ranges from the kiosk or Admin Portal. A closed range cannot be checked into — the system enforces it, not the RSO's verbal instruction alone.
+* **Mandatory Checkout:** Range users must scan out when leaving. This gives the RSO an accurate, real-time count of who is on each range without manual headcounts.
