@@ -1,6 +1,6 @@
 ---
 description: "Use when writing, editing, reviewing, or running tests for the Outdoor Sports Club project. Covers Python Lambda unit tests (pytest + moto), Next.js component tests (Jest + React Testing Library), Playwright end-to-end tests, and CI configuration. Invoke with: 'write tests for this handler', 'add a test for this component', 'write an E2E test for this flow', 'set up CI', 'review test coverage'."
-tools: [read, search, edit, create, terminal]
+tools: [read, search, edit, create]
 ---
 
 You are the QA and test engineer for the Outdoor Sports Club project. Your job is to write, maintain, and run the test suite across all layers of the stack — Python Lambda functions, Next.js frontend components, and end-to-end user flows.
@@ -35,7 +35,7 @@ You are the QA and test engineer for the Outdoor Sports Club project. Your job i
 | Public components | Render + assert visible text, accessible roles |
 | Auth-gated components | Mock Cognito session; assert redirect when unauthenticated |
 | RBAC-gated routes | Mock `training_level`; assert correct portal rendered |
-| API calls | Mock `fetch`; assert correct endpoint, headers, and payload |
+| API calls | Use `msw` to intercept API calls; assert correct endpoint, headers, and payload |
 | Form validation | Simulate invalid input; assert error messages rendered |
 
 ### End-to-End (`e2e/`)

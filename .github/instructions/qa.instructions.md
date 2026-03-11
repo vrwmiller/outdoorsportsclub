@@ -1,6 +1,6 @@
 ---
 description: "Use when writing, editing, or reviewing tests for the Outdoor Sports Club project. Covers Python Lambda unit tests (pytest + moto), Next.js component tests (Jest + React Testing Library), Playwright end-to-end tests, and CI configuration."
-applyTo: "tests/**/*.py, src/**/*.test.tsx, src/**/__tests__/**/*.tsx, e2e/**/*.ts, .github/workflows/*.yml"
+applyTo: "tests/**/*.py, src/**/*.test.tsx, src/**/__tests__/**/*.tsx, e2e/**/*.ts, .github/workflows/*.yml, .github/workflows/*.yaml"
 ---
 
 # QA & Testing Standards — Outdoor Sports Club

@@ -75,10 +75,10 @@ Why this change is needed — reference the open issue if one exists (`Closes #N
 
 ## GitHub tooling
 
-- Use the `gh` CLI for all GitHub operations: creating branches, pushing, opening PRs, reading PR comments, checking review status, and managing issues
+- Use `git` for local branching, commits, and pushing; use the `gh` CLI for GitHub operations such as opening PRs, reading PR comments, checking review status, and managing issues
 - Do **not** use GitKraken, GitLens MCP tools, or any other GUI Git client — `gh` and `git` on the command line are the only approved tools
 - Read PR review comments with: `gh pr view <number> --comments`
-- Read inline code review comments with: `gh api repos/vrwmiller/outdoorsportsclub/pulls/<number>/comments`
+- Read inline code review comments with: `gh api repos/{owner}/{repo}/pulls/<number>/comments`
 
 ## Using the gh CLI
 
