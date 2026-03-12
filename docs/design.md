@@ -225,7 +225,39 @@ When to prefer Django on other projects:
 * For other projects, Django may be preferred for a Python-first monolith with deep server-side business logic, complex DB transactions, or where the built-in Django Admin is required for model management.
 * For other projects, Django may also suit teams that prefer a single-language (Python) stack and where server-side rendering is the primary rendering model.
 
-## 10. Open Design Questions
+## 10. Architecture Decisions — External Review Findings
+
+An independent architectural review was conducted against the design documented here. The following records which recommendations were accepted, rejected, or deferred, and why.
+
+### Accepted: Real-time RSO check-in view is a gap
+
+The review correctly identified that RSOs have no current mechanism to see who is checked in on their range in real time. This is captured as **Open Design Question #9**. Polling a `GET /v1/ranges/{id}/checkins` endpoint is the recommended starting point before considering SSE or WebSockets.
+
+### Accepted: A `ranges` table is needed
+
+The review independently confirmed the need for a `ranges` or "range segments" entity (e.g., Trap House 1, Pistol Bay A) to support range-specific check-in validation and status. This is already captured as **Open Design Question #5** and is a prerequisite for implementing check-in logic.
+
+### Rejected: PWA / offline-first kiosk
+
+The review recommended implementing the kiosk as a Progressive Web App (PWA) with service workers for offline resilience. This is incompatible with the current design. Stripe Terminal SDK requires direct NFC hardware access, which browser-based service workers cannot reliably provide across all tablet platforms. The kiosk is a **dedicated paired tablet appliance** authenticated by Device Token — this model intentionally avoids browser-based execution for security and reliability reasons.
+
+### Rejected: Django Admin as a substitute for the Admin Portal
+
+The review suggested Django's built-in admin interface as a development advantage. This advantage only applies when no custom admin surface exists. **Outdoor Sports Club** specifies a full-featured **Admin Portal** as a first-class product surface. Django Admin is not a viable substitute for custom role-based UI, range-specific views, and RSO workflows.
+
+### Rejected: Aurora is overkill / switch to standard RDS
+
+The review suggested standard Amazon RDS PostgreSQL as a cost-saving alternative to Aurora. This comparison does not account for the **Aurora Serverless v2** variant in use here. Aurora Serverless v2 scales to 0.5 ACU at idle and targets bursty, weekend-heavy traffic patterns — exactly the usage profile of a physical range facility. Always-on RDS is more expensive for this workload, not less. Aurora Serverless v2 is the correct choice.
+
+### Rejected: DynamoDB as an alternative
+
+The review correctly rejected DynamoDB, consistent with the existing design rationale. Relational integrity is fundamental here — waiver checks, training-level gating, and device pairing all require foreign-key consistency that is complex to enforce in a document store.
+
+### Deferred: Sport-specific metadata (JSONB column)
+
+The review suggested a JSONB column for sport-specific activity metadata (e.g., clays thrown for trap, target distance for archery). This is a reasonable future extension but is premature without a concrete use case. The `activity_logs` schema is sufficient for current scope. Revisit when range-specific analytics are a defined requirement.
+
+## 11. Open Design Questions
 
 The following are unresolved before implementation begins. Each requires a deliberate decision — do not implement with assumed behaviour.
 
