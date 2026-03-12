@@ -152,6 +152,7 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 * **Storage:** Signed waivers are stored in **Amazon S3** with **S3 Object Lock** (Compliance Mode) to prevent tampering or accidental deletion.
 * **Notifications:** Urgent safety alerts or range closures are pushed via **Amazon SNS** (SMS) to ensure reach to 100% of members.
 * **Zero-Trust Security:** Data is encrypted at rest and in transit via **AWS KMS**; no raw credit card data is ever stored on Club-managed systems.
+* **Authorization invariant — `training_level`:** Every Lambda that gates access by training level **must re-query `training_level` from Aurora** on every request. It must never be read from the Cognito JWT claim. The JWT is used only to identify the caller (via `sub`); the authoritative level is always the database row. A member's level can be revoked between token issuance and token expiry — reading the claim would miss that change.
 
 ## 7. API Outlines (AWS-Native / RESTful)
 
@@ -237,6 +238,14 @@ The `dev` environment is a **completely separate CloudFormation stack** from `pr
 
 The `dev` stack uses the same CloudFormation templates as `prod`, with `Environment: dev` passed as a parameter to select reduced-cost resource tiers and relaxed retention settings.
 
+### Multi-region operational risk: configuration drift
+
+Each region runs an independent copy of the stack. Configuration drift — where secrets, environment variables, Lambda code versions, or IAM policies diverge between regions — is a real operational risk in active-active deployments. Mitigations:
+
+* All per-region configuration is declared in CloudFormation parameters and sourced from the same template; no manual console changes in production.
+* Secrets Manager multi-region replication keeps secrets in sync automatically; secret rotation must be applied to the primary and allowed to replicate before it takes effect in secondary regions.
+* Automated failover testing must validate that the promoted secondary region is behaviorally identical to the primary — including Stripe key, Cognito configuration, and KMS key access.
+
 ### Backup & point-in-time recovery
 
 * **Aurora PITR:** 35-day continuous backup window; restore to any second
@@ -308,6 +317,14 @@ The review correctly rejected DynamoDB, consistent with the existing design rati
 
 The review suggested a JSONB column for sport-specific activity metadata (e.g., clays thrown for trap, target distance for archery). This is a reasonable future extension but is premature without a concrete use case. The `activity_logs` schema is sufficient for current scope. Revisit when range-specific analytics are a defined requirement.
 
+### Accepted: Observability is undefined
+
+The review correctly identified that no centralized monitoring strategy exists. Captured as **Open Design Question #14**. **Amazon CloudWatch Logs** (structured logging), **AWS X-Ray** tracing, and **Amazon CloudWatch Alarms** must be defined before the first Lambda is deployed to production.
+
+### Accepted: Async background workflows are unplanned
+
+The review identified that non-user-facing operations (dues reminders, waiver expiry warnings, service-hours promotion) have no processing layer defined. Captured as **Open Design Question #15**.
+
 ## 11. Open Design Questions
 
 The following are unresolved before implementation begins. Each requires a deliberate decision — do not implement with assumed behaviour.
@@ -327,3 +344,5 @@ The following are unresolved before implementation begins. Each requires a delib
 | 11 | **Violation override flow** | When a check-in fails a rule (guest limit exceeded, waiver expired, etc.), the kiosk enters violation alert state that only a Level 4+ RSO can clear. Two resolution paths are needed: (a) **Approve override** — RSO uses their own credential (PIN, NFC badge, or Admin Portal action) to allow entry anyway and record the exception; (b) **Deny entry** — RSO dismisses the alert, check-in is cancelled, lane remains available. The exact RSO authentication mechanism for clearing the alert (to prevent a user self-clearing) must be defined. |
 | 12 | **Lane configuration management** | Lane count per range is needed by the `lanes` table. How are lanes created and managed — static seed data in a DB migration, or configurable via the **Admin Portal**? If lane counts change (range expansion, temporary closure of lanes), the Admin Portal must support adding/removing/disabling lanes without a migration. |
 | 13 | **Kiosk handoff model** | Two physical deployment models are viable: (a) **RSO-mediated** — RSO holds the tablet, hands it to arriving users for check-in, and takes it back on completion. The RSO is physically present at every check-in and can clear violation alerts directly on the device. (b) **Fixed-mount self-serve** — tablet is mounted at the range entrance; users self-scan. Violation alerts must be pushed to the RSO by another mechanism (e.g., audio alert, secondary RSO dashboard). The handoff model affects the violation-clearing UX, the physical mounting requirements, and whether the tablet needs a "return to RSO dashboard" post-check-in state. |
+| 14 | **Observability strategy** | No centralized monitoring is defined. Decisions needed: (a) **Structured logging** — Lambda functions should emit structured JSON logs to **Amazon CloudWatch Logs** with consistent fields (`request_id`, `member_id`, `device_id`, `action`, `duration_ms`, `error`). (b) **Distributed tracing** — **AWS X-Ray** active tracing on API Gateway and Lambda to surface latency by segment (auth, DB, Stripe). (c) **Metrics and alarms** — which Lambda error rates, API Gateway 4xx/5xx rates, Aurora ACU utilization, and Stripe failure rates warrant **Amazon CloudWatch Alarms** and to whom are they routed (**Amazon SNS** → admin SMS, or a separate ops channel)? (d) **Log retention** — what CloudWatch log group retention period is appropriate given waiver and transaction audit requirements? These decisions must be made before the first Lambda is deployed to production, as retrofitting structured logging is expensive. |
+| 15 | **Async background workflow scope** | Several non-user-facing operations are currently unplanned: annual dues renewal reminders, waiver expiry warnings (e.g., 30-day advance SMS via **Amazon SNS**), service-hours promotion evaluation (`service_hours >= 6` → Level 2), and audit log export to **Amazon S3** for admin review. These are candidates for an async processing layer (**Amazon SQS** + **AWS Lambda** worker or **Amazon EventBridge Scheduler**). Decisions needed: (a) which events trigger which notifications; (b) whether promotion to Level 2 is fully automated or requires admin confirmation; (c) what the retry and dead-letter policy is for failed notification deliveries. |
