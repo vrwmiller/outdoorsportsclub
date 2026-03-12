@@ -244,7 +244,7 @@ Each region runs an independent copy of the stack. Configuration drift — where
 
 * All per-region configuration is declared in CloudFormation parameters and sourced from the same template; no manual console changes in production.
 * Secrets Manager multi-region replication keeps secrets in sync automatically; secret rotation must be applied to the primary and allowed to replicate before it takes effect in secondary regions.
-* Automated failover testing (for ODQ #14) must validate that the promoted secondary region is behaviorally identical to the primary — including Stripe key, Cognito configuration, and KMS key access.
+* Automated failover testing must validate that the promoted secondary region is behaviorally identical to the primary — including Stripe key, Cognito configuration, and KMS key access.
 
 ### Backup & point-in-time recovery
 
@@ -319,7 +319,7 @@ The review suggested a JSONB column for sport-specific activity metadata (e.g., 
 
 ### Accepted: Observability is undefined
 
-The review correctly identified that no centralized monitoring strategy exists. Captured as **Open Design Question #14**. Structured CloudWatch logging, X-Ray tracing, and CloudWatch Alarms must be defined before the first Lambda is deployed to production.
+The review correctly identified that no centralized monitoring strategy exists. Captured as **Open Design Question #14**. **Amazon CloudWatch Logs** (structured logging), **AWS X-Ray** tracing, and **Amazon CloudWatch Alarms** must be defined before the first Lambda is deployed to production.
 
 ### Accepted: Async background workflows are unplanned
 
