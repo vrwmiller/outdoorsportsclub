@@ -12,7 +12,7 @@ The application has four surfaces. The **Home Page** is the club's primary publi
 | **1** | **Probationary** | Service Tracker | Restricted range access; focus on logging 6 required service hours. |
 | **2** | **Basic Member** | General Access | Unlocks check-in for basic facilities (Skeet, Trap, Archery). |
 | **3** | **Qualified** | Specialized Access | Verified Qualification unlocks specialized Rifle/Pistol ranges. |
-| **4** | **RSO / Instructor**| Range Ops | Can "Open/Close" ranges and override guest limits. |
+| **4** | **RSO / Instructor** | Range Ops | Can "Open/Close" ranges and override guest limits. |
 | **5** | **Administrator** | Business Oversight | **Full Business Access:** Finance, Database, and Rules. |
 | **6** | **Webmaster** | **Technical Oversight** | **Full System Access:** API logs, Device Pairing, and Recovery. |
 
@@ -35,12 +35,39 @@ To ensure high-speed check-ins and eliminate the security risks of social login 
 
 ## 4. Operational Track (Mobile Kiosk)
 
+### Physical kiosk model
+
+Staffed ranges (Rifle/Pistol, Skeet/Trap, and staffed Archery and Air Rifle) each have 2–3 tablet kiosks. Unstaffed ranges (outdoor Archery and indoor Air Rifle when not staffed) do not have kiosks — no check-in flow applies.
+
+The kiosk handoff model — whether the RSO holds the tablet and hands it to arriving users, or the tablet is fixed-mount and self-serve — is an **open design question (#13)**. Both models are supportable by the same underlying check-in flow; the difference is physical deployment and the violation-clearing mechanism.
+
+### Kiosk states
+
+| State | Description |
+| :--- | :--- |
+| **RSO Dashboard** | Default view. Displays lane occupancy for this kiosk's range: each lane shows `Available` or the name/member number of the assigned occupant and their guest count. |
+| **Check-in flow** | Initiated by RSO. Member scans QR Badge; system validates `training_level`, waiver, dues, and guest count. |
+| **Guest add-on** | After the member's lane is assigned, the kiosk prompts: "Add guests? (0 / 1 / 2)." For each guest, the kiosk collects a waiver acknowledgement and presents a payment screen — either the guest or the sponsoring member may tap to pay. Guests share the member's lane. |
+| **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The user cannot dismiss this screen — only the RSO can clear it by either resolving the issue or denying entry. |
+| **Lane assignment** | After check-in (and optional guest add-on) is complete, the assigned lane and guest count are confirmed on screen. |
+| **Check-out flow** | RSO-initiated or user-initiated. Member scans QR Badge; open lane assignment (including all guests on that lane) is closed and the lane returns to `Available`. |
+
+### Flow rules
+
 * **The "Safety Gate":** Automated blocking of check-ins for members with insufficient `training_level` for a specific range.
-* **Mandatory Check-Out:** Range users are required to check out when leaving a range. Check-out is logged as a `Range-Checkout` event via the same kiosk QR scan flow used for check-in.
+* **Mandatory Check-Out:** Range users must check out before leaving. Check-out closes the lane assignment (including all guests) and logs a `Range-Checkout` event.
+* **Violation lock:** A failed check-in locks the screen in violation state. The RSO resolves — approve an override where policy allows, or deny entry. Only Level 4+ can clear a violation alert.
+* **Lane assignment:** Each member check-in assigns one available lane. Member and all their guests share that lane. If no lanes are available, check-in is blocked.
+* **Guest sponsorship:** Guests must be accompanied by a sponsoring member. A member may bring a maximum of **2 guests per range visit**. The limit is enforced per range — a member may not bring more than 2 guests on the same range at the same time. Guest count is stored in `lanes.guest_count` and checked at check-in.
+* **Guest check-in order:** The member checks in first and is assigned a lane. The kiosk then offers the guest add-on step (0, 1, or 2 guests). Each guest requires a waiver acknowledgement and a fee payment via **Stripe Terminal** (Tap to Pay). Either the guest or the sponsoring member may pay.
 * **Cashless Guest Fees:** Integrated "Tap-to-Pay" (NFC) via mobile tablets at the range, powered by the **Stripe Terminal SDK**. No additional card reader hardware is required — the tablet's built-in NFC chip acts as the payment terminal.
 * **Consumable Sales:** Members and guests may purchase consumables (e.g., targets, canned soda, coffee) at the kiosk. Each transaction is recorded in the `consumable_purchases` table with full line-item detail. Payment is processed via **Stripe Terminal SDK** (Tap to Pay). **Known Limitation:** There is no reliable physical process to verify that recorded quantities match items actually dispensed; the system records what is entered at the kiosk but cannot enforce inventory accuracy.
 * **Time-Bound Waivers:** Automated re-signing triggers for Safety Waivers based on 1-year expiration logic.
 * **Tablet Hardware Requirement:** Kiosk tablets **must have an accessible NFC chip** to support Tap to Pay. Most modern Android tablets and iPads qualify. Budget or older Android tablets may omit NFC — verify hardware specs before purchasing.
+
+### Offline operation
+
+If internet connectivity is lost, the kiosk must continue to support member check-in and check-out using a locally cached dataset. Guest payment (Stripe Terminal) requires connectivity and cannot be processed offline. See **Open Design Question #10** for the offline architecture decisions.
 
 ## 5. Data Schema (Amazon Aurora Serverless v2)
 
@@ -71,7 +98,30 @@ The database utilizes a relational model (PostgreSQL) with **Row-Level Security 
 | `min_training_level` | SMALLINT (0-6) | Minimum `training_level` required to check in at this kiosk's range. |
 | `status` | TEXT | `Pending-Pairing`, `Active`, `Revoked` |
 
-### **5.3 Table: `activity_logs`**
+### **5.3 Table: `lanes`**
+
+Each lane belongs to a range and tracks current occupancy. The `devices` table links kiosks to ranges; lanes belong to ranges, not to individual kiosk tablets.
+
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | UUID (PK) | Unique lane identifier. |
+| `range_tag` | TEXT | Range-level identifier (e.g., `Rifle-Range`, `Skeet-Field`). This is the range prefix; `devices.location_tag` extends it with a kiosk instance suffix (e.g., `Skeet-Field-1`). Once the `ranges` table (ODQ #5) is introduced, this column should become a `range_id` FK. |
+| `lane_number` | SMALLINT | Lane number within the range (e.g., 1–10). |
+| `status` | TEXT | `Available`, `Occupied` |
+| `guest_count` | SMALLINT | Number of guests currently sharing this lane with the sponsoring member (0–2). Always 0 when `status` is `Available`. |
+| `current_member_id` | UUID (FK, Nullable) | FK to `members.id`; set on check-in, cleared on check-out. Nullable only when the lane is `Available`. Guests must be accompanied by a member — the lane is assigned to the sponsoring member's ID for the duration of the guest's occupancy. A null value always means the lane is unoccupied. |
+| `checked_in_at` | TIMESTAMP (Nullable) | Time the lane was last claimed. |
+
+**Constraints and indexes:**
+
+* `UNIQUE (range_tag, lane_number)` — no two lanes can share the same number within a range.
+* `CHECK (status IN ('Available', 'Occupied'))`
+* `CHECK (guest_count BETWEEN 0 AND 2)`
+* `CHECK (status = 'Available' AND current_member_id IS NULL AND guest_count = 0 OR status = 'Occupied' AND current_member_id IS NOT NULL AND guest_count BETWEEN 0 AND 2)` — enforces consistency between occupancy state, sponsoring member, and guest count.
+* `INDEX ON (range_tag, status)` — supports finding available/occupied lanes for a range.
+* `INDEX ON (current_member_id)` — supports finding the lane a member is currently occupying.
+
+### **5.4 Table: `activity_logs`**
 
 | Column | Type | Description |
 | :--- | :--- | :--- |
@@ -79,10 +129,11 @@ The database utilizes a relational model (PostgreSQL) with **Row-Level Security 
 | `member_id` | UUID (FK) | Reference to the `members` table. |
 | `device_id` | UUID (FK) | Reference to the `devices` table. |
 | `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed` |
-| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` events only. |
+| `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; null only for `Waiver-Signed` events with no lane context. |
+| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` events only and linked to the lane/visit via `lane_id`. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
 
-### **5.4 Table: `consumable_purchases`**
+### **5.5 Table: `consumable_purchases`**
 
 | Column | Type | Description |
 | :--- | :--- | :--- |
@@ -225,7 +276,39 @@ When to prefer Django on other projects:
 * For other projects, Django may be preferred for a Python-first monolith with deep server-side business logic, complex DB transactions, or where the built-in Django Admin is required for model management.
 * For other projects, Django may also suit teams that prefer a single-language (Python) stack and where server-side rendering is the primary rendering model.
 
-## 10. Open Design Questions
+## 10. Architecture Decisions — External Review Findings
+
+An independent architectural review was conducted against the design documented here. The following records which recommendations were accepted, rejected, or deferred, and why.
+
+### Accepted: Real-time RSO check-in view is a gap
+
+The review correctly identified that RSOs have no current mechanism to see who is checked in on their range in real time. This is captured as **Open Design Question #9**. Polling a `GET /v1/ranges/{id}/checkins` endpoint is the recommended starting point before considering SSE or WebSockets.
+
+### Accepted: A `ranges` table is needed
+
+The review independently confirmed the need for a `ranges` or "range segments" entity (e.g., Trap House 1, Pistol Bay A) to support range-specific check-in validation and status. This is already captured as **Open Design Question #5** and is a prerequisite for implementing check-in logic.
+
+### Rejected: PWA / offline-first kiosk
+
+The review recommended implementing the kiosk as a Progressive Web App (PWA) with service workers for offline resilience. This is incompatible with the current design. Stripe Terminal SDK requires direct NFC hardware access, which browser-based service workers cannot reliably provide across all tablet platforms. The kiosk is a **dedicated paired tablet appliance** authenticated by Device Token — this model intentionally avoids browser-based execution for security and reliability reasons.
+
+### Rejected: Django Admin as a substitute for the Admin Portal
+
+The review suggested Django's built-in admin interface as a development advantage. This advantage only applies when no custom admin surface exists. **Outdoor Sports Club** specifies a full-featured **Admin Portal** as a first-class product surface. Django Admin is not a viable substitute for custom role-based UI, range-specific views, and RSO workflows.
+
+### Rejected: Aurora is overkill / switch to standard RDS
+
+The review suggested standard Amazon RDS PostgreSQL as a cost-saving alternative to Aurora. This comparison does not account for the **Aurora Serverless v2** variant in use here. Aurora Serverless v2 scales to 0.5 ACU at idle and targets bursty, weekend-heavy traffic patterns — exactly the usage profile of a physical range facility. Always-on RDS is more expensive for this workload, not less. Aurora Serverless v2 is the correct choice.
+
+### Rejected: DynamoDB as an alternative
+
+The review correctly rejected DynamoDB, consistent with the existing design rationale. Relational integrity is fundamental here — waiver checks, training-level gating, and device pairing all require foreign-key consistency that is complex to enforce in a document store.
+
+### Deferred: Sport-specific metadata (JSONB column)
+
+The review suggested a JSONB column for sport-specific activity metadata (e.g., clays thrown for trap, target distance for archery). This is a reasonable future extension but is premature without a concrete use case. The `activity_logs` schema is sufficient for current scope. Revisit when range-specific analytics are a defined requirement.
+
+## 11. Open Design Questions
 
 The following are unresolved before implementation begins. Each requires a deliberate decision — do not implement with assumed behaviour.
 
@@ -239,4 +322,8 @@ The following are unresolved before implementation begins. Each requires a delib
 | 6 | **Member Portal read endpoints** | No GET endpoints are defined. The Member Portal needs to fetch member profile, `training_level`, `service_hours`, `dues_paid_until`, `waiver_signed_at`, and the QR badge token. These endpoints need to be added to Section 7. |
 | 7 | **Pairing Code generation** | `POST /v1/devices/pair` accepts a Pairing Code, but there is no defined flow for how a new tablet *generates* the code. Is this a one-time code displayed in the Admin Portal that the tablet manually enters, or does the tablet call an unauthenticated endpoint to request a code? |
 | 8 | **Guest Level 0 flow entry point** | Guests must pay a fee and sign a waiver at the kiosk. Does the kiosk allow starting this flow without scanning a QR code? The current check-in endpoint assumes a QR scan. A separate guest-registration flow — or a kiosk-initiated guest session — may be needed. |
-
+| 9 | **Real-time RSO check-in view** | The primary RSO view is the **kiosk lane dashboard** (Section 4), which shows live lane occupancy on the tablet itself. A secondary read-only view in the **Admin Portal** may also be needed for supervisory oversight across all ranges. The kiosk dashboard requires the same real-time data as check-in/check-out, so no additional push mechanism is needed if the kiosk re-fetches lane state after each transaction. A background polling interval (e.g., every 30s) is sufficient for the kiosk dashboard between transactions. |
+| 10 | **Offline operation architecture** | Member check-in and check-out must continue without internet connectivity. Proposed approach: the kiosk caches an encrypted local snapshot of active member QR tokens, `training_level`, and waiver/dues status at regular intervals while online. On connectivity loss, check-in validation runs against the local cache; events are queued and synced when connectivity restores. Guest payment (Stripe Terminal) requires connectivity and cannot be processed offline — policy decision needed: (a) refuse guest entry during outage, or (b) allow RSO to grant provisional entry at their discretion (no payment record until online). The caching strategy, encryption key management, and conflict-resolution on sync must be defined before kiosk implementation begins. |
+| 11 | **Violation override flow** | When a check-in fails a rule (guest limit exceeded, waiver expired, etc.), the kiosk enters violation alert state that only a Level 4+ RSO can clear. Two resolution paths are needed: (a) **Approve override** — RSO uses their own credential (PIN, NFC badge, or Admin Portal action) to allow entry anyway and record the exception; (b) **Deny entry** — RSO dismisses the alert, check-in is cancelled, lane remains available. The exact RSO authentication mechanism for clearing the alert (to prevent a user self-clearing) must be defined. |
+| 12 | **Lane configuration management** | Lane count per range is needed by the `lanes` table. How are lanes created and managed — static seed data in a DB migration, or configurable via the **Admin Portal**? If lane counts change (range expansion, temporary closure of lanes), the Admin Portal must support adding/removing/disabling lanes without a migration. |
+| 13 | **Kiosk handoff model** | Two physical deployment models are viable: (a) **RSO-mediated** — RSO holds the tablet, hands it to arriving users for check-in, and takes it back on completion. The RSO is physically present at every check-in and can clear violation alerts directly on the device. (b) **Fixed-mount self-serve** — tablet is mounted at the range entrance; users self-scan. Violation alerts must be pushed to the RSO by another mechanism (e.g., audio alert, secondary RSO dashboard). The handoff model affects the violation-clearing UX, the physical mounting requirements, and whether the tablet needs a "return to RSO dashboard" post-check-in state. |
