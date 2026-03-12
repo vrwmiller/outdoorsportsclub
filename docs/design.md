@@ -45,18 +45,21 @@ The kiosk handoff model — whether the RSO holds the tablet and hands it to arr
 
 | State | Description |
 | :--- | :--- |
-| **RSO Dashboard** | Default view. Displays lane occupancy for this kiosk's range: each lane shows `Available` or the name/member number of the assigned occupant. |
+| **RSO Dashboard** | Default view. Displays lane occupancy for this kiosk's range: each lane shows `Available` or the name/member number of the assigned occupant and their guest count. |
 | **Check-in flow** | Initiated by RSO. Member scans QR Badge; system validates `training_level`, waiver, dues, and guest count. |
+| **Guest add-on** | After the member's lane is assigned, the kiosk prompts: "Add guests? (0 / 1 / 2)." For each guest, the kiosk collects a waiver acknowledgement and presents a payment screen — either the guest or the sponsoring member may tap to pay. Guests share the member's lane. |
 | **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The user cannot dismiss this screen — only the RSO can clear it by either resolving the issue or denying entry. |
-| **Lane assignment** | After successful check-in, a lane is assigned and confirmed on screen. Member hands tablet back to RSO. |
-| **Check-out flow** | RSO-initiated or user-initiated. Member scans QR Badge; open lane assignment is closed and the lane returns to `Available`. |
+| **Lane assignment** | After check-in (and optional guest add-on) is complete, the assigned lane and guest count are confirmed on screen. |
+| **Check-out flow** | RSO-initiated or user-initiated. Member scans QR Badge; open lane assignment (including all guests on that lane) is closed and the lane returns to `Available`. |
 
 ### Flow rules
 
 * **The "Safety Gate":** Automated blocking of check-ins for members with insufficient `training_level` for a specific range.
-* **Mandatory Check-Out:** Range users must check out before leaving. Check-out closes the lane assignment and logs a `Range-Checkout` event.
+* **Mandatory Check-Out:** Range users must check out before leaving. Check-out closes the lane assignment (including all guests) and logs a `Range-Checkout` event.
 * **Violation lock:** A failed check-in locks the screen in violation state. The RSO resolves — approve an override where policy allows, or deny entry. Only Level 4+ can clear a violation alert.
-* **Lane assignment:** Each check-in assigns one available lane (from the `lanes` table). If no lanes are available, check-in is blocked.
+* **Lane assignment:** Each member check-in assigns one available lane. Member and all their guests share that lane. If no lanes are available, check-in is blocked.
+* **Guest sponsorship:** Guests must be accompanied by a sponsoring member. A member may bring a maximum of **2 guests per range visit**. The limit is enforced per range — a member may not bring more than 2 guests on the same range at the same time. Guest count is stored in `lanes.guest_count` and checked at check-in.
+* **Guest check-in order:** The member checks in first and is assigned a lane. The kiosk then offers the guest add-on step (0, 1, or 2 guests). Each guest requires a waiver acknowledgement and a fee payment via **Stripe Terminal** (Tap to Pay). Either the guest or the sponsoring member may pay.
 * **Cashless Guest Fees:** Integrated "Tap-to-Pay" (NFC) via mobile tablets at the range, powered by the **Stripe Terminal SDK**. No additional card reader hardware is required — the tablet's built-in NFC chip acts as the payment terminal.
 * **Consumable Sales:** Members and guests may purchase consumables (e.g., targets, canned soda, coffee) at the kiosk. Each transaction is recorded in the `consumable_purchases` table with full line-item detail. Payment is processed via **Stripe Terminal SDK** (Tap to Pay). **Known Limitation:** There is no reliable physical process to verify that recorded quantities match items actually dispensed; the system records what is entered at the kiosk but cannot enforce inventory accuracy.
 * **Time-Bound Waivers:** Automated re-signing triggers for Safety Waivers based on 1-year expiration logic.
@@ -105,7 +108,8 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | `range_tag` | TEXT | Range-level identifier (e.g., `Rifle-Range`, `Skeet-Field`). This is the range prefix; `devices.location_tag` extends it with a kiosk instance suffix (e.g., `Skeet-Field-1`). Once the `ranges` table (ODQ #5) is introduced, this column should become a `range_id` FK. |
 | `lane_number` | SMALLINT | Lane number within the range (e.g., 1–10). |
 | `status` | TEXT | `Available`, `Occupied` |
-| `current_member_id` | UUID (FK, Nullable) | FK to `members.id`; set on check-in, cleared on check-out. Nullable — guest-only occupancy is represented by `current_member_id` being null. |
+| `guest_count` | SMALLINT | Number of guests currently sharing this lane with the sponsoring member (0–2). Always 0 when `status` is `Available`. |
+| `current_member_id` | UUID (FK, Nullable) | FK to `members.id`; set on check-in, cleared on check-out. Nullable only when the lane is `Available`. Guests must be accompanied by a member — the lane is assigned to the sponsoring member's ID for the duration of the guest's occupancy. A null value always means the lane is unoccupied. |
 | `checked_in_at` | TIMESTAMP (Nullable) | Time the lane was last claimed. |
 
 ### **5.4 Table: `activity_logs`**
