@@ -12,7 +12,7 @@ The application has four surfaces. The **Home Page** is the club's primary publi
 | **1** | **Probationary** | Service Tracker | Restricted range access; focus on logging 6 required service hours. |
 | **2** | **Basic Member** | General Access | Unlocks check-in for basic facilities (Skeet, Trap, Archery). |
 | **3** | **Qualified** | Specialized Access | Verified Qualification unlocks specialized Rifle/Pistol ranges. |
-| **4** | **RSO / Instructor**| Range Ops | Can "Open/Close" ranges and override guest limits. |
+| **4** | **RSO / Instructor** | Range Ops | Can "Open/Close" ranges and override guest limits. |
 | **5** | **Administrator** | Business Oversight | **Full Business Access:** Finance, Database, and Rules. |
 | **6** | **Webmaster** | **Technical Oversight** | **Full System Access:** API logs, Device Pairing, and Recovery. |
 
@@ -272,4 +272,3 @@ The following are unresolved before implementation begins. Each requires a delib
 | 7 | **Pairing Code generation** | `POST /v1/devices/pair` accepts a Pairing Code, but there is no defined flow for how a new tablet *generates* the code. Is this a one-time code displayed in the Admin Portal that the tablet manually enters, or does the tablet call an unauthenticated endpoint to request a code? |
 | 8 | **Guest Level 0 flow entry point** | Guests must pay a fee and sign a waiver at the kiosk. Does the kiosk allow starting this flow without scanning a QR code? The current check-in endpoint assumes a QR scan. A separate guest-registration flow — or a kiosk-initiated guest session — may be needed. |
 | 9 | **Real-time RSO check-in view** | RSOs need a live view of who is currently checked in on their range so they can keep their attention on the firing line rather than a check-in log. No endpoint or push mechanism is currently defined for this. Options: (a) **polling** — Admin Portal polls a `GET /v1/ranges/{id}/checkins` endpoint on a short interval (simplest, no extra infra); (b) **Server-Sent Events (SSE)** — server pushes updates to the RSO's browser tab (one-way, lightweight); (c) **WebSockets** — full duplex, heavier to operate. The choice affects API Gateway configuration (SSE and WebSockets require API Gateway WebSocket API or a persistent connection). Polling is recommended as the starting point given club-scale traffic. |
-
