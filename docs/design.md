@@ -35,12 +35,36 @@ To ensure high-speed check-ins and eliminate the security risks of social login 
 
 ## 4. Operational Track (Mobile Kiosk)
 
+### Physical kiosk model
+
+Staffed ranges (Rifle/Pistol, Skeet/Trap, and staffed Archery) each have 2–3 tablet kiosks. Unstaffed ranges (outdoor Archery when not staffed, Air Rifle when not staffed) do not have kiosks — no check-in flow applies.
+
+The kiosk handoff model — whether the RSO holds the tablet and hands it to arriving users, or the tablet is fixed-mount and self-serve — is an **open design question (#13)**. Both models are supportable by the same underlying check-in flow; the difference is physical deployment and the violation-clearing mechanism.
+
+### Kiosk states
+
+| State | Description |
+| :--- | :--- |
+| **RSO Dashboard** | Default view. Displays lane occupancy for this kiosk's range: each lane shows `Available` or the name/member number of the assigned occupant. |
+| **Check-in flow** | Initiated by RSO. Member scans QR Badge; system validates `training_level`, waiver, dues, and guest count. |
+| **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The user cannot dismiss this screen — only the RSO can clear it by either resolving the issue or denying entry. |
+| **Lane assignment** | After successful check-in, a lane is assigned and confirmed on screen. Member hands tablet back to RSO. |
+| **Check-out flow** | RSO-initiated or user-initiated. Member scans QR Badge; open lane assignment is closed and the lane returns to `Available`. |
+
+### Flow rules
+
 * **The "Safety Gate":** Automated blocking of check-ins for members with insufficient `training_level` for a specific range.
-* **Mandatory Check-Out:** Range users are required to check out when leaving a range. Check-out is logged as a `Range-Checkout` event via the same kiosk QR scan flow used for check-in.
+* **Mandatory Check-Out:** Range users must check out before leaving. Check-out closes the lane assignment and logs a `Range-Checkout` event.
+* **Violation lock:** A failed check-in locks the screen in violation state. The RSO resolves — approve an override where policy allows, or deny entry. Only Level 4+ can clear a violation alert.
+* **Lane assignment:** Each check-in assigns one available lane (from the `lanes` table). If no lanes are available, check-in is blocked.
 * **Cashless Guest Fees:** Integrated "Tap-to-Pay" (NFC) via mobile tablets at the range, powered by the **Stripe Terminal SDK**. No additional card reader hardware is required — the tablet's built-in NFC chip acts as the payment terminal.
 * **Consumable Sales:** Members and guests may purchase consumables (e.g., targets, canned soda, coffee) at the kiosk. Each transaction is recorded in the `consumable_purchases` table with full line-item detail. Payment is processed via **Stripe Terminal SDK** (Tap to Pay). **Known Limitation:** There is no reliable physical process to verify that recorded quantities match items actually dispensed; the system records what is entered at the kiosk but cannot enforce inventory accuracy.
 * **Time-Bound Waivers:** Automated re-signing triggers for Safety Waivers based on 1-year expiration logic.
 * **Tablet Hardware Requirement:** Kiosk tablets **must have an accessible NFC chip** to support Tap to Pay. Most modern Android tablets and iPads qualify. Budget or older Android tablets may omit NFC — verify hardware specs before purchasing.
+
+### Offline operation
+
+If internet connectivity is lost, the kiosk must continue to support member check-in and check-out using a locally cached dataset. Guest payment (Stripe Terminal) requires connectivity and cannot be processed offline. See **Open Design Question #10** for the offline architecture decisions.
 
 ## 5. Data Schema (Amazon Aurora Serverless v2)
 
@@ -71,7 +95,20 @@ The database utilizes a relational model (PostgreSQL) with **Row-Level Security 
 | `min_training_level` | SMALLINT (0-6) | Minimum `training_level` required to check in at this kiosk's range. |
 | `status` | TEXT | `Pending-Pairing`, `Active`, `Revoked` |
 
-### **5.3 Table: `activity_logs`**
+### **5.3 Table: `lanes`**
+
+Each lane belongs to a range and tracks current occupancy. The `devices` table links kiosks to ranges; lanes belong to ranges, not to individual kiosk tablets.
+
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | UUID (PK) | Unique lane identifier. |
+| `range_tag` | TEXT | Human-readable range identifier (e.g., `Rifle-Range`, `Skeet-Field`). Matches `devices.location_tag` context. |
+| `lane_number` | SMALLINT | Lane number within the range (e.g., 1–10). |
+| `status` | TEXT | `Available`, `Occupied` |
+| `current_member_id` | UUID (FK, Nullable) | FK to `members.id`; set on check-in, cleared on check-out. Nullable — lanes occupied by guests do not have a `member_id`. |
+| `checked_in_at` | TIMESTAMP (Nullable) | Time the lane was last claimed. |
+
+### **5.4 Table: `activity_logs`**
 
 | Column | Type | Description |
 | :--- | :--- | :--- |
@@ -79,10 +116,11 @@ The database utilizes a relational model (PostgreSQL) with **Row-Level Security 
 | `member_id` | UUID (FK) | Reference to the `members` table. |
 | `device_id` | UUID (FK) | Reference to the `devices` table. |
 | `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed` |
+| `lane_id` | UUID (FK, Nullable) | Lane assigned during `Range-Checkin`; populated for check-in and check-out events, null for payment/waiver events. |
 | `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` events only. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
 
-### **5.4 Table: `consumable_purchases`**
+### **5.5 Table: `consumable_purchases`**
 
 | Column | Type | Description |
 | :--- | :--- | :--- |
@@ -271,4 +309,8 @@ The following are unresolved before implementation begins. Each requires a delib
 | 6 | **Member Portal read endpoints** | No GET endpoints are defined. The Member Portal needs to fetch member profile, `training_level`, `service_hours`, `dues_paid_until`, `waiver_signed_at`, and the QR badge token. These endpoints need to be added to Section 7. |
 | 7 | **Pairing Code generation** | `POST /v1/devices/pair` accepts a Pairing Code, but there is no defined flow for how a new tablet *generates* the code. Is this a one-time code displayed in the Admin Portal that the tablet manually enters, or does the tablet call an unauthenticated endpoint to request a code? |
 | 8 | **Guest Level 0 flow entry point** | Guests must pay a fee and sign a waiver at the kiosk. Does the kiosk allow starting this flow without scanning a QR code? The current check-in endpoint assumes a QR scan. A separate guest-registration flow — or a kiosk-initiated guest session — may be needed. |
-| 9 | **Real-time RSO check-in view** | RSOs need a live view of who is currently checked in on their range so they can keep their attention on the firing line rather than a check-in log. No endpoint or push mechanism is currently defined for this. Options: (a) **polling** — Admin Portal polls a `GET /v1/ranges/{id}/checkins` endpoint on a short interval (simplest, no extra infra); (b) **Server-Sent Events (SSE)** — server pushes updates to the RSO's browser tab (one-way, lightweight); (c) **WebSockets** — full duplex, heavier to operate. The choice affects API Gateway configuration (SSE and WebSockets require API Gateway WebSocket API or a persistent connection). Polling is recommended as the starting point given club-scale traffic. |
+| 9 | **Real-time RSO check-in view** | The primary RSO view is the **kiosk lane dashboard** (Section 4), which shows live lane occupancy on the tablet itself. A secondary read-only view in the **Admin Portal** may also be needed for supervisory oversight across all ranges. The kiosk dashboard requires the same real-time data as check-in/check-out, so no additional push mechanism is needed if the kiosk re-fetches lane state after each transaction. A background polling interval (e.g., every 30s) is sufficient for the kiosk dashboard between transactions. |
+| 10 | **Offline operation architecture** | Member check-in and check-out must continue without internet connectivity. Proposed approach: the kiosk caches an encrypted local snapshot of active member QR tokens, `training_level`, and waiver/dues status at regular intervals while online. On connectivity loss, check-in validation runs against the local cache; events are queued and synced when connectivity restores. Guest payment (Stripe Terminal) requires connectivity and cannot be processed offline — policy decision needed: (a) refuse guest entry during outage, or (b) allow RSO to grant provisional entry at their discretion (no payment record until online). The caching strategy, encryption key management, and conflict-resolution on sync must be defined before kiosk implementation begins. |
+| 11 | **Violation override flow** | When a check-in fails a rule (guest limit exceeded, waiver expired, etc.), the kiosk enters violation alert state that only a Level 4+ RSO can clear. Two resolution paths are needed: (a) **Approve override** — RSO uses their own credential (PIN, NFC badge, or Admin Portal action) to allow entry anyway and record the exception; (b) **Deny entry** — RSO dismisses the alert, check-in is cancelled, lane remains available. The exact RSO authentication mechanism for clearing the alert (to prevent a user self-clearing) must be defined. |
+| 12 | **Lane configuration management** | Lane count per range is needed by the `lanes` table. How are lanes created and managed — static seed data in a DB migration, or configurable via the **Admin Portal**? If lane counts change (range expansion, temporary closure of lanes), the Admin Portal must support adding/removing/disabling lanes without a migration. |
+| 13 | **Kiosk handoff model** | Two physical deployment models are viable: (a) **RSO-mediated** — RSO holds the tablet, hands it to arriving users for check-in, and takes it back on completion. The RSO is physically present at every check-in and can clear violation alerts directly on the device. (b) **Fixed-mount self-serve** — tablet is mounted at the range entrance; users self-scan. Violation alerts must be pushed to the RSO by another mechanism (e.g., audio alert, secondary RSO dashboard). The handoff model affects the violation-clearing UX, the physical mounting requirements, and whether the tablet needs a "return to RSO dashboard" post-check-in state. |
