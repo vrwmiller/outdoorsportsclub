@@ -112,6 +112,15 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | `current_member_id` | UUID (FK, Nullable) | FK to `members.id`; set on check-in, cleared on check-out. Nullable only when the lane is `Available`. Guests must be accompanied by a member — the lane is assigned to the sponsoring member's ID for the duration of the guest's occupancy. A null value always means the lane is unoccupied. |
 | `checked_in_at` | TIMESTAMP (Nullable) | Time the lane was last claimed. |
 
+**Constraints and indexes:**
+
+* `UNIQUE (range_tag, lane_number)` — no two lanes can share the same number within a range.
+* `CHECK (status IN ('Available', 'Occupied'))`
+* `CHECK (guest_count BETWEEN 0 AND 2)`
+* `CHECK (status = 'Available' AND current_member_id IS NULL AND guest_count = 0 OR status = 'Occupied' AND current_member_id IS NOT NULL AND guest_count BETWEEN 0 AND 2)` — enforces consistency between occupancy state, sponsoring member, and guest count.
+* `INDEX ON (range_tag, status)` — supports finding available/occupied lanes for a range.
+* `INDEX ON (current_member_id)` — supports finding the lane a member is currently occupying.
+
 ### **5.4 Table: `activity_logs`**
 
 | Column | Type | Description |
@@ -120,8 +129,8 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | `member_id` | UUID (FK) | Reference to the `members` table. |
 | `device_id` | UUID (FK) | Reference to the `devices` table. |
 | `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed` |
-| `lane_id` | UUID (FK, Nullable) | Lane assigned during `Range-Checkin`; populated for check-in and check-out events, null for payment/waiver events. |
-| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` events only. |
+| `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; null only for `Waiver-Signed` events with no lane context. |
+| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` events only and linked to the lane/visit via `lane_id`. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
 
 ### **5.5 Table: `consumable_purchases`**
