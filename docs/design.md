@@ -102,10 +102,10 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | Column | Type | Description |
 | :--- | :--- | :--- |
 | `id` | UUID (PK) | Unique lane identifier. |
-| `range_tag` | TEXT | Human-readable range identifier (e.g., `Rifle-Range`, `Skeet-Field`). Matches `devices.location_tag` context. |
+| `range_tag` | TEXT | Range-level identifier (e.g., `Rifle-Range`, `Skeet-Field`). This is the range prefix; `devices.location_tag` extends it with a kiosk instance suffix (e.g., `Skeet-Field-1`). Once the `ranges` table (ODQ #5) is introduced, this column should become a `range_id` FK. |
 | `lane_number` | SMALLINT | Lane number within the range (e.g., 1–10). |
 | `status` | TEXT | `Available`, `Occupied` |
-| `current_member_id` | UUID (FK, Nullable) | FK to `members.id`; set on check-in, cleared on check-out. Nullable — lanes occupied by guests do not have a `member_id`. |
+| `current_member_id` | UUID (FK, Nullable) | FK to `members.id`; set on check-in, cleared on check-out. Nullable — guest-only occupancy is represented by `current_member_id` being null. |
 | `checked_in_at` | TIMESTAMP (Nullable) | Time the lane was last claimed. |
 
 ### **5.4 Table: `activity_logs`**
