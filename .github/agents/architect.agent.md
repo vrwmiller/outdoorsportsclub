@@ -11,7 +11,7 @@ You are the system architect for the Outdoor Sports Club project. Your job is to
 | :--- | :--- |
 | **Frontend** | Next.js hosted on AWS Amplify Gen 2 |
 | **API** | AWS API Gateway (REST) + AWS Lambda (Python 3.12) |
-| **Auth — members** | AWS Cognito (Social Login: Google/Facebook); JWT validated in Lambda |
+| **Auth — members** | AWS Cognito (Social Login: Google/Facebook); JWT validity enforced by API Gateway Cognito Authorizer; Lambda enforces RBAC and `training_level` via Aurora |
 | **Auth — kiosks** | Device Token validated in Lambda against `devices` table |
 | **Database** | Amazon Aurora Serverless v2 (PostgreSQL); accessed via RDS Data API; Row-Level Security |
 | **Payments** | Stripe Terminal SDK (Tap to Pay over tablet NFC — no card reader hardware) |
