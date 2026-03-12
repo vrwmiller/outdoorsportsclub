@@ -37,7 +37,7 @@ To ensure high-speed check-ins and eliminate the security risks of social login 
 
 ### Physical kiosk model
 
-Staffed ranges (Rifle/Pistol, Skeet/Trap, and staffed Archery) each have 2–3 tablet kiosks. Unstaffed ranges (outdoor Archery when not staffed, Air Rifle when not staffed) do not have kiosks — no check-in flow applies.
+Staffed ranges (Rifle/Pistol, Skeet/Trap, and staffed Archery and Air Rifle) each have 2–3 tablet kiosks. Unstaffed ranges (outdoor Archery and indoor Air Rifle when not staffed) do not have kiosks — no check-in flow applies.
 
 The kiosk handoff model — whether the RSO holds the tablet and hands it to arriving users, or the tablet is fixed-mount and self-serve — is an **open design question (#13)**. Both models are supportable by the same underlying check-in flow; the difference is physical deployment and the violation-clearing mechanism.
 
