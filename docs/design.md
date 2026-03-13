@@ -45,7 +45,7 @@ The kiosk handoff model — whether the RSO holds the tablet and hands it to arr
 
 | State | Description |
 | :--- | :--- |
-| **RSO Dashboard** | Default view. Displays lane occupancy for this kiosk's range: each lane shows `Available` or the name/member number of the assigned occupant and their guest count. |
+| **RSO Dashboard** | Default view. Displays lane occupancy for this kiosk's range: each lane shows `Available` or the name/member number of the assigned occupant and their guest count. Lane state is re-fetched after every check-in and check-out transaction, and polled every 30 seconds between transactions. |
 | **Check-in flow** | Initiated by RSO. Member scans QR Badge; system validates `training_level`, waiver, dues, and guest count. |
 | **Guest add-on** | After the member's lane is assigned, the kiosk prompts: "Add guests? (0 / 1 / 2)." For each guest, the RSO enters a name and phone number; the kiosk looks up the guest in the `guests` table. If a valid waiver is on file, no re-signing is required. If no record exists or the waiver has expired, the kiosk captures a waiver acknowledgement before proceeding. The annual visit count for this guest-member combination is then checked — if the limit has been reached (≥ 2 visits in the current calendar year), the guest is turned away (`403 Forbidden`; no RSO override applies to this rule). For guests that pass all checks, the kiosk presents a payment screen. Either the guest or the sponsoring member may tap to pay. Guests share the member's lane. |
 | **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The user cannot dismiss this screen — only the RSO can clear it by either resolving the issue or denying entry. |
@@ -58,7 +58,8 @@ The kiosk handoff model — whether the RSO holds the tablet and hands it to arr
 * **Mandatory Check-Out:** Range users must check out before leaving. Check-out closes the lane assignment (including all guests) and logs a `Range-Checkout` event.
 * **Violation lock:** A failed check-in locks the screen in violation state. The RSO resolves — approve an override where policy allows, or deny entry. Only Level 4+ can clear a violation alert.
 * **Lane assignment:** Each member check-in assigns one available lane. Member and all their guests share that lane. If no lanes are available, check-in is blocked.
-* **Guest sponsorship:** Guests must be accompanied by a sponsoring member. A member may bring a maximum of **2 guests per range visit**. The limit is enforced per range — a member may not bring more than 2 guests on the same range at the same time. Guest count is stored in `lanes.guest_count` and checked at check-in.
+* **Guest accompaniment:** Guests must be physically present with and accompanied by their sponsoring member. A guest cannot arrive independently — there is no guest-only entry flow. The guest add-on step at the kiosk (after the member's lane is assigned) is the only entry point for guest registration and payment.
+* **Guest sponsorship:** A member may bring a maximum of **2 guests per range visit**. The limit is enforced per range — a member may not bring more than 2 guests on the same range at the same time. Guest count is stored in `lanes.guest_count` and checked at check-in.
 * **Guest check-in order:** The member checks in first and is assigned a lane. The kiosk then offers the guest add-on step (0, 1, or 2 guests). Each guest requires a waiver acknowledgement and a fee payment via **Stripe Terminal** (Tap to Pay). Either the guest or the sponsoring member may pay.
 * **Cashless Guest Fees:** Integrated "Tap-to-Pay" (NFC) via mobile tablets at the range, powered by the **Stripe Terminal SDK**. No additional card reader hardware is required — the tablet's built-in NFC chip acts as the payment terminal.
 * **Consumable Sales:** Members and guests may purchase consumables (e.g., targets, canned soda, coffee) at the kiosk. Each transaction is recorded in the `consumable_purchases` table with full line-item detail. Payment is processed via **Stripe Terminal SDK** (Tap to Pay). **Known Limitation:** There is no reliable physical process to verify that recorded quantities match items actually dispensed; the system records what is entered at the kiosk but cannot enforce inventory accuracy.
@@ -116,10 +117,12 @@ All physical ranges have a row in this table, regardless of whether they are cur
 | Column | Type | Description |
 | :--- | :--- | :--- |
 | `id` | UUID (PK) | Unique hardware ID. |
-| `device_token` | TEXT | Salted hash of the secret used for **Kiosk-to-API** authentication. |
+| `device_token` | TEXT (Nullable) | Salted hash of the secret used for **Kiosk-to-API** authentication. Null until pairing is complete. |
 | `location_tag` | TEXT | Human-readable name (e.g., `Skeet-Trap-1`). |
 | `range_id` | UUID (FK) | FK to `ranges.id`. Determines which range this kiosk serves; used to look up `is_open` and `min_training_level` at check-in. |
 | `status` | TEXT | `Pending-Pairing`, `Active`, `Revoked` |
+| `pairing_code` | TEXT (Nullable) | Short-lived alphanumeric code generated by the Admin Portal during device provisioning. Single-use; cleared on successful pairing. Null for `Active` and `Revoked` devices. |
+| `pairing_code_expires_at` | TIMESTAMP (Nullable) | Expiry time for the pairing code (15-minute TTL). Requests with an expired code are rejected. |
 
 ### **5.4 Table: `lanes`**
 
@@ -258,7 +261,17 @@ If the count is ≥ 2, the kiosk returns `403 Forbidden`. All times are stored a
 
 The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrated via **AWS Amplify**.
 
-### **7.1 Kiosk Operations**
+### **7.1 Member Portal Operations**
+
+* **`GET /v1/members/me`** (**Authenticated member**, Level 0–3)
+  * **Logic:** Returns the authenticated member's own profile. `member_id` resolved from Cognito JWT `sub`; all fields queried from Aurora — never from the JWT claims.
+  * **Returns:** `200 OK` with `{ member_num, training_level, service_hours, dues_paid_until, waiver_signed_at, mobile_phone }`.
+
+* **`GET /v1/members/me/badge`** (**Authenticated member**, Level 0–3)
+  * **Logic:** Returns the member's `member_num` for QR code display in the Member Portal. The frontend renders the `member_num` as a QR code; the kiosk scans and resolves it via `POST /v1/kiosk/check-in`.
+  * **Returns:** `200 OK` with `{ member_num }`.
+
+### **7.2 Kiosk Operations**
 
 * **`POST /v1/kiosk/check-in`**
   * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) waiver not expired; (4) dues current; (5) requested guest count ≤ `training_level_policies.max_guests` for this member's level; (6) an available lane exists. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
@@ -276,13 +289,22 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Logic:** Records one or more line items (item name, quantity, unit price) to `consumable_purchases`; processes payment via **Stripe Terminal SDK** (Tap to Pay). `member_id` is optional — omit for anonymous guest purchases.
   * **Returns:** `200 OK` (Purchase Recorded) or `402 Payment Required` (Stripe payment failure).
 
-### **7.2 Administrative & Recovery**
+### **7.3 Administrative & Recovery**
+
+* **`GET /v1/admin/ranges/occupancy`** (**Level 4+** RSO)
+  * **Logic:** Returns current lane occupancy for all ranges. Each range entry includes `range_id`, `name`, `is_open`, and a list of lanes with their `status`, `lane_number`, `current_member_id` (if occupied), and `guest_count`. Intended for the supervisory cross-range view in the **Admin Portal** and mobile web. Polled by the client at a suitable interval (e.g., 30 seconds). No push mechanism required.
+  * **Returns:** `200 OK` with an array of range occupancy objects.
 
 * **`PATCH /v1/admin/members/reset-auth`** (**Level 6** **Webmaster** Only)
   * **Logic:** Clears the `social_provider_id` in the **Cognito User Pool** for the specific `member_id`.
 
-* **`POST /v1/devices/pair`** (**Level 6** **Webmaster** Only)
-  * **Logic:** Validates the tablet's **Pairing Code**; promotes device to 'Active' and returns the `device_token`.
+* **`POST /v1/admin/devices/pairing-code`** (**Level 6** **Webmaster** Only)
+  * **Logic:** Creates a new device row in `devices` (status `Pending-Pairing`) with a cryptographically random alphanumeric pairing code and a 15-minute expiry. The `location_tag` and `range_id` are set at this point. The Admin Portal displays the generated code for the Webmaster to hand to the technician configuring the tablet. A device row with an unexpired code for the same `location_tag` is rejected — preventing duplicate device creation.
+  * **Returns:** `201 Created` with `{ device_id, pairing_code, expires_at }`.
+
+* **`POST /v1/devices/pair`** (Unauthenticated — identified by Pairing Code)
+  * **Logic:** Called by the tablet during initial setup. Validates the supplied `pairing_code` against `devices` — rejects if not found, already used, or expired. On success: generates a `device_token`, stores its salted hash in `devices.device_token`, sets `status = Active`, and clears `pairing_code` and `pairing_code_expires_at`. Returns the raw token to the tablet, which stores it in secure storage. This is the only time the raw token is transmitted.
+  * **Returns:** `200 OK` with `{ device_token }` or `400 Bad Request` (invalid/expired code).
 
 * **`PATCH /v1/admin/ranges/{range_id}/status`** (**Level 4+** RSO)
   * **Logic:** Sets `ranges.is_open` to `true` or `false`. Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard. Closing a range does not force-clear active lanes — the RSO conducts a physical closing procedure to verify the range is vacated before locking the gate. The RSO dashboard continues to display current lane occupancy while `is_open = false` to support this procedure.
@@ -457,6 +479,32 @@ This requires two new tables: `guests` (persistent identity + waiver metadata, S
 
 The annual visit limit (≤ 2 per guest-member combination per calendar year) is enforced as a hard block — guests that reach the limit are turned away. No RSO override applies to this rule.
 
+### Resolved: Member Portal read endpoints (ODQ #6)
+
+The Member Portal requires two authenticated GET endpoints. Both re-query Aurora on every request — no data is read from JWT claims.
+
+* `GET /v1/members/me` — returns `member_num`, `training_level`, `service_hours`, `dues_paid_until`, `waiver_signed_at`, `mobile_phone`.
+* `GET /v1/members/me/badge` — returns `member_num`; the frontend renders this as a QR code for kiosk scanning.
+
+### Resolved: Pairing Code generation (ODQ #7)
+
+The Admin Portal (Level 6 Webmaster) initiates device provisioning via `POST /v1/admin/devices/pairing-code`, which creates a `Pending-Pairing` device row and returns a 15-minute, single-use alphanumeric code. The Webmaster hands the code to the technician configuring the tablet; the tablet calls `POST /v1/devices/pair` to complete pairing and receive its Device Token. No unauthenticated endpoint exposes a code-request surface — all code generation is gated behind Level 6 auth. Pairing code and expiry are stored directly in the `devices` table (`pairing_code`, `pairing_code_expires_at`); both are cleared on successful pairing.
+
+### Resolved: Guest entry point (ODQ #8)
+
+Guests must be physically present with their sponsoring member and check in together at the same kiosk. There is no guest-only entry path. The guest add-on step (after the member's lane is assigned) is the exclusive entry point for guest registration and first-visit waiver capture. This fully covers the ODQ #8 scenario — no separate guest-initiated kiosk flow is needed.
+
+### Resolved: Real-time RSO check-in view (ODQ #9)
+
+Two surfaces serve different audiences:
+
+* **Kiosk lane dashboard** (existing) — shows occupancy for this kiosk's own range only. State is re-fetched after every check-in/check-out transaction and polled every 30 seconds between transactions. No push mechanism required.
+* **Admin Portal / mobile web cross-range view** (new) — supervisory read-only view of all ranges and their lane-level occupancy, served by `GET /v1/admin/ranges/occupancy` (Level 4+). Client polls at a suitable interval (e.g., 30 seconds). SSE/WebSockets are not needed at club-scale traffic.
+
+### Deferred: Service hours logging (ODQ #3)
+
+Range-qualified members (Level 3) earn their status by completing a minimum 6-hour volunteer service commitment — RSOs are themselves volunteers. RSO check-in and check-out events recorded in `activity_logs` provide an implicit audit trail of volunteer activity, but automated service-hour calculation and promotion workflows are not a primary function of this system version. The `service_hours` column is retained in `members` as a placeholder for a future integration. Level 1 → Level 2 promotion remains a manual Administrator action (see ODQ #4) until a dedicated service-hours tracking feature is scoped.
+
 ### Accepted: Async background workflows are unplanned
 
 The review identified that non-user-facing operations (dues reminders, waiver expiry warnings, service-hours promotion) have no processing layer defined. Captured as **Open Design Question #15**.
@@ -469,13 +517,13 @@ The following are unresolved before implementation begins. Each requires a delib
 | :--- | :--- | :--- |
 | 1 | **Waiver signing** | What API endpoint handles waiver capture and signature? What is the payload (PDF blob, digital signature string, member acknowledgement)? Which surface captures it — Kiosk only, or also Member Portal on personal devices? |
 | 2 | **Dues payment** | How are annual dues paid? **Stripe Terminal** (NFC, kiosk only) or **Stripe.js** (card element, personal device via Member Portal)? A personal-device flow requires a different Stripe integration from the Terminal SDK. |
-| 3 | **Service hours logging** | What is the endpoint and flow for recording service hours? Who initiates the log entry — the member self-reporting, an RSO verifying on-site, or an **Administrator**? What prevents false entries? |
+| 3 | **Service hours logging** | ⏸ Deferred — RSO check-in/check-out events in `activity_logs` serve as an implicit volunteer audit trail. Automated service-hour calculation and promotion are not in scope for this version. `service_hours` retained in `members` as a placeholder. Level 1 → Level 2 promotion remains a manual Administrator action until a dedicated feature is scoped. See Section 10. |
 | 4 | **`training_level` promotion** | What triggers a level change — a manual **Administrator** action, an automated rule (e.g., `service_hours >= 6` auto-promotes Level 1 → Level 2), or both? What is the API endpoint? |
 | 5 | **Range Open / Close** | ✅ Resolved — see Section 5.2 and Section 7.2. `ranges` table added; `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open` (Level 4+); soft close — RSO physically clears the range. Five ranges seeded: Rifle-Pistol, Skeet-Trap, Air-Rifle, Indoor-Archery, Outdoor-Archery (names provisional). |
-| 6 | **Member Portal read endpoints** | No GET endpoints are defined. The Member Portal needs to fetch member profile, `training_level`, `service_hours`, `dues_paid_until`, `waiver_signed_at`, and the QR badge token. These endpoints need to be added to Section 7. |
-| 7 | **Pairing Code generation** | `POST /v1/devices/pair` accepts a Pairing Code, but there is no defined flow for how a new tablet *generates* the code. Is this a one-time code displayed in the Admin Portal that the tablet manually enters, or does the tablet call an unauthenticated endpoint to request a code? |
-| 8 | **Guest Level 0 flow entry point** | Guests must pay a fee and sign a waiver at the kiosk. Does the kiosk allow starting this flow without scanning a QR code? The current check-in endpoint assumes a QR scan. A separate guest-registration flow — or a kiosk-initiated guest session — may be needed. |
-| 9 | **Real-time RSO check-in view** | The primary RSO view is the **kiosk lane dashboard** (Section 4), which shows live lane occupancy on the tablet itself. A secondary read-only view in the **Admin Portal** may also be needed for supervisory oversight across all ranges. The kiosk dashboard requires the same real-time data as check-in/check-out, so no additional push mechanism is needed if the kiosk re-fetches lane state after each transaction. A background polling interval (e.g., every 30s) is sufficient for the kiosk dashboard between transactions. |
+| 6 | **Member Portal read endpoints** | ✅ Resolved — `GET /v1/members/me` and `GET /v1/members/me/badge` added to Section 7.1. Both re-query Aurora on every request; no data read from JWT claims. |
+| 7 | **Pairing Code generation** | ✅ Resolved — Admin Portal (Level 6) calls `POST /v1/admin/devices/pairing-code` to generate a 15-minute single-use code stored in `devices.pairing_code`. Tablet calls `POST /v1/devices/pair` to complete pairing. No unauthenticated code-request surface. See Section 5.3 and Section 7.3. |
+| 8 | **Guest Level 0 flow entry point** | ✅ Resolved — guests must be physically present with their sponsoring member; no independent guest entry path exists. The guest add-on step (after member lane assignment) is the exclusive entry point for first-visit waiver capture and payment. See Section 4 and Section 7.2. |
+| 9 | **Real-time RSO check-in view** | ✅ Resolved — kiosk shows local range occupancy (re-fetched after each transaction + 30s poll). Admin Portal / mobile web adds a cross-range supervisory view via `GET /v1/admin/ranges/occupancy` (Level 4+), polled at 30s. No push mechanism required. See Section 7.3 and Section 10. |
 | 10 | **Offline operation architecture** | Member check-in and check-out must continue without internet connectivity. Proposed approach: the kiosk caches an encrypted local snapshot of active member QR tokens, `training_level`, and waiver/dues status at regular intervals while online. On connectivity loss, check-in validation runs against the local cache; events are queued and synced when connectivity restores. Guest payment (Stripe Terminal) requires connectivity and cannot be processed offline — policy decision needed: (a) refuse guest entry during outage, or (b) allow RSO to grant provisional entry at their discretion (no payment record until online). The caching strategy, encryption key management, and conflict-resolution on sync must be defined before kiosk implementation begins. |
 | 11 | **Violation override flow** | When a check-in fails a rule (guest limit exceeded, waiver expired, etc.), the kiosk enters violation alert state that only a Level 4+ RSO can clear. Two resolution paths are needed: (a) **Approve override** — RSO uses their own credential (PIN, NFC badge, or Admin Portal action) to allow entry anyway and record the exception; (b) **Deny entry** — RSO dismisses the alert, check-in is cancelled, lane remains available. The exact RSO authentication mechanism for clearing the alert (to prevent a user self-clearing) must be defined. |
 | 12 | **Lane configuration management** | ✅ Resolved — see Section 5.4 and Section 7.2. Initial counts seeded in bootstrap migration (Rifle-Pistol: 17 lanes); future changes via `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration. |
