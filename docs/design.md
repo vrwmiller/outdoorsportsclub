@@ -153,9 +153,9 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | :--- | :--- | :--- |
 | `id` | BIGINT (PK) | High-volume log ID. |
 | `member_id` | UUID (FK) | Reference to the `members` table. |
-| `device_id` | UUID (FK) | Reference to the `devices` table. |
+| `device_id` | UUID (FK, Nullable) | Reference to the `devices` table. `NULL` for non-kiosk events (e.g., `Level-Change` actions performed from the Admin Portal). |
 | `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`, `Level-Change` |
-| `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; null only for `Waiver-Signed` events with no lane context. |
+| `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; `NULL` for `Waiver-Signed` and `Level-Change` events which have no lane context. |
 | `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` events only and linked to the lane/visit via `lane_id`. |
 | `guest_id` | UUID (FK, Nullable) | FK to `guests.id`; populated for `Guest-Payment` and `Waiver-Signed` events involving a guest. Null for all other activity types. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
@@ -324,7 +324,7 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
 
 * **`PATCH /v1/admin/members/{member_id}/level`** (**Level 5+** Administrator)
   * **Logic:** Updates `members.training_level` for the specified member. Requires `training_level` (0–6) in the request body. Re-queries the current level from Aurora before applying the change and writes an `activity_logs` entry with `activity_type = 'Level-Change'`. No automated promotion logic — all level changes are explicit Administrator actions.
-  * **Returns:** `200 OK` or `403 Forbidden`.
+  * **Returns:** `200 OK`, `400 Bad Request` (missing or out-of-range `training_level`), `403 Forbidden`, or `404 Not Found`.
 
 ## 8. High Availability, Multi-Region & Disaster Recovery
 

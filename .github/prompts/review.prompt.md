@@ -8,8 +8,9 @@ Follow these steps exactly. Do not skip any step.
 1. **Identify the PR number** — run `gh pr view --json number,headRefName` to get the PR number and branch name. If the current branch has no open PR, stop and tell the user.
 
 2. **Read review comments** — fetch all feedback:
+   * Derive the repo path: `gh repo view --json nameWithOwner --jq .nameWithOwner`
    * Top-level review comments: `gh pr view <number> --comments`
-   * Inline code comments: `gh api repos/vrwmiller/outdoorsportsclub/pulls/<number>/comments`
+   * Inline code comments: `gh api repos/<nameWithOwner>/pulls/<number>/comments`
    Read both outputs before proceeding.
 
 3. **Summarise the feedback** — print a concise, numbered list of every distinct change requested. Group inline comments by file. Ask the user to confirm before making any edits if anything is ambiguous.
