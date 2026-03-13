@@ -29,4 +29,4 @@ Follow these steps exactly. Do not skip any step.
 
 6. **Push** — run `git push`.
 
-7. **Notify reviewer** — run `gh pr comment <number> --body "Addressed all review comments — please take another look."` to leave a comment on the PR.
+7. **Request re-review** — run `gh pr comment <number> --body "@copilot-bot re-review"` to trigger a new Copilot review pass. To also notify human reviewers, add a follow-up comment: `gh pr comment <number> --body "Addressed all review comments — please take another look."`
