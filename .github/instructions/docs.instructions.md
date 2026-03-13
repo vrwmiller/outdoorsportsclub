@@ -15,7 +15,7 @@ applyTo: "docs/**/*.md"
 | `docs/architecture.md` | Developers and Webmaster | System architecture diagram and flow notes; must stay in sync with `design.md` |
 | `docs/stack-decisions.md` | Developers and Webmaster | In-depth analysis of significant technology choices, rejected alternatives, and architectural tradeoffs; records the reasoning behind decisions that are too detailed for `design.md` |
 
-- Implementation detail (schemas, API endpoints, code libraries) belongs in `design.md` only
+- Canonical implementation detail (schemas, API endpoints, code libraries, locked decisions) belongs in `design.md` only; technical context needed to explain a tradeoff (e.g., cost tables, rejected alternatives) belongs in `stack-decisions.md` — do not duplicate, cross-reference instead
 - `one-pager.md` and `proposal.md` should not contradict `design.md`; if they differ, `design.md` wins
 - `stack-decisions.md` captures *why* — the analysis, tradeoffs, and rejected paths behind a decision; `design.md` captures *what* — the canonical decision itself. Do not duplicate content between them; cross-reference instead
 

@@ -47,7 +47,7 @@ The check-in handler (`POST /v1/kiosk/check-in`) enforces a multi-step safety ga
 | :--- | :--- |
 | Valid member, correct `training_level`, valid waiver, dues paid, lane available | `200 OK`; lane assigned; `Range-Checkin` written to `activity_logs` |
 | Member `training_level` below kiosk `min_training_level` | `403 Forbidden`; violation alert reason returned |
-| Member waiver expired (`waiver_signed_at` > 1 year ago) | `403 Forbidden`; violation alert reason returned |
+| Member waiver expired (waiver signed more than 1 year ago) | `403 Forbidden`; violation alert reason returned |
 | Member dues not current (`dues_paid_until` < today) | `403 Forbidden`; violation alert reason returned |
 | Member already checked in on another lane (open `Range-Checkin` exists) | `409 Conflict`; no duplicate lane assigned |
 | No lanes available on this range (all `status = 'Occupied'`) | `409 Conflict`; check-in blocked |

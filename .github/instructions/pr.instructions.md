@@ -19,10 +19,10 @@ applyTo: "**"
 | :--- | :--- |
 | Undo staged changes before committing | `git restore --staged <file>` |
 | Discard uncommitted changes to a file | `git restore <file>` |
-| Undo the last commit but keep the changes staged | `git reset --soft HEAD~1` |
-| Undo the last commit and unstage the changes | `git reset HEAD~1` (mixed — default) |
+| Undo the last commit but keep the changes staged | `git reset --soft HEAD~1` — only if the commit has not been pushed |
+| Undo the last commit and unstage the changes | `git reset HEAD~1` (mixed — default) — only if the commit has not been pushed |
 | Revert a commit that has already been pushed | `git revert <sha>` — creates a new commit, does not rewrite history |
-| Sync a branch to the remote without discarding local work | `git fetch origin && git merge origin/main` |
+| Update your branch with the latest `main` without discarding local work | `git fetch origin && git merge origin/main` |
 | Stash work in progress before switching context | `git stash push -m "description"` / `git stash pop` |
 
 Only use `git reset --hard` when you are certain local changes are safe to discard and the branch has not been pushed. Never use it on `main` or on a branch with an open PR.
