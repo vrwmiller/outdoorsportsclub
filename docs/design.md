@@ -93,10 +93,10 @@ The kiosk handoff model — whether the RSO holds the tablet and hands it to arr
 | State | Description |
 | :--- | :--- |
 | **RSO Dashboard** | Default view. Displays lane occupancy for this kiosk's range: each lane shows `Available` or the name/member number of the assigned occupant and their guest count. Lane state is re-fetched after every check-in and check-out transaction, and polled every 30 seconds between transactions. |
-| **Check-in flow** | Initiated by RSO. Member scans QR Badge; system validates `training_level`, waiver, dues, and guest count. |
+| **Check-in flow** | Initiated by RSO. Member scans QR Badge; system validates `training_level`, dues, and declared guest count. |
 | **Guest add-on** | After a lane is assigned (either directly or after being called from the wait list), the kiosk runs the guest add-on flow for each declared guest: waiver check, annual-limit check, and payment via **Stripe Terminal**. No payment is taken before a lane is confirmed. |
 | **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The user cannot dismiss this screen — only the RSO can clear it by either resolving the issue or denying entry. |
-| **Lane assignment** | After the member and all guests are processed, the system assigns the lane that maximises distance from occupied groups. The confirmed lane number is shown on screen. |
+| **Lane assignment** | Once the member has declared their guest count and a lane is available, the system assigns the lane that maximises spacing from occupied groups based on the declared group size. The confirmed lane number is shown on screen. Guest waiver and payment are then processed per guest. |
 | **Wait list** | Displayed when all lanes are occupied. The kiosk shows the member's current position in the queue. The member may cancel and leave at any time. When a lane opens, the kiosk calls the next member in the queue and advances to lane assignment. |
 | **Check-out flow** | RSO-initiated or user-initiated. Member scans QR Badge; open lane assignment (including all guests on that lane) is closed, the lane returns to `Available`, and the wait list is advanced if any entries are queued. |
 
@@ -178,7 +178,7 @@ flowchart TD
 * **Violation lock:** A failed check-in locks the screen in violation state. The RSO resolves — approve an override where policy allows, or deny entry. Only Level 4+ can clear a violation alert.
 * **Lane assignment:** Each member check-in assigns one available lane. Member and all their guests share that lane. When multiple lanes are available, the system selects the lane that maximises physical distance from all currently occupied lanes — preferring lanes whose nearest occupied neighbour is as far away as possible. This distributes groups across the range rather than clustering them adjacently. When all lanes are occupied the member is offered a wait list position instead of a hard block.
 * **Wait list:** When the range is full, the kiosk adds the member to the wait list for that range (`wait_list` table) and displays their queue position. When any lane is released via check-out, the system automatically advances the queue: the next `Waiting` entry is promoted to `Called`, the RSO Dashboard highlights the queued member, and (if the member has a `mobile_phone` on record) an **Amazon SNS** SMS is sent. The called entry expires after 5 minutes (`expires_at`); if not acted on it is marked `Expired` and the next entry is advanced. A member may cancel their wait list entry at any time from the kiosk screen.
-* **Guest accompaniment:** Guests must be physically present with and accompanied by their sponsoring member. A guest cannot arrive independently — there is no guest-only entry flow. The guest add-on step at the kiosk (before lane assignment) is the only entry point for guest registration and payment.
+* **Guest accompaniment:** Guests must be physically present with and accompanied by their sponsoring member. A guest cannot arrive independently — there is no guest-only entry flow. The guest add-on step at the kiosk (after lane assignment) is the only entry point for guest registration and payment.
 * **Guest sponsorship:** A member may bring a maximum of **2 guests per range visit**. The limit is enforced per range — a member may not bring more than 2 guests on the same range at the same time. Guest count is stored in `lanes.guest_count` and checked at check-in.
 * **Guest check-in order:** The member declares guest count (0, 1, or 2) before the lane check. The declared count is used to score lane selection but no guest processing occurs at this stage. Once a lane is assigned — either immediately or after being called from the wait list — the kiosk runs the guest add-on flow for each guest: waiver acknowledgement, annual-limit check, and payment via **Stripe Terminal** (Tap to Pay). Either the guest or the sponsoring member may pay. If the member was on the wait list and declines or leaves before a lane opens, no payment has been taken.
 * **Cashless Guest Fees:** Integrated "Tap-to-Pay" (NFC) via mobile tablets at the range, powered by the **Stripe Terminal SDK**. No additional card reader hardware is required — the tablet's built-in NFC chip acts as the payment terminal.
@@ -252,6 +252,7 @@ erDiagram
         UUID actor_member_id FK
         UUID device_id FK
         UUID lane_id FK
+        UUID guest_id FK
         TEXT activity_type
         TIMESTAMP timestamp
     }
@@ -268,9 +269,11 @@ erDiagram
         UUID range_id FK
         UUID member_id FK
         UUID device_id FK
+        SMALLINT guest_count
         SMALLINT position
         TEXT status
         TIMESTAMP joined_at
+        TIMESTAMP called_at
         TIMESTAMP expires_at
     }
 
@@ -491,7 +494,7 @@ One row per queued member per range visit attempt. Created when all lanes are oc
 
 * `CHECK (status IN ('Waiting', 'Called', 'Expired', 'Cancelled', 'Checked-In'))`
 * `CHECK (guest_count BETWEEN 0 AND 2)`
-* `UNIQUE (range_id, member_id)` filtered on `status IN ('Waiting', 'Called')` — a member may not hold more than one active position in the queue for the same range.
+* `CREATE UNIQUE INDEX ON wait_list (range_id, member_id) WHERE status IN ('Waiting', 'Called')` — a member may not hold more than one active position in the queue for the same range. This is a partial unique index, not a UNIQUE constraint; PostgreSQL does not support filtered UNIQUE constraints.
 * `INDEX ON (range_id, status, position)` — queue advance query: `WHERE range_id = $1 AND status = 'Waiting' ORDER BY position LIMIT 1`.
 * `INDEX ON (member_id, status)` — member cancellation and status lookup.
 
@@ -523,7 +526,7 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Returns:** `200 OK` with `{ range_id, name, is_open, lanes: [{ lane_id, lane_number, status, current_member_id, member_num, guest_count, checked_in_at }] }`. `member_num` and `checked_in_at` are `null` when `status` is `Available`.
 
 * **`POST /v1/kiosk/check-in`**
-  * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no active `wait_list` entry already exists for this member at this range. If all lanes are occupied, a `wait_list` row is inserted (storing `guest_count` for later lane scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If a lane is available, selects the lane that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
+  * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry is transitioned to `Checked-In` on successful lane assignment). If all lanes are occupied, a `wait_list` row is inserted (storing `guest_count` for later lane scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If a lane is available, selects the lane that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
   * **Returns:** `200 OK` with `{ lane_number }` (lane assigned), `202 Accepted` with `{ wait_position }` (range full — added to wait list), or `403 Forbidden` (e.g., "Level 3 Required", "Guests not permitted at this level").
 
 * **`POST /v1/kiosk/check-out`**

@@ -82,7 +82,7 @@ flowchart LR
 
 ## Check-in Data Flow
 
-This sequence traces a single kiosk check-in from QR scan to lane assignment. Every validation step is performed by **Lambda** querying **Aurora** via the **RDS Data API** — no data is trusted from the device record or JWT claim.
+This sequence traces a kiosk check-in from QR scan through validation, lane assignment, and the wait list fallback path. Every validation step is performed by **Lambda** querying **Aurora** via the **RDS Data API** — no data is trusted from the device record or JWT claim.
 
 ```mermaid
 sequenceDiagram
@@ -92,18 +92,26 @@ sequenceDiagram
     participant LM as Lambda
     participant DB as Aurora
 
-    RSO->>K: Member scans QR Badge
-    K->>GW: POST /v1/kiosk/check-in (Device Token header)
+    RSO->>K: Member scans QR Badge + declares guest count
+    K->>GW: POST /v1/kiosk/check-in (Device Token + guest_count)
     GW->>LM: Invoke — no Cognito Authorizer on kiosk routes
     LM->>DB: Validate device (devices.status = Active)
     LM->>DB: Fetch range (is_open, min_training_level)
-    LM->>DB: Fetch member (training_level, waiver_signed_at, dues_paid_until)
+    LM->>DB: Fetch member (training_level, dues_paid_until)
     LM->>DB: Fetch policy (training_level_policies.max_guests)
-    LM->>DB: Find available lane for range
-    LM->>DB: UPDATE lanes (Occupied) + INSERT activity_logs
-    LM-->>GW: 200 OK { lane_number }
-    GW-->>K: 200 OK { lane_number }
-    K-->>RSO: Lane confirmed on screen
+    LM->>DB: Count available lanes for range
+    alt Lane available
+        LM->>DB: Select lane — maximise gap from occupied lanes by lane_number
+        LM->>DB: UPDATE lanes (Occupied) + INSERT activity_logs
+        LM-->>GW: 200 OK { lane_number }
+        GW-->>K: 200 OK { lane_number }
+        K-->>RSO: Lane confirmed — guest add-on flow runs next
+    else Range full
+        LM->>DB: INSERT wait_list row (guest_count stored, no payment)
+        LM-->>GW: 202 Accepted { wait_position }
+        GW-->>K: 202 Accepted { wait_position }
+        K-->>RSO: Wait list position shown — member may cancel at any time
+    end
 ```
 
 ## RBAC
