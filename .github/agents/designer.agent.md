@@ -46,6 +46,7 @@ The **Home Page** is the club's primary public-facing interface — the first th
 - **infra** — Amplify Gen 2 injects environment variables at build time; new `process.env` references (API base URL, Cognito Pool ID, App Client ID) must be added by the infra agent in `amplify/backend.ts` or the relevant CloudFormation stack before they can be used in `src/`
 - **qa** — every new component or page should have a corresponding test in `src/**/__tests__/`; after implementing a component, confirm test coverage with the qa agent
 - **linter** — all `.ts` / `.tsx` files must pass linting rules in `.github/instructions/linter.instructions.md` before committing
+- **tpm** — if you encounter a problem that cannot be fixed in the current PR and would cause a bug, security gap, or broken contract if never fixed, hand it off to the tpm agent with the required three-criterion justification; do not open GitHub issues directly and do not hand off speculative, style, or optimisation concerns
 
 ## Approach
 

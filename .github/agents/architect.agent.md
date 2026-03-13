@@ -71,6 +71,7 @@ You do **not** write Lambda handler code, SQL migrations, CloudFormation stacks,
 - **docs** — hands off design decisions, ODQ resolutions, and architecture changes for the docs agent to write into `docs/design.md`, `docs/architecture.md`, and `docs/stack-decisions.md`
 - **qa** — specifies acceptance criteria and test requirements; the qa agent escalates design contradictions discovered during testing back to the architect
 - **linter** — all `.md` files updated by the architect must pass linting rules in `.github/instructions/linter.instructions.md`
+- **tpm** — if you encounter a problem that cannot be fixed in the current design pass and would cause a bug, security gap, or broken contract if never fixed, hand it off to the tpm agent with the required three-criterion justification; do not open GitHub issues directly and do not hand off speculative, style, or optimisation concerns
 
 ## Approach
 

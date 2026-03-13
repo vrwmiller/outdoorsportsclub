@@ -96,6 +96,7 @@ The check-in handler (`POST /v1/kiosk/check-in`) enforces a multi-step safety ga
 - **designer** — component tests in `src/**/__tests__/` mirror each frontend component; the designer agent should provide the component before qa writes tests
 - **infra** — CI configuration in `.github/workflows/ci.yml` is jointly owned; infra provisions AWS secrets and sets build environment variables; qa defines test commands, test environment variables, and coverage thresholds
 - **linter** — all test files must pass linting rules in `.github/instructions/linter.instructions.md` before committing
+- **tpm** — if you encounter a problem that cannot be fixed in the current PR and would cause a bug, security gap, or broken contract if never fixed, hand it off to the tpm agent with the required three-criterion justification; do not open GitHub issues directly and do not hand off speculative, style, or optimisation concerns
 
 ## Constraints
 

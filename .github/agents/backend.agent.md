@@ -57,6 +57,7 @@ Implement exactly the contracts specified in `docs/design.md` Section 7. Do not 
 - **infra** — Lambda execution roles (IAM), Secrets Manager secret names, and environment variable names are provisioned by infra in `infra/stacks/`; do not hardcode resource names — check infra stacks for the canonical values
 - **qa** — every handler must have a corresponding test in `tests/unit/`; after implementing a handler, confirm coverage with the qa agent
 - **linter** — all `.py` files must pass linting rules in `.github/instructions/linter.instructions.md` before committing
+- **tpm** — if you encounter a problem that cannot be fixed in the current PR and would cause a bug, security gap, or broken contract if never fixed, hand it off to the tpm agent with the required three-criterion justification; do not open GitHub issues directly and do not hand off speculative, style, or optimisation concerns
 
 ## Approach
 
