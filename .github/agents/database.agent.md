@@ -34,6 +34,7 @@ All tables are defined in `docs/design.md` Section 5. Current tables:
 - DO NOT bypass RLS — every new table must have a policy defined before it is used in production
 - DO NOT use `SERIAL` / `INT` for primary keys — use `UUID` (`gen_random_uuid()`) except where `BIGINT` is justified for high-volume append-only tables (e.g., `activity_logs`)
 - DO NOT write migrations that lock tables for more than a few seconds — use `ADD COLUMN` with a default rather than rewriting rows where possible
+- DO NOT accept PR reviewer suggestions without first verifying the claim against the actual schema, `.github/instructions/database.instructions.md`, and `docs/design.md` Section 5 — reject or correct any comment that contradicts the established schema model
 - All migrations must be idempotent — safe to run twice without error
 - Schema changes must be reflected in `docs/design.md` Section 5 before the migration is considered complete
 

@@ -48,6 +48,7 @@ You are the infrastructure and DevOps engineer for the Outdoor Sports Club proje
 - S3 Object Lock must be set at bucket creation — it cannot be enabled after the fact
 - KMS key deletion has a minimum 7-day waiting period — never schedule key deletion without Webmaster approval
 - All CloudFormation stacks must have `DeletionPolicy: Retain` on stateful resources (Aurora, S3, KMS keys)
+- DO NOT accept PR reviewer suggestions without first verifying the claim against the actual templates, `.github/instructions/infra.instructions.md`, and `docs/design.md` — reject or correct any comment that contradicts established infra patterns or security controls
 
 ## Coordinates with
 
