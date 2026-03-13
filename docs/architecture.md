@@ -80,6 +80,40 @@ flowchart LR
 | Aurora / S3 → KMS | All stored data is encrypted at rest via **AWS KMS** |
 | Aurora / S3 → AWS Backup | **AWS Backup** captures continuous PITR snapshots and replicates them cross-region for disaster recovery |
 
+## Check-in Data Flow
+
+This sequence traces a kiosk check-in from QR scan through validation, lane assignment, and the wait list fallback path. Every validation step is performed by **Lambda** querying **Aurora** via the **RDS Data API** — no data is trusted from the device record or JWT claim.
+
+```mermaid
+sequenceDiagram
+    actor RSO as User
+    participant K as Kiosk Tablet
+    participant GW as API Gateway
+    participant LM as Lambda
+    participant DB as Aurora
+
+    RSO->>K: Member scans QR Badge + declares guest count
+    K->>GW: POST /v1/kiosk/check-in (Device Token + guest_count)
+    GW->>LM: Invoke — no Cognito Authorizer on kiosk routes
+    LM->>DB: Validate device (devices.status = Active)
+    LM->>DB: Fetch range (is_open, min_training_level)
+    LM->>DB: Fetch member (training_level, dues_paid_until)
+    LM->>DB: Fetch policy (training_level_policies.max_guests)
+    LM->>DB: Count available lanes for range
+    alt Lane available
+        LM->>DB: Select lane — maximise gap from occupied lanes by lane_number
+        LM->>DB: UPDATE lanes (Occupied) + INSERT activity_logs
+        LM-->>GW: 200 OK { lane_number }
+        GW-->>K: 200 OK { lane_number }
+        K-->>RSO: Lane confirmed — guest add-on flow runs next
+    else Range full
+        LM->>DB: INSERT wait_list row (guest_count stored, no payment)
+        LM-->>GW: 202 Accepted { wait_position }
+        GW-->>K: 202 Accepted { wait_position }
+        K-->>RSO: Wait list position shown — member may cancel at any time
+    end
+```
+
 ## RBAC
 
 Two auth paths control access within a single **Next.js** app hosted on **AWS Amplify Gen 2**. For personal devices, **AWS Cognito** Social Login grants a JWT; the nav menu then expands based on `training_level` fetched via a backend API call (**Lambda** re-queries **Aurora** via **RDS Data API**) — the JWT claim is never trusted for this. For kiosk tablets, a Device Token is included on every API request and validated by **Lambda** directly; **Cognito** is bypassed entirely. The `training_level` value stored in **Aurora** is always the source of truth.

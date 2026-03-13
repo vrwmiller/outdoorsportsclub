@@ -16,6 +16,28 @@ The application is a single **Next.js** app hosted on **AWS Amplify Gen 2**. The
 | **5** | **Administrator** | Business Oversight | **Full Business Access:** Finance, Database, and Rules. |
 | **6** | **Webmaster** | **Technical Oversight** | **Full System Access:** API logs, Device Pairing, and Recovery. |
 
+### Level progression
+
+All level changes are explicit **Administrator (Level 5+)** actions in the Admin Portal — no automated promotion occurs.
+
+```mermaid
+flowchart LR
+    G["Level 0<br/>Guest<br/>Kiosk only"]
+    P["Level 1<br/>Probationary<br/>Pending 6 service hours"]
+    BM["Level 2<br/>Basic Member<br/>Skeet · Trap · Archery"]
+    Q["Level 3<br/>Qualified<br/>Adds Rifle / Pistol"]
+    RSO["Level 4<br/>RSO / Instructor<br/>Opens and closes ranges"]
+    ADM["Level 5<br/>Administrator<br/>Finance and oversight"]
+    WM["Level 6<br/>Webmaster<br/>Full system access"]
+
+    G -->|Admin promotes| P
+    P -->|6 service hours + Admin promotes| BM
+    BM -->|Qualification training + Admin promotes| Q
+    Q -->|RSO cert + Admin promotes| RSO
+    RSO -->|Admin promotes| ADM
+    ADM -->|Admin promotes| WM
+```
+
 ## 2. Kiosk Identity & Device Provisioning (AWS)
 
 To ensure high-speed check-ins and eliminate the security risks of social login on shared tablets, the system utilizes **Secure Device Pairing**:
@@ -23,6 +45,31 @@ To ensure high-speed check-ins and eliminate the security risks of social login 
 * **Pairing Workflow:** A **Webmaster (Level 6)** initiates device provisioning via the Admin Portal, which generates a short-lived **Pairing Code**. The Webmaster hands the code to the technician configuring the tablet; the tablet uses the code to complete pairing and receive its Device Token.
 * **Kiosk Token:** Once paired, the server issues a unique **Device Token** stored in the tablet's secure storage. The tablet then functions as a trusted appliance.
 * **Revocation:** If a tablet is lost or stolen, the **Webmaster** sets the device's `status` to `Revoked` in the `devices` table via the Admin Portal. The next API request from that tablet will be rejected immediately.
+
+### Pairing sequence
+
+```mermaid
+sequenceDiagram
+    actor WM as Webmaster (Level 6)
+    participant AP as Admin Portal
+    participant API as API Gateway + Lambda
+    participant DB as Aurora
+    participant T as Kiosk Tablet
+
+    WM->>AP: Initiate provisioning (location_tag, range)
+    AP->>API: POST /v1/admin/devices/pairing-code
+    API->>DB: INSERT device — Pending-Pairing, 15-min pairing code
+    DB-->>API: device_id, pairing_code
+    API-->>AP: { device_id, pairing_code, expires_at }
+    AP-->>WM: Display pairing code
+    Note over WM,T: Webmaster hands code to technician
+    T->>API: POST /v1/devices/pair { pairing_code }
+    API->>DB: Validate — not expired, not already used
+    API->>DB: Store device_token hash, status = Active, clear pairing_code
+    API-->>T: { device_token }
+    T->>T: Store in secure storage
+    Note over T,API: All subsequent API calls include Device Token header
+```
 
 ## 3. Member Identity & Recovery Protocol
 
@@ -46,21 +93,94 @@ The kiosk handoff model — whether the RSO holds the tablet and hands it to arr
 | State | Description |
 | :--- | :--- |
 | **RSO Dashboard** | Default view. Displays lane occupancy for this kiosk's range: each lane shows `Available` or the name/member number of the assigned occupant and their guest count. Lane state is re-fetched after every check-in and check-out transaction, and polled every 30 seconds between transactions. |
-| **Check-in flow** | Initiated by RSO. Member scans QR Badge; system validates `training_level`, waiver, dues, and guest count. |
-| **Guest add-on** | After the member's lane is assigned, the kiosk prompts: "Add guests? (0 / 1 / 2)." For each guest, the RSO enters a name and phone number; the kiosk looks up the guest in the `guests` table. If a valid waiver is on file, no re-signing is required. If no record exists or the waiver has expired, the kiosk captures a waiver acknowledgement before proceeding. The annual visit count for this guest-member combination is then checked — if the limit has been reached (≥ 2 visits in the current calendar year), the guest is turned away (`403 Forbidden`; no RSO override applies to this rule). For guests that pass all checks, the kiosk presents a payment screen. Either the guest or the sponsoring member may tap to pay. Guests share the member's lane. |
+| **Check-in flow** | Initiated by RSO. Member scans QR Badge; system validates `training_level`, dues, and declared guest count. |
+| **Guest add-on** | After a lane is assigned (either directly or after being called from the wait list), the kiosk runs the guest add-on flow for each declared guest: waiver check, annual-limit check, and payment via **Stripe Terminal**. No payment is taken before a lane is confirmed. |
 | **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The user cannot dismiss this screen — only the RSO can clear it by either resolving the issue or denying entry. |
-| **Lane assignment** | After check-in (and optional guest add-on) is complete, the assigned lane and guest count are confirmed on screen. |
-| **Check-out flow** | RSO-initiated or user-initiated. Member scans QR Badge; open lane assignment (including all guests on that lane) is closed and the lane returns to `Available`. |
+| **Lane assignment** | Once the member has declared their guest count and a lane is available, the system assigns the lane that maximises spacing from occupied groups based on the declared group size. The confirmed lane number is shown on screen. Guest waiver and payment are then processed per guest. |
+| **Wait list** | Displayed when all lanes are occupied. The kiosk shows the member's current position in the queue. The member may cancel and leave at any time. When a lane opens, the kiosk calls the next member in the queue and advances to lane assignment. |
+| **Check-out flow** | RSO-initiated or user-initiated. Member scans QR Badge; open lane assignment (including all guests on that lane) is closed, the lane returns to `Available`, and the wait list is advanced if any entries are queued. |
+
+### Check-in workflow
+
+```mermaid
+flowchart TD
+    DASH["RSO Dashboard<br/>Lane occupancy displayed"]
+    SCAN["Member scans QR Badge"]
+    T_LVL{"training_level ≥<br/>range minimum?"}
+    DUES{"Dues current?"}
+    LANE{"Lane available?"}
+    ASSIGN["Assign lane<br/>maximise spacing from occupied lanes"]
+    GUESTS{"Declare guest count<br/>0 · 1 · 2"}
+    GUEST_FLOW["Guest add-on flow<br/>per guest — see below"]
+    CONFIRM["Lane number confirmed<br/>on screen"]
+    VIOL["Violation alert<br/>RSO resolves or denies entry"]
+    CHECKOUT["Member scans QR at exit"]
+    CLOSE["Lane released — Available"]
+    WL["Added to wait list<br/>guest count stored — no payment yet"]
+    WL_CALLED["Lane opened —<br/>member called to kiosk"]
+
+    DASH --> SCAN
+    SCAN --> T_LVL
+    T_LVL -->|No| VIOL
+    T_LVL -->|Yes| DUES
+    DUES -->|Unpaid| VIOL
+    DUES -->|Current| GUESTS
+    GUESTS --> LANE
+    LANE -->|Available| ASSIGN
+    LANE -->|None available| WL
+    WL -->|Member cancels| DASH
+    WL -->|Lane opens| WL_CALLED --> ASSIGN
+    VIOL -->|RSO clears| DASH
+    ASSIGN -->|0 guests| CONFIRM
+    ASSIGN -->|1–2 guests| GUEST_FLOW --> CONFIRM
+    CONFIRM --> CHECKOUT
+    CHECKOUT --> CLOSE
+    CLOSE --> DASH
+```
+
+### Guest add-on flow
+
+Run once per guest — up to two guests per check-in.
+
+```mermaid
+flowchart TD
+    START["Guest add-on begins"]
+    LOOKUP["Look up guest<br/>first name · last name · phone"]
+    FOUND{"Record found?"}
+    CREATE["Create guest record"]
+    WAIVER_CHK{"Waiver on file<br/>and not expired?"}
+    WAIVER_CAP["Capture waiver<br/>acknowledgement at kiosk"]
+    LIMIT_CHK{"Visits this year<br/>with this member < 2?"}
+    HARD_BLOCK["403 Forbidden<br/>Annual limit reached<br/>No RSO override applies"]
+    PAYMENT["Guest fee via<br/>Stripe Terminal — NFC"]
+    PAY_OK{"Payment confirmed?"}
+    PAY_FAIL["402 Payment Required"]
+    INSERT["Insert guest_visits row<br/>Log to activity_logs"]
+    DONE["Guest shares member lane"]
+
+    START --> LOOKUP
+    LOOKUP --> FOUND
+    FOUND -->|No| CREATE --> WAIVER_CHK
+    FOUND -->|Yes| WAIVER_CHK
+    WAIVER_CHK -->|No or expired| WAIVER_CAP --> LIMIT_CHK
+    WAIVER_CHK -->|Valid| LIMIT_CHK
+    LIMIT_CHK -->|≥ 2 visits| HARD_BLOCK
+    LIMIT_CHK -->|< 2| PAYMENT
+    PAYMENT --> PAY_OK
+    PAY_OK -->|No| PAY_FAIL
+    PAY_OK -->|Yes| INSERT --> DONE
+```
 
 ### Flow rules
 
 * **The "Safety Gate":** Automated blocking of check-ins for members with insufficient `training_level` for a specific range.
 * **Mandatory Check-Out:** Range users must check out before leaving. Check-out closes the lane assignment (including all guests) and logs a `Range-Checkout` event.
 * **Violation lock:** A failed check-in locks the screen in violation state. The RSO resolves — approve an override where policy allows, or deny entry. Only Level 4+ can clear a violation alert.
-* **Lane assignment:** Each member check-in assigns one available lane. Member and all their guests share that lane. If no lanes are available, check-in is blocked.
-* **Guest accompaniment:** Guests must be physically present with and accompanied by their sponsoring member. A guest cannot arrive independently — there is no guest-only entry flow. The guest add-on step at the kiosk (after the member's lane is assigned) is the only entry point for guest registration and payment.
+* **Lane assignment:** Each member check-in assigns one available lane. Member and all their guests share that lane. When multiple lanes are available, the system selects the lane that maximises physical distance from all currently occupied lanes — preferring lanes whose nearest occupied neighbour is as far away as possible. This distributes groups across the range rather than clustering them adjacently. When all lanes are occupied the member is offered a wait list position instead of a hard block.
+* **Wait list:** When the range is full, the kiosk adds the member to the wait list for that range (`wait_list` table) and displays their queue position. When any lane is released via check-out, the system automatically advances the queue: the next `Waiting` entry is promoted to `Called`, the RSO Dashboard highlights the queued member, and (if the member has a `mobile_phone` on record) an **Amazon SNS** SMS is sent. The called entry expires after 5 minutes (`expires_at`); if not acted on it is marked `Expired` and the next entry is advanced. A member may cancel their wait list entry at any time from the kiosk screen.
+* **Guest accompaniment:** Guests must be physically present with and accompanied by their sponsoring member. A guest cannot arrive independently — there is no guest-only entry flow. The guest add-on step at the kiosk (after lane assignment) is the only entry point for guest registration and payment.
 * **Guest sponsorship:** A member may bring a maximum of **2 guests per range visit**. The limit is enforced per range — a member may not bring more than 2 guests on the same range at the same time. Guest count is stored in `lanes.guest_count` and checked at check-in.
-* **Guest check-in order:** The member checks in first and is assigned a lane. The kiosk then offers the guest add-on step (0, 1, or 2 guests). Each guest requires a waiver acknowledgement and a fee payment via **Stripe Terminal** (Tap to Pay). Either the guest or the sponsoring member may pay.
+* **Guest check-in order:** The member declares guest count (0, 1, or 2) before the lane check. The declared count is used to score lane selection but no guest processing occurs at this stage. Once a lane is assigned — either immediately or after being called from the wait list — the kiosk runs the guest add-on flow for each guest: waiver acknowledgement, annual-limit check, and payment via **Stripe Terminal** (Tap to Pay). Either the guest or the sponsoring member may pay. If the member was on the wait list and declines or leaves before a lane opens, no payment has been taken.
 * **Cashless Guest Fees:** Integrated "Tap-to-Pay" (NFC) via mobile tablets at the range, powered by the **Stripe Terminal SDK**. No additional card reader hardware is required — the tablet's built-in NFC chip acts as the payment terminal.
 * **Consumable Sales:** Members and guests may purchase consumables (e.g., targets, canned soda, coffee) at the kiosk. Each transaction is recorded in the `consumable_purchases` table with full line-item detail. Payment is processed via **Stripe Terminal SDK** (Tap to Pay). **Known Limitation:** There is no reliable physical process to verify that recorded quantities match items actually dispensed; the system records what is entered at the kiosk but cannot enforce inventory accuracy.
 * **Time-Bound Waivers:** Automated re-signing triggers for Safety Waivers based on 1-year expiration logic.
@@ -73,6 +193,108 @@ If internet connectivity is lost, the kiosk must continue to support member chec
 ## 5. Data Schema (Amazon Aurora Serverless v2)
 
 The database utilizes a relational model (PostgreSQL) with **Row-Level Security (RLS)**. This ensures members can only access their own profiles, while Level 4–6 users have elevated visibility for range safety and system maintenance.
+
+### Entity relationships
+
+```mermaid
+erDiagram
+    members {
+        UUID id PK
+        TEXT member_num
+        INT training_level
+        TEXT email
+        TIMESTAMP waiver_signed_at
+        DATE dues_paid_until
+    }
+    training_level_policies {
+        SMALLINT training_level PK
+        SMALLINT max_guests
+    }
+    ranges {
+        UUID id PK
+        TEXT name
+        BOOLEAN is_open
+        SMALLINT min_training_level
+    }
+    devices {
+        UUID id PK
+        TEXT location_tag
+        UUID range_id FK
+        TEXT status
+        TEXT pairing_code
+    }
+    lanes {
+        UUID id PK
+        UUID range_id FK
+        SMALLINT lane_number
+        TEXT status
+        UUID current_member_id FK
+        SMALLINT guest_count
+    }
+    guests {
+        UUID id PK
+        TEXT first_name
+        TEXT last_name
+        TEXT phone
+        TIMESTAMP waiver_signed_at
+    }
+    guest_visits {
+        UUID id PK
+        UUID guest_id FK
+        UUID member_id FK
+        UUID range_id FK
+        UUID lane_id FK
+        TIMESTAMP visited_at
+    }
+    activity_logs {
+        BIGINT id PK
+        UUID member_id FK
+        UUID actor_member_id FK
+        UUID device_id FK
+        UUID lane_id FK
+        UUID guest_id FK
+        TEXT activity_type
+        TIMESTAMP timestamp
+    }
+    consumable_purchases {
+        UUID id PK
+        UUID member_id FK
+        UUID device_id FK
+        TEXT item_name
+        DECIMAL total
+        TIMESTAMP timestamp
+    }
+    wait_list {
+        UUID id PK
+        UUID range_id FK
+        UUID member_id FK
+        UUID device_id FK
+        SMALLINT guest_count
+        SMALLINT position
+        TEXT status
+        TIMESTAMP joined_at
+        TIMESTAMP called_at
+        TIMESTAMP expires_at
+    }
+
+    members }o--|| training_level_policies : "level lookup"
+    ranges ||--o{ devices : "assigned to"
+    ranges ||--o{ lanes : "contains"
+    members ||--o{ lanes : "occupies"
+    lanes ||--o{ activity_logs : "logged for"
+    members ||--o{ activity_logs : "tracks"
+    devices ||--o{ activity_logs : "via"
+    guests ||--o{ activity_logs : "guest"
+    guests ||--o{ guest_visits : "visits"
+    members ||--o{ guest_visits : "sponsors"
+    ranges ||--o{ guest_visits : "at"
+    lanes ||--o{ guest_visits : "on"
+    members ||--o{ consumable_purchases : "purchases"
+    devices ||--o{ consumable_purchases : "processed on"
+    members ||--o{ wait_list : "queued"
+    ranges ||--o{ wait_list : "for"
+    devices ||--o{ wait_list : "at"
+```
 
 ### **5.1 Table: `members`**
 
@@ -251,6 +473,31 @@ If the count is ≥ 2, the kiosk returns `403 Forbidden`. All times are stored a
 * `INDEX ON (guest_id, member_id, visited_at)` — annual count query.
 * `INDEX ON (member_id)` — sponsor history lookup.
 
+### **5.10 Table: `wait_list`**
+
+One row per queued member per range visit attempt. Created when all lanes are occupied at check-in; consumed when a lane becomes available and the member is called forward.
+
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | UUID (PK) | Unique wait list entry. |
+| `range_id` | UUID (FK) | FK to `ranges.id` — the range the member is queued for. |
+| `member_id` | UUID (FK) | FK to `members.id` — the waiting member. |
+| `device_id` | UUID (FK) | FK to `devices.id` — the kiosk where the member is waiting; used to display the call on the correct screen. |
+| `guest_count` | SMALLINT | Number of guests the member intends to bring; validated again against `training_level_policies.max_guests` when the entry is called forward. |
+| `position` | SMALLINT | Queue position within the range (1 = next). Recalculated on every cancellation or expiry. |
+| `status` | TEXT | `Waiting`, `Called`, `Expired`, `Cancelled`, `Checked-In` |
+| `joined_at` | TIMESTAMP | When the entry was created. |
+| `called_at` | TIMESTAMP (Nullable) | When the entry was promoted to `Called`; used to calculate `expires_at`. |
+| `expires_at` | TIMESTAMP (Nullable) | 5-minute TTL from `called_at`; entry is marked `Expired` and the queue is advanced if the member does not complete check-in by this time. |
+
+**Constraints and indexes:**
+
+* `CHECK (status IN ('Waiting', 'Called', 'Expired', 'Cancelled', 'Checked-In'))`
+* `CHECK (guest_count BETWEEN 0 AND 2)`
+* `CREATE UNIQUE INDEX ON wait_list (range_id, member_id) WHERE status IN ('Waiting', 'Called')` — a member may not hold more than one active position in the queue for the same range. This is a partial unique index, not a UNIQUE constraint; PostgreSQL does not support filtered UNIQUE constraints.
+* `INDEX ON (range_id, status, position)` — queue advance query: `WHERE range_id = $1 AND status = 'Waiting' ORDER BY position LIMIT 1`.
+* `INDEX ON (member_id, status)` — member cancellation and status lookup.
+
 ## 6. Infrastructure & Security (AWS)
 
 * **Storage:** Signed waivers are stored in **Amazon S3** with **S3 Object Lock** (Compliance Mode) to prevent tampering or accidental deletion.
@@ -279,12 +526,16 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Returns:** `200 OK` with `{ range_id, name, is_open, lanes: [{ lane_id, lane_number, status, current_member_id, member_num, guest_count, checked_in_at }] }`. `member_num` and `checked_in_at` are `null` when `status` is `Available`.
 
 * **`POST /v1/kiosk/check-in`**
-  * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) waiver not expired; (4) dues current; (5) requested guest count ≤ `training_level_policies.max_guests` for this member's level; (6) an available lane exists. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
-  * **Returns:** `200 OK` (Access Granted) or `403 Forbidden` (e.g., "Range closed", "Level 3 Required", "Guests not permitted at this level").
+  * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry is transitioned to `Checked-In` on successful lane assignment). If all lanes are occupied, a `wait_list` row is inserted (storing `guest_count` for later lane scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If a lane is available, selects the lane that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
+  * **Returns:** `200 OK` with `{ lane_number }` (lane assigned), `202 Accepted` with `{ wait_position }` (range full — added to wait list), or `403 Forbidden` (e.g., "Level 3 Required", "Guests not permitted at this level").
 
 * **`POST /v1/kiosk/check-out`**
-  * **Logic:** Triggered by a QR scan at range exit. Validates an active open `Range-Checkin` exists for the member on that device; writes a `Range-Checkout` record to `activity_logs`.
+  * **Logic:** Triggered by a QR scan at range exit. Validates an active open `Range-Checkin` exists for the member on that device; clears the lane; writes a `Range-Checkout` record to `activity_logs`. After the lane is freed, advances the wait list: queries the next `Waiting` entry for this range ordered by `position`, sets its `status = Called`, records `called_at`, sets `expires_at = called_at + 5 minutes`, and (if the member has a `mobile_phone`) publishes an **Amazon SNS** SMS notification. The RSO Dashboard's 30-second poll surfaces the `Called` entry automatically.
   * **Returns:** `200 OK` (Check-Out Logged) or `404 Not Found` (no open check-in on record).
+
+* **`DELETE /v1/kiosk/wait-list/{entry_id}`** (**Device Token** authenticated)
+  * **Logic:** Cancels the calling member's active `wait_list` entry for this range. Sets `status = Cancelled`; recalculates `position` for all remaining `Waiting` entries in the range. The device's `range_id` must match the entry's `range_id` — a kiosk cannot cancel entries for a different range.
+  * **Returns:** `200 OK` or `404 Not Found`.
 
 * **`POST /v1/kiosk/guest-payment`**
   * **Logic:** Handles the full guest add-on flow for a single guest: (1) look up guest by `first_name`, `last_name`, and `phone` in `guests` — create a new record if not found; (2) check `guests.waiver_signed_at` — prompt waiver capture at the kiosk if no record exists or the waiver has expired; (3) query `guest_visits` for this guest-member combination in the current calendar year — if count ≥ 2, return `403 Forbidden` (hard block; no RSO override applies); (4) process the guest fee via **Stripe Terminal SDK** (Tap to Pay on tablet NFC); (5) insert a `guest_visits` row; (6) create an `activity_logs` entry with `guest_id` populated.
@@ -346,6 +597,51 @@ Each active region runs a complete, independent copy of:
 * **AWS KMS** — multi-region keys (`mrk-` prefix) replicated to each active region; same key material, independent key ARNs per region
 * **AWS Secrets Manager** — secrets replicated to each active region via Secrets Manager multi-region replication
 * **AWS Cognito** — single User Pool in the primary region; regional Lambda@Edge or API Gateway endpoints proxy auth to the primary pool
+
+### Regional topology
+
+The diagram below shows the full two-region active-active deployment. Development and single-region production use only the primary region stack.
+
+```mermaid
+flowchart TD
+    USERS["Personal Devices<br/>and Kiosk Tablets"]
+    CF["CloudFront<br/>Next.js static assets"]
+    R53["Route 53<br/>Latency-based routing<br/>Health checks every 30 s"]
+
+    subgraph PRIMARY["Primary — us-east-1"]
+        APIGW_P["API Gateway"]
+        LAMBDA_P["Lambda"]
+        AURORA_P[("Aurora<br/>Writer")]
+        S3_P["S3 Waivers"]
+        COG["Cognito User Pool"]
+        BK_P["AWS Backup"]
+    end
+
+    subgraph DR["DR — us-east-2"]
+        APIGW_DR["API Gateway"]
+        LAMBDA_DR["Lambda"]
+        AURORA_DR[("Aurora<br/>Reader — promotes to Writer on failover")]
+        S3_DR["S3 Replica"]
+        BK_DR["AWS Backup"]
+    end
+
+    USERS --> CF
+    USERS --> R53
+    R53 -->|healthy requests| APIGW_P
+    R53 -.->|failover| APIGW_DR
+    APIGW_P --> LAMBDA_P
+    LAMBDA_P --> AURORA_P
+    LAMBDA_P --> S3_P
+    LAMBDA_P --> COG
+    APIGW_DR --> LAMBDA_DR
+    LAMBDA_DR --> AURORA_DR
+    LAMBDA_DR --> S3_DR
+    AURORA_P -->|Global DB replication| AURORA_DR
+    S3_P -->|Cross-Region Replication| S3_DR
+    AURORA_P --> BK_P
+    S3_P --> BK_P
+    BK_P -->|cross-region copy| BK_DR
+```
 
 ### Traffic routing
 
