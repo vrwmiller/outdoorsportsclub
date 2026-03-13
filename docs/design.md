@@ -9,7 +9,7 @@ The application has four surfaces. The **Home Page** is the club's primary publi
 | Level | Designation | Digital Permissions | Range & System Logic |
 | :--- | :--- | :--- | :--- |
 | **0** | **Guest** | Waiver & Payment | Must pay guest fee and sign digital form at Kiosk. |
-| **1** | **Probationary** | Service Tracker | Restricted range access; focus on logging 6 required service hours. |
+| **1** | **Probationary** | Range Access | Restricted range access pending completion of 6 volunteer service hours (tracked manually by Administrator). |
 | **2** | **Basic Member** | General Access | Unlocks check-in for basic facilities (Skeet, Trap, Archery). |
 | **3** | **Qualified** | Specialized Access | Verified Qualification unlocks specialized Rifle/Pistol ranges. |
 | **4** | **RSO / Instructor** | Range Ops | Can "Open/Close" ranges and override guest limits. |
@@ -20,7 +20,7 @@ The application has four surfaces. The **Home Page** is the club's primary publi
 
 To ensure high-speed check-ins and eliminate the security risks of social login on shared tablets, the system utilizes **Secure Device Pairing**:
 
-* **Pairing Workflow:** New tablets generate a short-lived **Pairing Code**. A **Webmaster (Level 6)** authorizes the code via the Admin Portal to link the hardware.
+* **Pairing Workflow:** A **Webmaster (Level 6)** initiates device provisioning via the Admin Portal, which generates a short-lived **Pairing Code**. The Webmaster hands the code to the technician configuring the tablet; the tablet uses the code to complete pairing and receive its Device Token.
 * **Kiosk Token:** Once paired, the server issues a unique **Device Token** stored in the tablet's secure storage. The tablet then functions as a trusted appliance.
 * **Revocation:** If a tablet is lost or stolen, the **Webmaster** sets the device's `status` to `Revoked` in the `devices` table via the Admin Portal. The next API request from that tablet will be rejected immediately.
 
@@ -263,15 +263,19 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
 
 ### **7.1 Member Portal Operations**
 
-* **`GET /v1/members/me`** (**Authenticated member**, Level 0–3)
+* **`GET /v1/members/me`** (**Authenticated member**, Level 1–6)
   * **Logic:** Returns the authenticated member's own profile. `member_id` resolved from Cognito JWT `sub`; all fields queried from Aurora — never from the JWT claims.
   * **Returns:** `200 OK` with `{ member_num, training_level, service_hours, dues_paid_until, waiver_signed_at, mobile_phone }`.
 
-* **`GET /v1/members/me/badge`** (**Authenticated member**, Level 0–3)
+* **`GET /v1/members/me/badge`** (**Authenticated member**, Level 1–6)
   * **Logic:** Returns the member's `member_num` for QR code display in the Member Portal. The frontend renders the `member_num` as a QR code; the kiosk scans and resolves it via `POST /v1/kiosk/check-in`.
   * **Returns:** `200 OK` with `{ member_num }`.
 
 ### **7.2 Kiosk Operations**
+
+* **`GET /v1/kiosk/range/lanes`** (**Device Token** authenticated)
+  * **Logic:** Returns current lane occupancy for the kiosk's own range (resolved from the Device Token's `range_id`). Used by the RSO Dashboard for the initial load, post-transaction re-fetch, and the 30-second background poll between transactions.
+  * **Returns:** `200 OK` with `{ range_id, name, is_open, lanes: [{ lane_id, lane_number, status, current_member_id, member_num, guest_count, checked_in_at }] }`. `member_num` and `checked_in_at` are `null` when `status` is `Available`.
 
 * **`POST /v1/kiosk/check-in`**
   * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) waiver not expired; (4) dues current; (5) requested guest count ≤ `training_level_policies.max_guests` for this member's level; (6) an available lane exists. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
@@ -423,10 +427,6 @@ When to prefer Django on other projects:
 ## 10. Architecture Decisions — External Review Findings
 
 An independent architectural review was conducted against the design documented here. The following records which recommendations were accepted, rejected, or deferred, and why.
-
-### Accepted: Real-time RSO check-in view is a gap
-
-The review correctly identified that RSOs have no current mechanism to see who is checked in on their range in real time. This is captured as **Open Design Question #9**. Polling a `GET /v1/ranges/{id}/checkins` endpoint is the recommended starting point before considering SSE or WebSockets.
 
 ### Resolved: Ranges table and lane management (ODQ #5 and ODQ #12)
 
