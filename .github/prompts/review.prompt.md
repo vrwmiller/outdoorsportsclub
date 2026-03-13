@@ -29,4 +29,4 @@ Follow these steps exactly. Do not skip any step.
 
 6. **Push** — run `git push`.
 
-7. **Re-request review** — run `gh pr review <number> --comment --body "Addressed all review comments — please take another look."` to notify the reviewer.
+7. **Notify reviewer** — run `gh pr comment <number> --body "Addressed all review comments — please take another look."` to leave a comment on the PR.
