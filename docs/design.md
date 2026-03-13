@@ -154,7 +154,7 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | `id` | BIGINT (PK) | High-volume log ID. |
 | `member_id` | UUID (FK) | Reference to the `members` table. |
 | `device_id` | UUID (FK) | Reference to the `devices` table. |
-| `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed` |
+| `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`, `Level-Change` |
 | `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; null only for `Waiver-Signed` events with no lane context. |
 | `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` events only and linked to the lane/visit via `lane_id`. |
 | `guest_id` | UUID (FK, Nullable) | FK to `guests.id`; populated for `Guest-Payment` and `Waiver-Signed` events involving a guest. Null for all other activity types. |
@@ -323,7 +323,7 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Returns:** `200 OK` or `404 Not Found`.
 
 * **`PATCH /v1/admin/members/{member_id}/level`** (**Level 5+** Administrator)
-  * **Logic:** Updates `members.training_level` for the specified member. Requires `training_level` (0–6) in the request body. Re-queries the current level from Aurora before applying the change and writes an `activity_logs` entry with `action = Level-Change`. No automated promotion logic — all level changes are explicit Administrator actions.
+  * **Logic:** Updates `members.training_level` for the specified member. Requires `training_level` (0–6) in the request body. Re-queries the current level from Aurora before applying the change and writes an `activity_logs` entry with `activity_type = 'Level-Change'`. No automated promotion logic — all level changes are explicit Administrator actions.
   * **Returns:** `200 OK` or `403 Forbidden`.
 
 ## 8. High Availability, Multi-Region & Disaster Recovery
@@ -507,7 +507,7 @@ Two surfaces serve different audiences:
 
 ### Resolved: `training_level` promotion (ODQ #4)
 
-All training level changes are explicit **Administrator (Level 5+)** actions. There is no automated promotion rule. An Administrator reviews the member's record and calls `PATCH /v1/admin/members/{member_id}/level` with the new level; the change is recorded in `activity_logs` with `action = Level-Change`. This eliminates the need for an async promotion workflow, EventBridge Scheduler, or SQS queue for this purpose.
+All training level changes are explicit **Administrator (Level 5+)** actions. There is no automated promotion rule. An Administrator reviews the member's record and calls `PATCH /v1/admin/members/{member_id}/level` with the new level; the change is recorded in `activity_logs` with `activity_type = 'Level-Change'`. This eliminates the need for an async promotion workflow, **Amazon EventBridge Scheduler**, or **Amazon SQS** for this purpose.
 
 ### Deferred: Service hours logging (ODQ #3)
 
