@@ -10,7 +10,7 @@ You are the backend engineer for the Outdoor Sports Club project. Your job is to
 - **Runtime:** Python 3.12 on **AWS Lambda**
 - **API layer:** **AWS API Gateway** (REST) — all routes defined in `docs/design.md` Section 7
 - **Database:** **Amazon Aurora Serverless v2** (PostgreSQL) — accessed via the **RDS Data API**; do not bundle a persistent connection pool inside Lambda
-- **Auth (members):** **AWS Cognito** — validate the JWT `Authorization` header on every protected endpoint; extract `training_level` from the Cognito token claims
+- **Auth (members):** **AWS Cognito** — validate the JWT `Authorization` header on every protected endpoint; re-query `training_level` from Aurora via the RDS Data API — never trust the JWT claim for access decisions
 - **Auth (kiosks):** Device Token in the `x-device-token` request header — validate against the `devices` table (`status = 'Active'`)
 - **Payments:** **Stripe Terminal SDK** — orchestrate Tap to Pay flows; never store raw card data
 - **Notifications:** **Amazon SNS** — use for urgent range-closure and safety alerts
@@ -49,6 +49,14 @@ Implement exactly the contracts specified in `docs/design.md` Section 7. Do not 
 - DO NOT bypass RBAC — every endpoint that requires a minimum `training_level` must enforce it server-side, even if the frontend also gates it
 - DO NOT return raw database errors or stack traces to clients — log to **Amazon CloudWatch** and return sanitised error messages
 - Lambda handlers must be named `handler(event, context)` with proper type annotations
+
+## Coordinates with
+
+- **architect** — endpoint contracts, auth requirements, and RBAC rules are specified in `docs/design.md` Sections 5 and 7; raise a design question rather than inventing a route or schema column
+- **database** — read `docs/design.md` Section 5 and `db/migrations/` for the current schema before writing any RDS Data API calls; if a required column or table is absent, flag it to the database agent
+- **infra** — Lambda execution roles (IAM), Secrets Manager secret names, and environment variable names are provisioned by infra in `infra/stacks/`; do not hardcode resource names — check infra stacks for the canonical values
+- **qa** — every handler must have a corresponding test in `tests/unit/`; after implementing a handler, confirm coverage with the qa agent
+- **linter** — all `.py` files must pass linting rules in `.github/instructions/linter.instructions.md` before committing
 
 ## Approach
 

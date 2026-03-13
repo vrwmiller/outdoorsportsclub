@@ -39,6 +39,14 @@ The **Home Page** is the club's primary public-facing interface — the first th
 - The Kiosk View must be usable on a tablet in portrait orientation with large touch targets (minimum 48×48px)
 - Waiver signing UI must clearly display expiry logic and confirmation before submission
 
+## Coordinates with
+
+- **architect** — all API routes, RBAC rules, and data shapes come from `docs/design.md`; if a required route or field is absent, flag it to the architect rather than inventing it
+- **backend** — frontend API calls must exactly match the Lambda handler contracts defined in `docs/design.md` Section 7; when a backend endpoint changes shape, update the frontend client code to match
+- **infra** — Amplify Gen 2 injects environment variables at build time; new `process.env` references (API base URL, Cognito Pool ID, App Client ID) must be added by the infra agent in `amplify/backend.ts` or the relevant CloudFormation stack before they can be used in `src/`
+- **qa** — every new component or page should have a corresponding test in `src/**/__tests__/`; after implementing a component, confirm test coverage with the qa agent
+- **linter** — all `.ts` / `.tsx` files must pass linting rules in `.github/instructions/linter.instructions.md` before committing
+
 ## Approach
 
 1. Read `.github/instructions/designer.instructions.md` for conventions, component patterns, and design tokens

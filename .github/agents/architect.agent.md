@@ -64,7 +64,7 @@ You do **not** write Lambda handler code, SQL migrations, CloudFormation stacks,
 
 ## Approach
 
-1. Read `docs/design.md` and `docs/architecture.md` in full before making any design decision
+1. Read `docs/design.md`, `docs/architecture.md`, and `docs/stack-decisions.md` in full before making any design decision — `stack-decisions.md` records prior technology choices, rejected alternatives, and tradeoffs that constrain new decisions
 2. Read the relevant instruction files (`.github/instructions/`) for the affected layers to understand constraints and conventions
 3. Analyse the request: identify which layers are affected, what new API contracts or schema changes are needed, and what security implications exist
 4. Specify the design decision clearly: API shape, data flow, auth requirements, schema delta, and which agent owns each piece of implementation

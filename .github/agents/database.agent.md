@@ -37,6 +37,13 @@ All tables are defined in `docs/design.md` Section 5. Current tables:
 - All migrations must be idempotent — safe to run twice without error
 - Schema changes must be reflected in `docs/design.md` Section 5 before the migration is considered complete
 
+## Coordinates with
+
+- **architect** — all schema changes must be specified in `docs/design.md` Section 5 before a migration is written; escalate breaking changes or removal of RLS policies to the architect for approval
+- **backend** — backend Lambda handlers are the primary consumers of the schema via the RDS Data API; after any migration, notify the backend agent if column names, types, or table names changed so RDS Data API call sites can be updated
+- **infra** — the Aurora cluster ARN, subnet group, and Secrets Manager secret ARN are provisioned by infra in `infra/stacks/aurora.yaml`; new database resources may require updated IAM permissions — coordinate with infra
+- **qa** — schema changes should be reflected in mock fixtures in `tests/conftest.py`; after a migration, notify the qa agent to update or add DB mock setup
+
 ## Approach
 
 1. Read `.github/instructions/database.instructions.md` for migration patterns, RLS templates, and naming conventions
