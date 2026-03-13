@@ -317,11 +317,11 @@ The review correctly rejected DynamoDB, consistent with the existing design rati
 
 The review suggested a JSONB column for sport-specific activity metadata (e.g., clays thrown for trap, target distance for archery). This is a reasonable future extension but is premature without a concrete use case. The `activity_logs` schema is sufficient for current scope. Revisit when range-specific analytics are a defined requirement.
 
-### Accepted: Observability is undefined
+### Resolved: Observability strategy (ODQ #14)
 
 The review correctly identified that no centralized monitoring strategy exists. Resolved as **Open Design Question #14** — see decisions below.
 
-**Structured logging:** All Lambda functions emit a single structured JSON log line per request to **Amazon CloudWatch Logs** via `logger.info()`. Required fields: `request_id`, `member_id`, `device_id`, `action`, `duration_ms`, `error`. Check-in handlers additionally log `training_level`; payment handlers additionally log `stripe_payment_intent_id`.
+**Structured logging:** All Lambda functions emit a single structured JSON log line per request to **Amazon CloudWatch Logs** via `logger.info(json.dumps({...}))`. Required fields: `request_id`, `member_id`, `device_id`, `action`, `duration_ms`, `error`. Check-in handlers additionally log `training_level`; payment handlers additionally log `stripe_payment_intent_id`.
 
 **Distributed tracing:** **AWS X-Ray** is deferred. The traffic volume and latency profile at club scale do not justify the overhead. Re-evaluate if a specific latency problem emerges.
 
