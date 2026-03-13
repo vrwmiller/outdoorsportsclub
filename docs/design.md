@@ -322,6 +322,10 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Logic:** Updates lane status or disables a lane. Used for range reconfiguration without requiring a DB migration.
   * **Returns:** `200 OK` or `404 Not Found`.
 
+* **`PATCH /v1/admin/members/{member_id}/level`** (**Level 5+** Administrator)
+  * **Logic:** Updates `members.training_level` for the specified member. Requires `training_level` (0–6) in the request body. Re-queries the current level from Aurora before applying the change and writes an `activity_logs` entry with `action = Level-Change`. No automated promotion logic — all level changes are explicit Administrator actions.
+  * **Returns:** `200 OK` or `403 Forbidden`.
+
 ## 8. High Availability, Multi-Region & Disaster Recovery
 
 ### Design principle: variable region count
@@ -501,6 +505,10 @@ Two surfaces serve different audiences:
 * **Kiosk lane dashboard** (existing) — shows occupancy for this kiosk's own range only. State is re-fetched after every check-in/check-out transaction and polled every 30 seconds between transactions. No push mechanism required.
 * **Admin Portal / mobile web cross-range view** (new) — supervisory read-only view of all ranges and their lane-level occupancy, served by `GET /v1/admin/ranges/occupancy` (Level 4+). Client polls at a suitable interval (e.g., 30 seconds). SSE/WebSockets are not needed at club-scale traffic.
 
+### Resolved: `training_level` promotion (ODQ #4)
+
+All training level changes are explicit **Administrator (Level 5+)** actions. There is no automated promotion rule. An Administrator reviews the member's record and calls `PATCH /v1/admin/members/{member_id}/level` with the new level; the change is recorded in `activity_logs` with `action = Level-Change`. This eliminates the need for an async promotion workflow, EventBridge Scheduler, or SQS queue for this purpose.
+
 ### Deferred: Service hours logging (ODQ #3)
 
 Range-qualified members (Level 3) earn their status by completing a minimum 6-hour volunteer service commitment — RSOs are themselves volunteers. RSO check-in and check-out events recorded in `activity_logs` provide an implicit audit trail of volunteer activity, but automated service-hour calculation and promotion workflows are not a primary function of this system version. The `service_hours` column is retained in `members` as a placeholder for a future integration. Level 1 → Level 2 promotion remains a manual Administrator action (see ODQ #4) until a dedicated service-hours tracking feature is scoped.
@@ -518,7 +526,7 @@ The following are unresolved before implementation begins. Each requires a delib
 | 1 | **Waiver signing** | What API endpoint handles waiver capture and signature? What is the payload (PDF blob, digital signature string, member acknowledgement)? Which surface captures it — Kiosk only, or also Member Portal on personal devices? |
 | 2 | **Dues payment** | How are annual dues paid? **Stripe Terminal** (NFC, kiosk only) or **Stripe.js** (card element, personal device via Member Portal)? A personal-device flow requires a different Stripe integration from the Terminal SDK. |
 | 3 | **Service hours logging** | ⏸ Deferred — RSO check-in/check-out events in `activity_logs` serve as an implicit volunteer audit trail. Automated service-hour calculation and promotion are not in scope for this version. `service_hours` retained in `members` as a placeholder. Level 1 → Level 2 promotion remains a manual Administrator action until a dedicated feature is scoped. See Section 10. |
-| 4 | **`training_level` promotion** | What triggers a level change — a manual **Administrator** action, an automated rule (e.g., `service_hours >= 6` auto-promotes Level 1 → Level 2), or both? What is the API endpoint? |
+| 4 | **`training_level` promotion** | ✅ Resolved — manual Administrator action only. `PATCH /v1/admin/members/{member_id}/level` (Level 5+); change recorded in `activity_logs`. No automated rule, no async infra required. See Section 7.3 and Section 10. |
 | 5 | **Range Open / Close** | ✅ Resolved — see Section 5.2 and Section 7.2. `ranges` table added; `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open` (Level 4+); soft close — RSO physically clears the range. Five ranges seeded: Rifle-Pistol, Skeet-Trap, Air-Rifle, Indoor-Archery, Outdoor-Archery (names provisional). |
 | 6 | **Member Portal read endpoints** | ✅ Resolved — `GET /v1/members/me` and `GET /v1/members/me/badge` added to Section 7.1. Both re-query Aurora on every request; no data read from JWT claims. |
 | 7 | **Pairing Code generation** | ✅ Resolved — Admin Portal (Level 6) calls `POST /v1/admin/devices/pairing-code` to generate a 15-minute single-use code stored in `devices.pairing_code`. Tablet calls `POST /v1/devices/pair` to complete pairing. No unauthenticated code-request surface. See Section 5.3 and Section 7.3. |
