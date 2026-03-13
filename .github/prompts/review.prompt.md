@@ -1,6 +1,6 @@
 ---
 agent: agent
-description: Read all review comments on the current PR, address each one, then push and re-request review.
+description: Read all review comments on the current PR, address each one, push the fixes, and notify the reviewer.
 ---
 
 Follow these steps exactly. Do not skip any step.
@@ -20,7 +20,7 @@ Follow these steps exactly. Do not skip any step.
    * Do not make unrequested changes alongside a fix.
    * If a comment is a question rather than a change request, note the answer but do not change code.
 
-5. **Commit the fixes** — stage only the files you changed, then commit:
+5. **Commit the fixes** — stage only the files you changed. Do not stage `.env*`, secrets, or credentials. Then commit:
    ```
    git add <changed files>
    git commit -m "fix: address PR review comments"
