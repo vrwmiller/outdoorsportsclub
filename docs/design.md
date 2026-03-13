@@ -90,7 +90,7 @@ The database utilizes a relational model (PostgreSQL) with **Row-Level Security 
 
 ### **5.2 Table: `ranges`**
 
-Each staffed range has a row in this table. The `ranges` table is the authoritative source for open/close state and access requirements. Unstaffed ranges (outdoor Archery, Air Rifle when unstaffed) do not have kiosks and do not appear here.
+All physical ranges have a row in this table, regardless of whether they are currently staffed. The `ranges` table is the authoritative source for open/close state and access requirements. Unstaffed ranges (outdoor Archery, Air Rifle when unstaffed) do not have kiosk devices assigned to them, but they still appear here so that `min_training_level` and `is_open` are centrally managed for all ranges.
 
 | Column | Type | Description |
 | :--- | :--- | :--- |
@@ -229,7 +229,18 @@ One row per range visit per guest. Used to enforce the annual visit limit: a gue
 | `visited_at` | TIMESTAMP | Visit timestamp; used to scope the annual limit check to the current calendar year. |
 | `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID for the guest fee charged on this visit. Duplicated here for direct reconciliation without joining to `activity_logs`. |
 
-**Annual limit check:** `SELECT COUNT(*) FROM guest_visits WHERE guest_id = $1 AND member_id = $2 AND EXTRACT(YEAR FROM visited_at) = EXTRACT(YEAR FROM NOW())`. If result ≥ 2, the kiosk returns `403 Forbidden`. A `guest_visits` row is inserted only after payment is confirmed.
+**Annual limit check:** Query `guest_visits` using a timestamp range rather than `EXTRACT(YEAR …)` so the `(guest_id, member_id, visited_at)` index is used:
+
+```sql
+SELECT COUNT(*)
+FROM guest_visits
+WHERE guest_id  = $1
+  AND member_id = $2
+  AND visited_at >= date_trunc('year', now() AT TIME ZONE 'UTC')
+  AND visited_at  < date_trunc('year', now() AT TIME ZONE 'UTC') + INTERVAL '1 year';
+```
+
+If the count is ≥ 2, the kiosk returns `403 Forbidden`. All times are stored and compared in UTC. A `guest_visits` row is inserted only after payment is confirmed. To prevent a race condition where two simultaneous guest-payment requests both pass the count check, the check and insert must execute within a single **serializable transaction** (or use `SELECT … FOR UPDATE` on the sponsoring member's lane record to serialize concurrent check-ins for the same member).
 
 **Indexes:**
 
@@ -403,7 +414,7 @@ The review independently confirmed the need for a `ranges` table. Both questions
 * `lanes.range_tag` (TEXT) is replaced by `lanes.range_id` (UUID FK to `ranges.id`).
 * Range open/close is a soft operation: `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open`; existing check-ins are not force-cleared. The RSO physically ensures the range is vacated during the closing procedure.
 * The endpoint is callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard (Level 4+).
-* Initial seed: Rifle-Pistol (17 lanes), Skeet-Trap, Archery, Air-Rifle. All seed as closed. `min_training_level` values TBD.
+* Initial seed: Rifle-Pistol (17 lanes), Skeet-Trap, Air-Rifle, Indoor-Archery, Outdoor-Archery. All seed as closed. `min_training_level` values TBD.
 * Lane counts are seeded in the bootstrap migration; future changes use `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration.
 
 ### Rejected: PWA / offline-first kiosk
