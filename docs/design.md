@@ -152,7 +152,8 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | Column | Type | Description |
 | :--- | :--- | :--- |
 | `id` | BIGINT (PK) | High-volume log ID. |
-| `member_id` | UUID (FK) | For kiosk-originated events (`Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`): the member performing the action. For `Level-Change` events: the **target member** whose level was changed. The administrator's identity is captured from the authenticated JWT at write time and available in **Amazon CloudWatch Logs** structured log output. |
+| `member_id` | UUID (FK) | The member performing the action for kiosk-originated events (`Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`). For `Level-Change` events: the **target member** whose level was changed. |
+| `actor_member_id` | UUID (FK, Nullable) | The Administrator who performed the action. Populated for `Level-Change` events (resolved from JWT `sub` → `members.id` at write time); `NULL` for all kiosk-originated event types where `member_id` is the actor. |
 | `device_id` | UUID (FK, Nullable) | Reference to the `devices` table. `NULL` for non-kiosk events (e.g., `Level-Change` actions performed from the Admin Portal). |
 | `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`, `Level-Change` |
 | `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; `NULL` for `Waiver-Signed` and `Level-Change` events which have no lane context. |
@@ -323,7 +324,7 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Returns:** `200 OK` or `404 Not Found`.
 
 * **`PATCH /v1/admin/members/{member_id}/level`** (**Level 5+** Administrator)
-  * **Logic:** Updates `members.training_level` for the specified member. Requires `training_level` (0–6) in the request body. Re-queries the **target member's** current `training_level` from Aurora before applying the change and writes an `activity_logs` entry with `activity_type = 'Level-Change'`, `member_id` = target member, `old_level` and `new_level` recorded in structured CloudWatch log output alongside the administrator's `member_id` from the JWT. No automated promotion logic — all level changes are explicit Administrator actions.
+  * **Logic:** Updates `members.training_level` for the specified member. Requires `training_level` (0–6) in the request body. Re-queries the **target member's** current `training_level` from Aurora before applying the change and writes an `activity_logs` entry with `activity_type = 'Level-Change'`, `member_id` = target member, `actor_member_id` = the Administrator's `members.id` (resolved by looking up JWT `sub` in `members`). No automated promotion logic — all level changes are explicit Administrator actions.
   * **Returns:** `200 OK`, `400 Bad Request` (missing or out-of-range `training_level`), `403 Forbidden`, or `404 Not Found`.
 
 ## 8. High Availability, Multi-Region & Disaster Recovery
