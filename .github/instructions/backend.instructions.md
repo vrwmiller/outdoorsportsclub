@@ -55,6 +55,26 @@ def handler(event: dict, context: Any) -> dict:
 * Never return raw exception messages or stack traces to the client
 * Log exceptions with `logger.exception()` for CloudWatch; the client receives only a sanitised message
 
+### Structured logging
+
+Every handler must emit one structured JSON log line per request using `logger.info(json.dumps({...}))`. Required fields for all handlers:
+
+| Field | Value |
+| :--- | :--- |
+| `request_id` | `context.aws_request_id` |
+| `member_id` | Cognito `sub` or device-token member ID; `null` for unauthenticated |
+| `device_id` | Device ID from token; `null` for member requests |
+| `action` | Short verb-noun string matching the endpoint (e.g., `checkin`, `pair_device`) |
+| `duration_ms` | Elapsed time for the handler in milliseconds |
+| `error` | Exception class name on failure; `null` on success |
+
+Additional required fields by handler type:
+
+* **Check-in handlers:** also log `training_level` (value fetched from Aurora, not JWT)
+* **Payment handlers:** also log `stripe_payment_intent_id`
+
+Never log raw device token values, Stripe secret keys, or full JWT strings.
+
 ## Authentication
 
 ### Member endpoints (Cognito JWT)
