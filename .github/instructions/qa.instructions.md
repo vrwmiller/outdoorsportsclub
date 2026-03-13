@@ -167,13 +167,25 @@ describe('auth-gated component', () => {
 
 ### Flow priority
 
-| File | Flow | Priority |
-| :--- | :--- | :--- |
-| `home-page.spec.ts` | Home Page loads; sign-in CTA visible | High |
-| `member-auth.spec.ts` | Social login → redirect by `training_level` | High |
-| `kiosk-check-in.spec.ts` | Device-paired kiosk → QR scan → check-in confirmed | High |
-| `admin-reset-auth.spec.ts` | Level 6 admin resets a member's social auth | Medium |
-| `consumable-purchase.spec.ts` | Kiosk consumable purchase via Stripe Terminal | Medium |
+| File | Surface | Flow | Priority |
+| :--- | :--- | :--- | :--- |
+| `home-page.spec.ts` | **Home Page** | Page loads; sign-in CTA visible; no member data in DOM | High |
+| `member-auth.spec.ts` | **Member Portal** | Social login → redirect by `training_level`; unauthenticated access redirects to Home Page | High |
+| `member-portal-qr-badge.spec.ts` | **Member Portal** | QR badge renders for authenticated member | High |
+| `member-portal-level0.spec.ts` | **Member Portal** | Level 0 member sees dues/waiver prompt, not range access | Medium |
+| `admin-portal-access.spec.ts` | **Admin Portal** | Level 3 member blocked; Level 4 RSO can open/close a range | High |
+| `admin-portal-level6.spec.ts` | **Admin Portal** | Level 6 Webmaster can pair a device and reset member auth | High |
+| `admin-portal-level5.spec.ts` | **Admin Portal** | Level 5 admin can view finance and member records | Medium |
+| `kiosk-check-in.spec.ts` | **Kiosk View** | Happy path: valid member, correct level, valid waiver, dues paid, lane available → lane assigned | High |
+| `kiosk-check-in.spec.ts` | **Kiosk View** | Insufficient `training_level` → violation alert displayed and screen locked | High |
+| `kiosk-check-in.spec.ts` | **Kiosk View** | Expired waiver → violation alert displayed | High |
+| `kiosk-check-in.spec.ts` | **Kiosk View** | Dues not current → violation alert displayed | High |
+| `kiosk-check-in.spec.ts` | **Kiosk View** | No lanes available → check-in blocked with message | High |
+| `kiosk-check-out.spec.ts` | **Kiosk View** | QR scan check-out → lane returns to available | High |
+| `kiosk-guest-addon.spec.ts` | **Kiosk View** | Guest add-on flow: waiver acknowledgement + Stripe payment | High |
+| `kiosk-violation-alert.spec.ts` | **Kiosk View** | Failed check-in → violation alert locked; Level 4+ clears it | High |
+| `kiosk-revoked-device.spec.ts` | **Kiosk View** | Revoked device token rejected on next request | High |
+| `consumable-purchase.spec.ts` | **Kiosk View** | Kiosk consumable purchase via Stripe Terminal | Medium |
 
 ### Conventions
 
