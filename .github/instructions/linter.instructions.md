@@ -16,7 +16,7 @@ applyTo: "**/*.md, **/*.ts, **/*.tsx, **/*.js, **/*.jsx, **/*.py"
 - List markers must be followed by exactly one space (MD030); use `* ` not `*   `
 - Bullet lists use `*` as the list marker
 - One blank line between sections; no double blank lines
-- No duplicate headings within the same file
+- No duplicate headings at the same level under the same parent section — duplicate headings are allowed when they appear under different parent sections (e.g., a "Verdict" subsection in each top-level decision section is fine)
 
 ## TypeScript / Next.js (`**/*.ts`, `**/*.tsx`)
 

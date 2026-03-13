@@ -27,7 +27,7 @@ This does not make Django a bad choice. It means the determinism gain is partial
 
 ### How the Architecture Would Change Under Django
 
-### What disappears
+#### What disappears
 
 | Current (Next.js) | Under Django |
 | :--- | :--- |
@@ -37,7 +37,7 @@ This does not make Django a bad choice. It means the determinism gain is partial
 | TypeScript across the frontend | Python for everything except Stripe Terminal JS |
 | RDS Data API (stateless Lambda → Aurora) | psycopg2 ORM + **Amazon RDS Proxy** for connection pooling |
 
-### What gets simpler
+#### What gets simpler
 
 * **One language.** Lambda functions are already Python. Django means Python everywhere — no TypeScript, no `npm`, no Node toolchain to maintain.
 * **Stack traces are immediately readable.** Django exceptions go straight to the line. React hydration errors point at a virtual DOM diff.
@@ -45,7 +45,7 @@ This does not make Django a bad choice. It means the determinism gain is partial
 * **No rendering mode decision.** Django templates are server-rendered. There is no correct/incorrect choice to make per page.
 * **The ORM for complex queries** is easier than the RDS Data API for multi-join queries — for example, fetching a member's active lane, guest count, waiver status, and dues standing in one query.
 
-### What gets more complex
+#### What gets more complex
 
 * **Cognito integration is no longer native.** **AWS Amplify Gen 2** has first-class **AWS Cognito** support. Django would require `python-social-auth` or `django-allauth` configured with Cognito as the OAuth2 provider — workable, but custom plumbing.
 * **Django on Lambda is a known antipattern.** Python Django startup time at cold start is significant (often 3–8 seconds). The serverless web tier would need to be replaced with a persistent container process on **AWS ECS Fargate** or Elastic Beanstalk, introducing container orchestration and ongoing compute cost.
