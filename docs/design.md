@@ -205,14 +205,15 @@ A persistent identity record for non-member visitors. Created on first visit; re
 | `id` | UUID (PK) | Unique guest identifier. |
 | `first_name` | TEXT | Guest first name. |
 | `last_name` | TEXT | Guest last name. |
-| `phone` | TEXT | Contact phone in E.164 format. Used with name as the composite lookup key when matching a returning guest at the kiosk. |
+| `phone` | TEXT | Contact phone in E.164 format. Part of the composite lookup key. |
+| `email` | TEXT | Guest email address. Part of the composite lookup key; also used for waiver delivery or future notifications. |
 | `waiver_signed_at` | TIMESTAMP (Nullable) | Timestamp of the most recent waiver signing. Null until completed at the kiosk on first visit. Checked against the 1-year expiration rule on each visit. |
 | `waiver_s3_key` | TEXT (Nullable) | S3 object key for the signed waiver document; stored with S3 Object Lock (Compliance Mode) consistent with member waivers. |
 
 **Constraints and indexes:**
 
-* `UNIQUE (first_name, last_name, phone)` — lookup composite key. Whether this combination is sufficient to uniquely identify a returning guest is the remaining open question in ODQ #16.
-* `INDEX ON (last_name, phone)` — kiosk lookup during the guest add-on step.
+* `UNIQUE (first_name, last_name, phone, email)` — lookup composite key.
+* `INDEX ON (last_name, phone, email)` — kiosk lookup during the guest add-on step.
 
 ### **5.9 Table: `guest_visits`**
 
@@ -470,4 +471,4 @@ The following are unresolved before implementation begins. Each requires a delib
 | 13 | **Kiosk handoff model** | Two physical deployment models are viable: (a) **RSO-mediated** — RSO holds the tablet, hands it to arriving users for check-in, and takes it back on completion. The RSO is physically present at every check-in and can clear violation alerts directly on the device. (b) **Fixed-mount self-serve** — tablet is mounted at the range entrance; users self-scan. Violation alerts must be pushed to the RSO by another mechanism (e.g., audio alert, secondary RSO dashboard). The handoff model affects the violation-clearing UX, the physical mounting requirements, and whether the tablet needs a "return to RSO dashboard" post-check-in state. |
 | 14 | **Observability strategy** | ✅ Resolved — see Section 10. Structured JSON logging to **Amazon CloudWatch Logs**; X-Ray deferred; three alarms to admin **Amazon SNS** topic; 7-year log retention. |
 | 15 | **Async background workflow scope** | Several non-user-facing operations are currently unplanned: annual dues renewal reminders, waiver expiry warnings (e.g., 30-day advance SMS via **Amazon SNS**), service-hours promotion evaluation (`service_hours >= 6` → Level 2), and audit log export to **Amazon S3** for admin review. These are candidates for an async processing layer (**Amazon SQS** + **AWS Lambda** worker or **Amazon EventBridge Scheduler**). Decisions needed: (a) which events trigger which notifications; (b) whether promotion to Level 2 is fully automated or requires admin confirmation; (c) what the retry and dead-letter policy is for failed notification deliveries. |
-| 16 | **Guest lookup key** | The `guests` table (Section 5.8) uses `(first_name, last_name, phone)` as the composite lookup key and unique constraint. Open question: is this combination sufficient to uniquely identify a returning guest in practice, or should an email address also be collected? The answer determines the `UNIQUE` constraint on `guests` and the data-entry fields shown during the kiosk guest add-on step. Must be confirmed before the guest add-on UI and check-in Lambda are implemented. |
+| 16 | **Guest lookup key** | ✅ Resolved — `guests` uses `(first_name, last_name, phone, email)` as the composite lookup key and unique constraint (Section 5.8). Email is collected alongside name and phone during the kiosk guest add-on step. |
