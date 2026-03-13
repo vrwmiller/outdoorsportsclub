@@ -94,7 +94,7 @@ flowchart TD
     subgraph WEB_AUTH[Cognito Auth Path — personal devices only]
         SOCIAL[Social Login<br/>Google or Facebook]
         JWT[Cognito JWT]
-        MW[Next.js Middleware<br/>calls GET /v1/members/me for training_level]
+        MW[App<br/>calls GET /v1/members/me for training_level]
     end
 
     subgraph KIOSK_AUTH[Kiosk API Authorization — per request]
@@ -104,15 +104,15 @@ flowchart TD
 
     subgraph APP[Next.js app — single Amplify deployment]
         PUB[Home Page<br/>public nav]
-        NAV_M[Member nav added<br/>Level 1–3]
-        NAV_A[Admin nav added<br/>Level 4–6]
+        NAV_M[Member nav added<br/>Levels 1–3]
+        NAV_A[Admin nav added<br/>Levels 4–6]
         KV[Kiosk View /kiosk<br/>full-screen, no nav bar]
     end
 
     PD -->|unauthenticated| PUB
     PD --> SOCIAL --> JWT --> MW
-    MW -->|Level 1–3| NAV_M
-    MW -->|Level 4–6| NAV_A
+    MW -->|Levels 1–3| NAV_M
+    MW -->|Levels 4–6| NAV_A
     KT -->|loads app, navigates to /kiosk| KV
     KV -->|API calls| DEVTOKEN --> DEVCHECK
 ```
@@ -123,7 +123,7 @@ Every Lambda invocation enforces RBAC independently of the surface routing above
 
 | Enforcement point | Mechanism |
 | :--- | :--- |
-| API Gateway — web routes | Cognito Authorizer validates JWTs before Lambda is invoked; auth failures return the Cognito Authorizer's native response (handled by the Cognito SDK on the frontend as a redirect-to-login) |
+| API Gateway — web routes | Cognito Authorizer validates JWTs before Lambda is invoked; requests with missing or invalid JWTs are rejected at the API Gateway layer before reaching Lambda |
 | API Gateway — kiosk routes | No Cognito Authorizer; Lambda validates the Device Token directly |
 | Lambda — web | Re-queries `training_level` from Aurora on every request; never trusts the JWT claim |
 | Lambda — kiosk | Validates Device Token on every request; a `Revoked` or missing record is rejected immediately |
@@ -150,7 +150,7 @@ Adding a 5th client surface (e.g., an Instructor Portal) is a coordinated multi-
 | :--- | :--- |
 | Frontend | New App Router route group with its own layout and middleware guard |
 | Aurora / Lambda | New `training_level` value(s) defined and RBAC checks updated in the affected Lambda handlers |
-| Lambda authorizer / middleware | New role added to the allow-list for any shared endpoints; new endpoints added for surface-specific operations |
+| Auth enforcement | Cognito Authorizer updated to allow new routes; Lambda handlers updated to check the new `training_level` value |
 | CloudFormation | IAM execution role updated if the surface's Lambdas need new AWS permissions |
 | API Gateway | New routes wired to new Lambda functions |
 
