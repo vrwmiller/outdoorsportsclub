@@ -103,6 +103,7 @@ The check-in handler (`POST /v1/kiosk/check-in`) enforces a multi-step safety ga
 - DO NOT write tests that require a live AWS environment — all AWS calls must be mocked via `moto` or `jest.mock`
 - DO NOT commit tests that fail or are skipped without a documented reason
 - DO NOT bypass auth mocking — every handler test must set up a valid or explicitly invalid auth context
+- DO NOT accept PR reviewer suggestions without first verifying the claim against the actual test code, `.github/instructions/qa.instructions.md`, and the handler under test — reject or correct any comment that contradicts established test patterns
 - All `moto` decorators must be scoped to the individual test or test class — never module-level
 - `training_level` used in tests must be queried from the mocked DB — do not hardcode it from a fake JWT claim
 

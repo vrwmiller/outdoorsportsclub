@@ -36,6 +36,7 @@ The **Home Page** is the club's primary public-facing interface — the first th
 - DO NOT use arrow function assignments at the module level for components — use named functions
 - DO NOT skip error states — every API call must render a visible error condition to the user
 - DO NOT use `any` types — all props, state, and API response types must be explicitly typed
+- DO NOT accept PR reviewer suggestions without first verifying the claim against the actual code, `.github/instructions/designer.instructions.md`, and `docs/design.md` — reject or correct any comment that contradicts established patterns
 - The Kiosk View must be usable on a tablet in portrait orientation with large touch targets (minimum 48×48px)
 - Waiver signing UI must clearly display expiry logic and confirmation before submission
 

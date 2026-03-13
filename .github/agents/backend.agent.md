@@ -48,6 +48,7 @@ Implement exactly the contracts specified in `docs/design.md` Section 7. Do not 
 - DO NOT open persistent database connections — use the **RDS Data API** for all Aurora queries
 - DO NOT bypass RBAC — every endpoint that requires a minimum `training_level` must enforce it server-side, even if the frontend also gates it
 - DO NOT return raw database errors or stack traces to clients — log to **Amazon CloudWatch** and return sanitised error messages
+- DO NOT accept PR reviewer suggestions without first verifying the claim against the actual code, `.github/instructions/backend.instructions.md`, and `docs/design.md` — reject or correct any comment that contradicts established patterns
 - Lambda handlers must be named `handler(event, context)` with proper type annotations
 
 ## Coordinates with

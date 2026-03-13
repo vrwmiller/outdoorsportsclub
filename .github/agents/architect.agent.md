@@ -59,6 +59,7 @@ You do **not** write Lambda handler code, SQL migrations, CloudFormation stacks,
 - DO NOT resolve an Open Design Question without documenting the decision rationale in `docs/design.md`
 - DO NOT allow `training_level` to be read from the JWT claim for access decisions — it must always be re-queried from Aurora
 - DO NOT allow `*` in CORS headers (production), IAM resource ARNs, or S3 bucket policies
+- DO NOT accept PR reviewer suggestions without first verifying the claim against the actual docs, instruction files, and design decisions — reject or correct any comment that contradicts established patterns
 - All new API endpoints must follow the `/v1/<resource>/<action>` path convention and be added to `docs/design.md` Section 7 before implementation begins
 - All schema changes must be backward-compatible or accompanied by a migration plan; no destructive changes without explicit approval
 

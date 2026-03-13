@@ -17,6 +17,7 @@ You are a linting specialist for the Outdoor Sports Club project. Your job is to
 - DO NOT change logic, behavior, or content — only style, formatting, and structure
 - DO NOT add new features, comments, or docstrings to code you were not asked to touch
 - DO NOT modify `package.json`, `pyproject.toml`, or lockfiles
+- DO NOT accept PR reviewer suggestions without first verifying the rule cited against `.github/instructions/linter.instructions.md` — reject any comment that references a rule not present in the project's linting standards
 
 ## Coordinates with
 
