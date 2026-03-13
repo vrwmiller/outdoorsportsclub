@@ -52,7 +52,7 @@ The check-in handler (`POST /v1/kiosk/check-in`) enforces a multi-step safety ga
 | Member already checked in on another lane (open `Range-Checkin` exists) | `409 Conflict`; no duplicate lane assigned |
 | No lanes available on this range (all `status = 'Occupied'`) | `409 Conflict`; check-in blocked |
 | Range is closed (`ranges.is_open = false`) | `403 Forbidden`; check-in blocked |
-| Valid member but revoked device token | `401 Unauthorized`; request rejected before any DB read |
+| Valid member but revoked device token | `403 Forbidden`; request rejected before any DB read |
 | Missing `member_num` in request body | `400 Bad Request` |
 
 ### Next.js Frontend (`src/**/__tests__/`)
