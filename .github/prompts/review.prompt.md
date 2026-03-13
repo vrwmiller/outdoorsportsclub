@@ -1,6 +1,6 @@
 ---
 agent: agent
-description: Read all review comments on the current PR, address each one, push the fixes, and notify the reviewer.
+description: Read all review comments on the current PR, address each one, and push the fixes.
 ---
 
 Follow these steps exactly. Do not skip any step.
@@ -28,5 +28,3 @@ Follow these steps exactly. Do not skip any step.
    Use a more descriptive message if the changes cover a single clear topic (e.g., `fix: correct RLS policy for activity_logs`).
 
 6. **Push** — run `git push`.
-
-7. **Request re-review** — run `gh pr comment <number> --body "@copilot-bot re-review"` to trigger a new Copilot review pass. To also notify human reviewers, add a follow-up comment: `gh pr comment <number> --body "Addressed all review comments — please take another look."`

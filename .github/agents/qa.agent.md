@@ -89,6 +89,14 @@ The check-in handler (`POST /v1/kiosk/check-in`) enforces a multi-step safety ga
 | **Kiosk View** | Consumable purchase via Stripe Terminal | Medium |
 | **Kiosk View** | Revoked device token is rejected at next request | High |
 
+## Coordinates with
+
+- **architect** — acceptance criteria and test requirements come from `docs/design.md`; if a test reveals a design contradiction (e.g., ambiguous auth boundary), escalate to the architect rather than patching the test
+- **backend** — unit tests in `tests/unit/` mirror each Lambda handler in `functions/`; the backend agent should provide the handler implementation before qa writes tests; confirm that `training_level` is always re-queried from the mocked DB, never hardcoded from a JWT claim
+- **designer** — component tests in `src/**/__tests__/` mirror each frontend component; the designer agent should provide the component before qa writes tests
+- **infra** — CI configuration in `.github/workflows/ci.yml` is jointly owned; infra provisions AWS secrets and sets build environment variables; qa defines test commands, test environment variables, and coverage thresholds
+- **linter** — all test files must pass linting rules in `.github/instructions/linter.instructions.md` before committing
+
 ## Constraints
 
 - DO NOT test implementation details — test behaviour and outcomes

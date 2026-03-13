@@ -49,6 +49,14 @@ You are the infrastructure and DevOps engineer for the Outdoor Sports Club proje
 - KMS key deletion has a minimum 7-day waiting period — never schedule key deletion without Webmaster approval
 - All CloudFormation stacks must have `DeletionPolicy: Retain` on stateful resources (Aurora, S3, KMS keys)
 
+## Coordinates with
+
+- **architect** — all new AWS services, route changes, and security boundary updates are specified in `docs/design.md` before infra implements them; do not provision a resource that is not listed in the design
+- **backend** — IAM execution roles are scoped per Lambda function; coordinate with the backend agent on the exact AWS service actions each handler needs and the Secrets Manager secret names the handler expects via `os.environ`
+- **database** — the Aurora cluster ARN, DB secret ARN, and parameter group are outputs of `infra/stacks/aurora.yaml`; expose these as CloudFormation exports so the database agent and backend agent can reference them without hardcoding values
+- **designer** — Amplify Gen 2 build-time environment variables (API Gateway base URL, Cognito User Pool ID, Cognito App Client ID) must match the `process.env` keys referenced in `src/`; coordinate with the designer agent when adding or renaming these values
+- **qa** — `.github/workflows/ci.yml` runs the test suite; coordinate with the qa agent on required secrets, test environment variables, and workflow steps; infra owns secret injection and deployment, qa owns test commands and coverage gates
+
 ## Approach
 
 1. Read `.github/instructions/infra.instructions.md` for naming conventions, stack structure, and IAM patterns

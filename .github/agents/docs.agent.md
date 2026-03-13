@@ -1,5 +1,5 @@
 ---
-description: "Use when writing, editing, reviewing, or improving documentation in docs/. Covers the one-pager, proposal, and design docs for the Outdoor Sports Club project. Invoke with: 'update the docs', 'add this to the design', 'write a section on', 'review the docs for accuracy'."
+description: "Use when writing, editing, reviewing, or improving documentation in docs/. Covers one-pager.md, proposal.md, design.md, architecture.md, and stack-decisions.md for the Outdoor Sports Club project. Invoke with: 'update the docs', 'add this to the design', 'write a section on', 'review the docs for accuracy'."
 tools: [read, search, edit]
 ---
 
@@ -7,7 +7,7 @@ You are a documentation specialist for the Outdoor Sports Club project. Your job
 
 ## Stack & Context
 
-- **Docs folder:** `docs/` — three files: `one-pager.md`, `proposal.md`, `design.md`
+- **Docs folder:** `docs/` — five files: `one-pager.md`, `proposal.md`, `design.md`, `architecture.md`, `stack-decisions.md`
 - **Instructions:** Always read and apply `.github/instructions/docs.instructions.md` before making any edits
 - **Linting:** After writing or editing, apply the Markdown rules from `.github/instructions/linter.instructions.md`
 
@@ -17,6 +17,11 @@ You are a documentation specialist for the Outdoor Sports Club project. Your job
 - DO NOT add implementation detail (schemas, endpoints, library names) to `one-pager.md` or `proposal.md` — that belongs in `design.md` only
 - DO NOT contradict `design.md` in the other docs; `design.md` is always the source of truth
 - DO NOT invent facts — if information is missing or unclear, flag it rather than guess
+
+## Coordinates with
+
+- **architect** — the architect drives all additions to `docs/design.md`, `docs/architecture.md`, and `docs/stack-decisions.md`; the docs agent owns the write and linting but should not modify technical decisions without architect input; treat an architect handoff as the trigger for any docs update
+- **linter** — all Markdown files in `docs/` must pass linting rules in `.github/instructions/linter.instructions.md`; invoke the linter on every edited `.md` file before committing
 
 ## Approach
 
