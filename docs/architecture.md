@@ -82,7 +82,7 @@ flowchart LR
 
 ## RBAC
 
-Two auth paths control access within a single Next.js app hosted on Amplify. For personal devices, Cognito Social Login grants a JWT; the nav menu then expands based on `training_level` fetched via a backend API call (Lambda re-queries Aurora via RDS Data API) — the JWT claim is never trusted for this. For kiosk tablets, a Device Token is included on every API request and validated by Lambda directly; Cognito is bypassed entirely. The `training_level` value stored in **Aurora** is always the source of truth.
+Two auth paths control access within a single **Next.js** app hosted on **AWS Amplify Gen 2**. For personal devices, **AWS Cognito** Social Login grants a JWT; the nav menu then expands based on `training_level` fetched via a backend API call (**Lambda** re-queries **Aurora** via **RDS Data API**) — the JWT claim is never trusted for this. For kiosk tablets, a Device Token is included on every API request and validated by **Lambda** directly; **Cognito** is bypassed entirely. The `training_level` value stored in **Aurora** is always the source of truth.
 
 ### Surface routing
 
@@ -94,7 +94,7 @@ flowchart TD
     subgraph WEB_AUTH[Cognito Auth Path — personal devices only]
         SOCIAL[Social Login<br/>Google or Facebook]
         JWT[Cognito JWT]
-        MW[Next.js Middleware<br/>calls /me API for training_level]
+        MW[Next.js Middleware<br/>calls GET /v1/members/me for training_level]
     end
 
     subgraph KIOSK_AUTH[Kiosk API Authorization — per request]
@@ -123,7 +123,7 @@ Every Lambda invocation enforces RBAC independently of the surface routing above
 
 | Enforcement point | Mechanism |
 | :--- | :--- |
-| API Gateway — web routes | Cognito Authorizer validates JWTs before Lambda is invoked; Gateway Response mapping returns `403 Forbidden` — never `401` |
+| API Gateway — web routes | Cognito Authorizer validates JWTs before Lambda is invoked; auth failures return the Cognito Authorizer's native response (handled by the Cognito SDK on the frontend as a redirect-to-login) |
 | API Gateway — kiosk routes | No Cognito Authorizer; Lambda validates the Device Token directly |
 | Lambda — web | Re-queries `training_level` from Aurora on every request; never trusts the JWT claim |
 | Lambda — kiosk | Validates Device Token on every request; a `Revoked` or missing record is rejected immediately |
