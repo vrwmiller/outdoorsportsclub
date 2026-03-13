@@ -30,3 +30,5 @@ Follow these steps exactly. Do not skip any step.
 6. **Push** — run `git push`.
 
 7. **Request re-review** — run `gh pr comment <number> --body "@copilot-bot re-review"` to trigger a new Copilot review pass. To also notify human reviewers, add a follow-up comment: `gh pr comment <number> --body "Addressed all review comments — please take another look."`
+
+   > **Warning:** Do not use `@copilot-pull-request-reviewer` or plain `@copilot` in the comment body. Mentioning the Copilot coding agent (`copilot-swe-agent`) by its handle will auto-open a new draft PR from a `copilot/sub-pr-<N>` branch, which must then be manually closed. Use only `@copilot-bot` (the code review bot handle) for re-review requests.
