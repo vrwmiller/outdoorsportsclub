@@ -16,7 +16,7 @@ applyTo: "**/*.md, **/*.ts, **/*.tsx, **/*.js, **/*.jsx, **/*.py"
 - List markers must be followed by exactly one space (MD030); use `* ` not `*   `
 - Bullet lists use `*` as the list marker
 - One blank line between sections; no double blank lines
-- No duplicate headings within the same file
+- No duplicate headings at the same level under the same parent section — duplicate headings are allowed when they appear under different parent sections (e.g., a "Verdict" subsection in each top-level decision section is fine)
 
 ## TypeScript / Next.js (`**/*.ts`, `**/*.tsx`)
 
@@ -61,3 +61,13 @@ Mermaid `architecture-beta` diagram labels are parsed strictly. Violations cause
 - Use `os.environ` for environment variable access; never hardcode credentials
 - Return dicts must always include `statusCode` and `body` keys for API Gateway compatibility
 - Use f-strings for string formatting; avoid `%` formatting and `.format()`
+
+## Code Complexity & Bloat (all files)
+
+- **Do the minimum necessary.** Serve the current requirement only — no hypothetical future needs.
+- **No speculative abstractions.** Only extract a helper or utility if it is used in at least two places in the current change.
+- **No defensive code for impossible cases.** Trust schema constraints, framework guarantees, and internal invariants.
+- **No unused imports, variables, or dead code.**
+- **No redundant comments.** Only comment where the *why* is not self-evident from the code.
+- **No docstrings on unchanged code.** Only annotate functions you are writing or modifying.
+- **Readable over clever.** A clear 5-line solution beats a clever 2-line solution that needs a comment to explain it.

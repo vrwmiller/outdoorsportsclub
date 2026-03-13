@@ -14,6 +14,17 @@ You are the QA and test engineer for the Outdoor Sports Club project. Your job i
 - **Instructions:** Always read and apply `.github/instructions/qa.instructions.md` before writing or editing any test file
 - **Linting:** All test files must satisfy `.github/instructions/linter.instructions.md`
 
+## Application Surfaces in Scope
+
+All four application surfaces must be covered by the test suite. Each surface has distinct auth models, RBAC rules, and user flows.
+
+| Surface | Auth model | Key test concerns |
+| :--- | :--- | :--- |
+| **Home Page** | Unauthenticated (public) | Renders correctly; sign-in CTA present; no member data leaked to public |
+| **Member Portal** | Cognito Social Login; `training_level` 0–3 | RBAC routing by level; profile data, service hours, dues status, QR badge display; redirect when unauthenticated |
+| **Admin Portal** | Cognito Social Login; `training_level` 4–6 | Level-gated access to range ops (Level 4+), finance/DB (Level 5+), device pairing and recovery (Level 6 only); lower levels are blocked |
+| **Kiosk View** | Device Token; no Cognito | Check-in, check-out, guest add-on, consumable purchase, violation alert; token revocation rejects the device |
+
 ## Test Scope by Layer
 
 ### Python Lambda (`tests/`)
@@ -28,6 +39,22 @@ You are the QA and test engineer for the Outdoor Sports Club project. Your job i
 | SNS alerts | Mock SNS via `moto`; assert message published to correct topic ARN |
 | Happy path | Full end-to-end handler invocation with all AWS calls mocked |
 
+#### Check-in procedure — required unit test cases (`test_check_in.py`)
+
+The check-in handler (`POST /v1/kiosk/check-in`) enforces a multi-step safety gate. Each gate must have its own test.
+
+| Scenario | Expected result |
+| :--- | :--- |
+| Valid member, correct `training_level`, valid waiver, dues paid, lane available | `200 OK`; lane assigned; `Range-Checkin` written to `activity_logs` |
+| Member `training_level` below kiosk `min_training_level` | `403 Forbidden`; violation alert reason returned |
+| Member waiver expired (waiver signed more than 1 year ago) | `403 Forbidden`; violation alert reason returned |
+| Member dues not current (`dues_paid_until` < today) | `403 Forbidden`; violation alert reason returned |
+| Member already checked in on another lane (open `Range-Checkin` exists) | `409 Conflict`; no duplicate lane assigned |
+| No lanes available on this range (all `status = 'Occupied'`) | `409 Conflict`; check-in blocked |
+| Range is closed (`ranges.is_open = false`) | `403 Forbidden`; check-in blocked |
+| Valid member but revoked device token | `403 Forbidden`; request rejected before any DB read |
+| Missing `member_num` in request body | `400 Bad Request` |
+
 ### Next.js Frontend (`src/**/__tests__/`)
 
 | What to test | How |
@@ -40,13 +67,27 @@ You are the QA and test engineer for the Outdoor Sports Club project. Your job i
 
 ### End-to-End (`e2e/`)
 
-| Flow | Priority |
-| :--- | :--- |
-| Home Page loads and renders sign-in CTA | High |
-| Member logs in via Google, redirected by `training_level` | High |
-| Kiosk check-in via QR scan | High |
-| Admin resets member auth | Medium |
-| Consumable purchase flow (Stripe Terminal) | Medium |
+| Surface | Flow | Priority |
+| :--- | :--- | :--- |
+| **Home Page** | Page loads; sign-in CTA visible; no member data in DOM | High |
+| **Member Portal** | Social login → redirect by `training_level` (Level 0 vs. Level 2 vs. Level 3) | High |
+| **Member Portal** | QR badge renders for authenticated member | High |
+| **Member Portal** | Unauthenticated access redirects to Home Page | High |
+| **Member Portal** | Level 0 member sees dues/waiver prompt, not range access | Medium |
+| **Admin Portal** | Level 4 RSO can open/close a range | High |
+| **Admin Portal** | Level 5 admin can view finance and member records | Medium |
+| **Admin Portal** | Level 6 Webmaster can pair a device and reset member auth | High |
+| **Admin Portal** | Level 3 member cannot access Admin Portal | High |
+| **Kiosk View** | Device-paired kiosk check-in — happy path: valid member, correct level, valid waiver, dues paid, lane available | High |
+| **Kiosk View** | Check-in blocked — insufficient `training_level`; violation alert displayed | High |
+| **Kiosk View** | Check-in blocked — expired waiver; violation alert displayed | High |
+| **Kiosk View** | Check-in blocked — dues not current; violation alert displayed | High |
+| **Kiosk View** | Check-in blocked — no lanes available | High |
+| **Kiosk View** | Check-out via QR scan closes lane and marks it available | High |
+| **Kiosk View** | Guest add-on flow: waiver acknowledgement + Stripe payment | High |
+| **Kiosk View** | Violation alert displayed and locked; only Level 4+ clears it | High |
+| **Kiosk View** | Consumable purchase via Stripe Terminal | Medium |
+| **Kiosk View** | Revoked device token is rejected at next request | High |
 
 ## Constraints
 
