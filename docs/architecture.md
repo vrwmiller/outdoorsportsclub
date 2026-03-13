@@ -68,9 +68,9 @@ flowchart LR
 
 | Flow | Description |
 | :--- | :--- |
-| Home Page / Member Device → Amplify | Public visitors and authenticated members hit the **Next.js** frontend hosted on **AWS Amplify Gen 2** — it is the same single app for all personal device users |
+| Home Page / Personal Device → Amplify | Public visitors and authenticated members hit the **Next.js** frontend hosted on **AWS Amplify Gen 2** — it is the same single app for all personal device users |
 | Kiosk Tablet → Amplify | Paired range tablets also load the Next.js app from **Amplify**, navigating directly to the full-screen `/kiosk` route; the kiosk never uses the Cognito login flow |
-| Amplify → Cognito | Personal device login uses **AWS Cognito** Social Login (Google / Facebook); on success, the nav menu expands based on `training_level` re-queried from Aurora — members (Level 1–3) see member items, staff (Level 4–6) see admin items |
+| Amplify → Cognito | Personal device login uses **AWS Cognito** Social Login (Google / Facebook); on success, the app calls a backend API endpoint to fetch `training_level` (Lambda re-queries Aurora) — members (Level 1–3) see member nav items, staff (Level 4–6) see admin items |
 | Amplify → API Gateway | Authenticated frontend calls hit **API Gateway**, which routes to the appropriate **Lambda** function |
 | Lambda → Aurora | All reads and writes use the **RDS Data API** — no persistent DB connections inside Lambda |
 | Lambda → S3 | Signed waivers are written to **Amazon S3** with **S3 Object Lock** (Compliance Mode, 7-year retention) |
@@ -82,7 +82,7 @@ flowchart LR
 
 ## RBAC
 
-Two auth paths control access within a single Next.js app hosted on Amplify. For personal devices, Cognito Social Login grants a JWT; the nav menu then expands based on `training_level` re-queried from Aurora — the JWT claim is never trusted for this. For kiosk tablets, a Device Token is validated directly by Lambda on every request, bypassing Cognito entirely. The `training_level` value stored in **Aurora** is always the source of truth.
+Two auth paths control access within a single Next.js app hosted on Amplify. For personal devices, Cognito Social Login grants a JWT; the nav menu then expands based on `training_level` fetched via a backend API call (Lambda re-queries Aurora via RDS Data API) — the JWT claim is never trusted for this. For kiosk tablets, a Device Token is included on every API request and validated by Lambda directly; Cognito is bypassed entirely. The `training_level` value stored in **Aurora** is always the source of truth.
 
 ### Surface routing
 
@@ -91,13 +91,13 @@ flowchart TD
     PD([Personal Device])
     KT([Kiosk Tablet<br/>Range Equipment])
 
-    subgraph WEB_AUTH[Cognito Auth Path]
+    subgraph WEB_AUTH[Cognito Auth Path — personal devices only]
         SOCIAL[Social Login<br/>Google or Facebook]
         JWT[Cognito JWT]
-        MW[Next.js Middleware<br/>re-queries training_level from Aurora]
+        MW[Next.js Middleware<br/>calls /me API for training_level]
     end
 
-    subgraph KIOSK_AUTH[Kiosk Auth Path]
+    subgraph KIOSK_AUTH[Kiosk API Authorization — per request]
         DEVTOKEN[Device Token<br/>stored in tablet secure storage]
         DEVCHECK[Lambda<br/>checks devices table — status = Active]
     end
@@ -113,7 +113,8 @@ flowchart TD
     PD --> SOCIAL --> JWT --> MW
     MW -->|Level 1–3| NAV_M
     MW -->|Level 4–6| NAV_A
-    KT --> DEVTOKEN --> DEVCHECK --> KV
+    KT -->|loads app, navigates to /kiosk| KV
+    KV -->|API calls| DEVTOKEN --> DEVCHECK
 ```
 
 ### API enforcement
@@ -122,7 +123,7 @@ Every Lambda invocation enforces RBAC independently of the surface routing above
 
 | Enforcement point | Mechanism |
 | :--- | :--- |
-| API Gateway — web routes | Cognito Authorizer rejects missing or invalid JWTs before Lambda is invoked |
+| API Gateway — web routes | Cognito Authorizer validates JWTs before Lambda is invoked; Gateway Response mapping returns `403 Forbidden` — never `401` |
 | API Gateway — kiosk routes | No Cognito Authorizer; Lambda validates the Device Token directly |
 | Lambda — web | Re-queries `training_level` from Aurora on every request; never trusts the JWT claim |
 | Lambda — kiosk | Validates Device Token on every request; a `Revoked` or missing record is rejected immediately |
@@ -148,7 +149,7 @@ Adding a 5th client surface (e.g., an Instructor Portal) is a coordinated multi-
 | Layer | What changes |
 | :--- | :--- |
 | Frontend | New App Router route group with its own layout and middleware guard |
-| Cognito | New user pool group for the role (e.g., `training_officer`) |
+| Aurora / Lambda | New `training_level` value(s) defined and RBAC checks updated in the affected Lambda handlers |
 | Lambda authorizer / middleware | New role added to the allow-list for any shared endpoints; new endpoints added for surface-specific operations |
 | CloudFormation | IAM execution role updated if the surface's Lambdas need new AWS permissions |
 | API Gateway | New routes wired to new Lambda functions |

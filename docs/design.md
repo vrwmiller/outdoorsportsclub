@@ -4,7 +4,7 @@
 
 The system's **Role-Based Access Control (RBAC)** is driven by the user's verified "Training Level." This controls nav visibility in the **web app** and acts as a safety gate at the **Mobile Kiosks**.
 
-The application is a single Next.js app hosted on AWS Amplify. The **Home Page** is the public-facing entry point visible to all visitors. After Cognito login on a personal device, the nav menu expands based on the user's `training_level` re-queried from Aurora: members (Level 1–3) see member-specific items and staff/admins (Level 4–6) see additional management items. The **Kiosk View** is a dedicated full-screen route (`/kiosk`) within the same app, served to paired range tablets — it is accessed exclusively via Device Token and is entirely separate from the personal device login flow.
+The application is a single Next.js app hosted on AWS Amplify. The **Home Page** is the public-facing entry point visible to all visitors. After Cognito login on a personal device, the nav menu expands based on the user's `training_level` fetched via a backend API call (Lambda re-queries Aurora via RDS Data API): members (Level 1–3) see member-specific items and staff/admins (Level 4–6) see additional management items. The **Kiosk View** is a dedicated full-screen route (`/kiosk`) within the same app, served to paired range tablets — it is accessed exclusively via Device Token and is entirely separate from the personal device login flow.
 
 | Level | Designation | Digital Permissions | Range & System Logic |
 | :--- | :--- | :--- | :--- |
