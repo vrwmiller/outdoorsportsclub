@@ -92,3 +92,4 @@ Use these tokens consistently across all surfaces:
 * All component props, API response shapes, and event handler parameters must be explicitly typed
 * Define API response types in `src/types/api.ts`; import from there rather than redeclaring inline
 * Imports ordered: React → Next.js → third-party → local (`@/`)
+* Keep components lean — no speculative abstractions, no unused props, no dead branches. See the Code Complexity & Bloat rules in `.github/instructions/linter.instructions.md`.

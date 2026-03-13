@@ -154,3 +154,4 @@ CORS_HEADERS = {
 * Use `os.environ` for environment variable access — raise a clear `RuntimeError` at cold-start if a required variable is missing
 * One Lambda function per file; handler always named `handler(event, context)`
 * No bare `except:` — always catch specific exception types; use a final broad `except Exception` only as a safety net with logging
+* Keep handlers lean — no speculative abstractions, no dead code, no defensive handling of states the schema guarantees cannot occur. See the Code Complexity & Bloat rules in `.github/instructions/linter.instructions.md`.

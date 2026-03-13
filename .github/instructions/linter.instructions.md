@@ -61,3 +61,13 @@ Mermaid `architecture-beta` diagram labels are parsed strictly. Violations cause
 - Use `os.environ` for environment variable access; never hardcode credentials
 - Return dicts must always include `statusCode` and `body` keys for API Gateway compatibility
 - Use f-strings for string formatting; avoid `%` formatting and `.format()`
+
+## Code Complexity & Bloat (all files)
+
+- **Do the minimum necessary.** Serve the current requirement only — no hypothetical future needs.
+- **No speculative abstractions.** Only extract a helper or utility if it is used in at least two places in the current change.
+- **No defensive code for impossible cases.** Trust schema constraints, framework guarantees, and internal invariants.
+- **No unused imports, variables, or dead code.**
+- **No redundant comments.** Only comment where the *why* is not self-evident from the code.
+- **No docstrings on unchanged code.** Only annotate functions you are writing or modifying.
+- **Readable over clever.** A clear 5-line solution beats a clever 2-line solution that needs a comment to explain it.
