@@ -2,9 +2,9 @@
 
 ## 1. Training-Centric Access Schema (RBAC)
 
-The system's **Role-Based Access Control (RBAC)** is driven by the user's verified "Training Level." This serves as a digital gatekeeper at the **Member Portal**, the **Admin Portal**, and the **Mobile Kiosks**.
+The system's **Role-Based Access Control (RBAC)** is driven by the user's verified "Training Level." This controls nav visibility in the **web app** and acts as a safety gate at the **Mobile Kiosks**.
 
-The application has four surfaces. The **Home Page** is the club's primary public-facing interface and the entry point for all website visitors. After login, users are routed to the **Member Portal** (Level 0–3) or the **Admin Portal** (Level 4–6). The **Kiosk View** is the default full-screen interface served to paired range tablets and is accessed exclusively via Device Token — it is entirely separate from the website login flow.
+The application is a single Next.js app hosted on AWS Amplify. The **Home Page** is the public-facing entry point visible to all visitors. After Cognito login on a personal device, the nav menu expands based on the user's `training_level` re-queried from Aurora: members (Level 1–3) see member-specific items and staff/admins (Level 4–6) see additional management items. The **Kiosk View** is a dedicated full-screen route (`/kiosk`) within the same app, served to paired range tablets — it is accessed exclusively via Device Token and is entirely separate from the personal device login flow.
 
 | Level | Designation | Digital Permissions | Range & System Logic |
 | :--- | :--- | :--- | :--- |
