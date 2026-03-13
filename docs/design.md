@@ -47,7 +47,7 @@ The kiosk handoff model — whether the RSO holds the tablet and hands it to arr
 | :--- | :--- |
 | **RSO Dashboard** | Default view. Displays lane occupancy for this kiosk's range: each lane shows `Available` or the name/member number of the assigned occupant and their guest count. |
 | **Check-in flow** | Initiated by RSO. Member scans QR Badge; system validates `training_level`, waiver, dues, and guest count. |
-| **Guest add-on** | After the member's lane is assigned, the kiosk prompts: "Add guests? (0 / 1 / 2)." For each guest, the kiosk collects a waiver acknowledgement and presents a payment screen — either the guest or the sponsoring member may tap to pay. Guests share the member's lane. |
+| **Guest add-on** | After the member's lane is assigned, the kiosk prompts: "Add guests? (0 / 1 / 2)." For each guest, the RSO enters a name and phone number; the kiosk looks up the guest in the `guests` table. If a valid waiver is on file, no re-signing is required. If no record exists or the waiver has expired, the kiosk captures a waiver acknowledgement before proceeding. The annual visit count for this guest-member combination is then checked — if the limit has been reached (≥ 2 visits in the current calendar year), the guest is turned away (`403 Forbidden`; no RSO override applies to this rule). For guests that pass all checks, the kiosk presents a payment screen. Either the guest or the sponsoring member may tap to pay. Guests share the member's lane. |
 | **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The user cannot dismiss this screen — only the RSO can clear it by either resolving the issue or denying entry. |
 | **Lane assignment** | After check-in (and optional guest add-on) is complete, the assigned lane and guest count are confirmed on screen. |
 | **Check-out flow** | RSO-initiated or user-initiated. Member scans QR Badge; open lane assignment (including all guests on that lane) is closed and the lane returns to `Available`. |
@@ -88,25 +88,48 @@ The database utilizes a relational model (PostgreSQL) with **Row-Level Security 
 | `home_phone` | TEXT (Nullable) | Home telephone number. |
 | `mobile_phone` | TEXT (Nullable) | Mobile number in E.164 format (e.g., `+15551234567`); validated/normalized for **Amazon SNS** delivery of SMS range alerts. |
 
-### **5.2 Table: `devices` (Kiosks)**
+### **5.2 Table: `ranges`**
+
+Each staffed range has a row in this table. The `ranges` table is the authoritative source for open/close state and access requirements. Unstaffed ranges (outdoor Archery, Air Rifle when unstaffed) do not have kiosks and do not appear here.
+
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | UUID (PK) | Unique range identifier. |
+| `name` | TEXT (Unique) | Human-readable range name (e.g., `Rifle-Pistol`, `Skeet-Trap`). |
+| `is_open` | BOOLEAN | `true` when the range is open for check-in. Closing a range prevents new check-ins; existing occupants are not force-cleared — the RSO conducts a physical closing procedure to ensure the range is vacated before locking the gate. |
+| `min_training_level` | SMALLINT (0-6) | Minimum `training_level` required to check in at this range. Applied at check-in time; authoritative value always queried from this table, never from the device or JWT. |
+
+**Initial seed data:**
+
+| `name` | `is_open` | `min_training_level` |
+| :--- | :--- | :--- |
+| `Rifle-Pistol` | `false` | 1 |
+| `Skeet-Trap` | `false` | TBD |
+| `Air-Rifle` | `false` | TBD |
+| `Indoor-Archery` | `false` | TBD |
+| `Outdoor-Archery` | `false` | TBD |
+
+*Names are provisional — confirm with club leadership before the seed migration is written. All ranges seed as closed. `min_training_level` values TBD.*
+
+### **5.3 Table: `devices` (Kiosks)**
 
 | Column | Type | Description |
 | :--- | :--- | :--- |
 | `id` | UUID (PK) | Unique hardware ID. |
 | `device_token` | TEXT | Salted hash of the secret used for **Kiosk-to-API** authentication. |
-| `location_tag` | TEXT | Human-readable name (e.g., "Skeet-Field-1"). |
-| `min_training_level` | SMALLINT (0-6) | Minimum `training_level` required to check in at this kiosk's range. |
+| `location_tag` | TEXT | Human-readable name (e.g., `Skeet-Trap-1`). |
+| `range_id` | UUID (FK) | FK to `ranges.id`. Determines which range this kiosk serves; used to look up `is_open` and `min_training_level` at check-in. |
 | `status` | TEXT | `Pending-Pairing`, `Active`, `Revoked` |
 
-### **5.3 Table: `lanes`**
+### **5.4 Table: `lanes`**
 
 Each lane belongs to a range and tracks current occupancy. The `devices` table links kiosks to ranges; lanes belong to ranges, not to individual kiosk tablets.
 
 | Column | Type | Description |
 | :--- | :--- | :--- |
 | `id` | UUID (PK) | Unique lane identifier. |
-| `range_tag` | TEXT | Range-level identifier (e.g., `Rifle-Range`, `Skeet-Field`). This is the range prefix; `devices.location_tag` extends it with a kiosk instance suffix (e.g., `Skeet-Field-1`). Once the `ranges` table (ODQ #5) is introduced, this column should become a `range_id` FK. |
-| `lane_number` | SMALLINT | Lane number within the range (e.g., 1–10). |
+| `range_id` | UUID (FK) | FK to `ranges.id`. Replaces the former `range_tag` TEXT column. |
+| `lane_number` | SMALLINT | Lane number within the range (e.g., 1–17 for Rifle-Pistol). |
 | `status` | TEXT | `Available`, `Occupied` |
 | `guest_count` | SMALLINT | Number of guests currently sharing this lane with the sponsoring member (0–2). Always 0 when `status` is `Available`. |
 | `current_member_id` | UUID (FK, Nullable) | FK to `members.id`; set on check-in, cleared on check-out. Nullable only when the lane is `Available`. Guests must be accompanied by a member — the lane is assigned to the sponsoring member's ID for the duration of the guest's occupancy. A null value always means the lane is unoccupied. |
@@ -114,14 +137,14 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 
 **Constraints and indexes:**
 
-* `UNIQUE (range_tag, lane_number)` — no two lanes can share the same number within a range.
+* `UNIQUE (range_id, lane_number)` — no two lanes can share the same number within a range.
 * `CHECK (status IN ('Available', 'Occupied'))`
 * `CHECK (guest_count BETWEEN 0 AND 2)`
 * `CHECK (status = 'Available' AND current_member_id IS NULL AND guest_count = 0 OR status = 'Occupied' AND current_member_id IS NOT NULL AND guest_count BETWEEN 0 AND 2)` — enforces consistency between occupancy state, sponsoring member, and guest count.
-* `INDEX ON (range_tag, status)` — supports finding available/occupied lanes for a range.
+* `INDEX ON (range_id, status)` — supports finding available/occupied lanes for a range.
 * `INDEX ON (current_member_id)` — supports finding the lane a member is currently occupying.
 
-### **5.4 Table: `activity_logs`**
+### **5.5 Table: `activity_logs`**
 
 | Column | Type | Description |
 | :--- | :--- | :--- |
@@ -131,9 +154,35 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed` |
 | `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; null only for `Waiver-Signed` events with no lane context. |
 | `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` events only and linked to the lane/visit via `lane_id`. |
+| `guest_id` | UUID (FK, Nullable) | FK to `guests.id`; populated for `Guest-Payment` and `Waiver-Signed` events involving a guest. Null for all other activity types. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
 
-### **5.5 Table: `consumable_purchases`**
+### **5.6 Table: `training_level_policies`**
+
+One row per training level. Stores scalar constraints enforced automatically at check-in. Admin-editable without a schema migration.
+
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `training_level` | SMALLINT (PK, 0-6) | The member level this policy applies to. |
+| `max_guests` | SMALLINT | Maximum number of guests a member at this level may bring per range visit. `0` means guests are not permitted. |
+
+**Seed data:**
+
+| `training_level` | `max_guests` | Notes |
+| :--- | :--- | :--- |
+| 0 | 0 | Guest — cannot sponsor guests |
+| 1 | 0 | Probationary — guests not permitted |
+| 2 | TBD | Standard — TBD |
+| 3 | 2 | Qualified — up to 2 guests per visit |
+| 4 | 2 | RSO/Instructor |
+| 5 | 2 | Senior RSO |
+| 6 | 2 | Webmaster |
+
+*Level 2 `max_guests` to be confirmed. All other values are known.*
+
+Enforced at check-in by querying `training_level_policies.max_guests` for the member's level and comparing against the requested guest count. Exceeding the limit triggers a violation alert (see ODQ #11).
+
+### **5.7 Table: `consumable_purchases`**
 
 | Column | Type | Description |
 | :--- | :--- | :--- |
@@ -146,6 +195,45 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | `total` | DECIMAL(8,2) | `quantity × unit_price`; computed at transaction time. |
 | `stripe_payment_intent_id` | TEXT | Stripe Payment Intent ID for reconciliation and dispute resolution. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
+
+### **5.8 Table: `guests`**
+
+A persistent identity record for non-member visitors. Created on first visit; reused on subsequent visits so a valid waiver on file does not need to be re-signed.
+
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | UUID (PK) | Unique guest identifier. |
+| `first_name` | TEXT | Guest first name. |
+| `last_name` | TEXT | Guest last name. |
+| `phone` | TEXT | Contact phone in E.164 format. Used with name as the composite lookup key when matching a returning guest at the kiosk. |
+| `waiver_signed_at` | TIMESTAMP (Nullable) | Timestamp of the most recent waiver signing. Null until completed at the kiosk on first visit. Checked against the 1-year expiration rule on each visit. |
+| `waiver_s3_key` | TEXT (Nullable) | S3 object key for the signed waiver document; stored with S3 Object Lock (Compliance Mode) consistent with member waivers. |
+
+**Constraints and indexes:**
+
+* `UNIQUE (first_name, last_name, phone)` — lookup composite key. Whether this combination is sufficient to uniquely identify a returning guest is the remaining open question in ODQ #16.
+* `INDEX ON (last_name, phone)` — kiosk lookup during the guest add-on step.
+
+### **5.9 Table: `guest_visits`**
+
+One row per range visit per guest. Used to enforce the annual visit limit: a guest-member combination may visit at most twice per calendar year. Guests that reach the limit are turned away — no RSO override applies to this rule.
+
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | UUID (PK) | Unique visit record. |
+| `guest_id` | UUID (FK) | FK to `guests.id`. |
+| `member_id` | UUID (FK) | FK to `members.id` — the sponsoring member for this visit. |
+| `range_id` | UUID (FK) | FK to `ranges.id` — the range visited. |
+| `lane_id` | UUID (FK, Nullable) | FK to `lanes.id` — the lane assigned for this visit. |
+| `visited_at` | TIMESTAMP | Visit timestamp; used to scope the annual limit check to the current calendar year. |
+| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID for the guest fee charged on this visit. Duplicated here for direct reconciliation without joining to `activity_logs`. |
+
+**Annual limit check:** `SELECT COUNT(*) FROM guest_visits WHERE guest_id = $1 AND member_id = $2 AND EXTRACT(YEAR FROM visited_at) = EXTRACT(YEAR FROM NOW())`. If result ≥ 2, the kiosk returns `403 Forbidden`. A `guest_visits` row is inserted only after payment is confirmed.
+
+**Indexes:**
+
+* `INDEX ON (guest_id, member_id, visited_at)` — annual count query.
+* `INDEX ON (member_id)` — sponsor history lookup.
 
 ## 6. Infrastructure & Security (AWS)
 
@@ -161,15 +249,16 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
 ### **7.1 Kiosk Operations**
 
 * **`POST /v1/kiosk/check-in`**
-  * **Logic:** Triggered by a QR scan. Validates `training_level` and `waiver_status` via the **RDS Data API**.
-  * **Returns:** `200 OK` (Access Granted) or `403 Forbidden` (e.g., "Level 3 Required").
+  * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) waiver not expired; (4) dues current; (5) requested guest count ≤ `training_level_policies.max_guests` for this member's level; (6) an available lane exists. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
+  * **Returns:** `200 OK` (Access Granted) or `403 Forbidden` (e.g., "Range closed", "Level 3 Required", "Guests not permitted at this level").
 
 * **`POST /v1/kiosk/check-out`**
   * **Logic:** Triggered by a QR scan at range exit. Validates an active open `Range-Checkin` exists for the member on that device; writes a `Range-Checkout` record to `activity_logs`.
   * **Returns:** `200 OK` (Check-Out Logged) or `404 Not Found` (no open check-in on record).
 
 * **`POST /v1/kiosk/guest-payment`**
-  * **Logic:** Orchestrates guest fee payment via the **Stripe Terminal SDK** (Tap to Pay on tablet NFC); creates `activity_logs` entry upon success.
+  * **Logic:** Handles the full guest add-on flow for a single guest: (1) look up guest by `first_name`, `last_name`, and `phone` in `guests` — create a new record if not found; (2) check `guests.waiver_signed_at` — prompt waiver capture at the kiosk if no record exists or the waiver has expired; (3) query `guest_visits` for this guest-member combination in the current calendar year — if count ≥ 2, return `403 Forbidden` (hard block; no RSO override applies); (4) process the guest fee via **Stripe Terminal SDK** (Tap to Pay on tablet NFC); (5) insert a `guest_visits` row; (6) create an `activity_logs` entry with `guest_id` populated.
+  * **Returns:** `200 OK`, `403 Forbidden` (annual limit reached), or `402 Payment Required` (Stripe failure).
 
 * **`POST /v1/kiosk/consumable-purchase`**
   * **Logic:** Records one or more line items (item name, quantity, unit price) to `consumable_purchases`; processes payment via **Stripe Terminal SDK** (Tap to Pay). `member_id` is optional — omit for anonymous guest purchases.
@@ -182,6 +271,18 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
 
 * **`POST /v1/devices/pair`** (**Level 6** **Webmaster** Only)
   * **Logic:** Validates the tablet's **Pairing Code**; promotes device to 'Active' and returns the `device_token`.
+
+* **`PATCH /v1/admin/ranges/{range_id}/status`** (**Level 4+** RSO)
+  * **Logic:** Sets `ranges.is_open` to `true` or `false`. Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard. Closing a range does not force-clear active lanes — the RSO conducts a physical closing procedure to verify the range is vacated before locking the gate. The RSO dashboard continues to display current lane occupancy while `is_open = false` to support this procedure.
+  * **Returns:** `200 OK` or `403 Forbidden`.
+
+* **`POST /v1/admin/lanes`** (**Level 4+** RSO)
+  * **Logic:** Creates a new lane for a range. `range_id` and `lane_number` required.
+  * **Returns:** `201 Created` or `409 Conflict` (duplicate lane number).
+
+* **`PATCH /v1/admin/lanes/{lane_id}`** (**Level 4+** RSO)
+  * **Logic:** Updates lane status or disables a lane. Used for range reconfiguration without requiring a DB migration.
+  * **Returns:** `200 OK` or `404 Not Found`.
 
 ## 8. High Availability, Multi-Region & Disaster Recovery
 
@@ -293,9 +394,16 @@ An independent architectural review was conducted against the design documented 
 
 The review correctly identified that RSOs have no current mechanism to see who is checked in on their range in real time. This is captured as **Open Design Question #9**. Polling a `GET /v1/ranges/{id}/checkins` endpoint is the recommended starting point before considering SSE or WebSockets.
 
-### Accepted: A `ranges` table is needed
+### Resolved: Ranges table and lane management (ODQ #5 and ODQ #12)
 
-The review independently confirmed the need for a `ranges` or "range segments" entity (e.g., Trap House 1, Pistol Bay A) to support range-specific check-in validation and status. This is already captured as **Open Design Question #5** and is a prerequisite for implementing check-in logic.
+The review independently confirmed the need for a `ranges` table. Both questions are now resolved — see Section 5 for the full schema.
+
+* A `ranges` table (Section 5.2) is the authoritative source for open/close state and `min_training_level` per range. `min_training_level` moves from `devices` to `ranges`.
+* `lanes.range_tag` (TEXT) is replaced by `lanes.range_id` (UUID FK to `ranges.id`).
+* Range open/close is a soft operation: `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open`; existing check-ins are not force-cleared. The RSO physically ensures the range is vacated during the closing procedure.
+* The endpoint is callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard (Level 4+).
+* Initial seed: Rifle-Pistol (17 lanes), Skeet-Trap, Archery, Air-Rifle. All seed as closed. `min_training_level` values TBD.
+* Lane counts are seeded in the bootstrap migration; future changes use `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration.
 
 ### Rejected: PWA / offline-first kiosk
 
@@ -329,6 +437,14 @@ The review correctly identified that no centralized monitoring strategy exists. 
 
 **Log retention:** All **Amazon CloudWatch Logs** log groups are configured with a 7-year retention period, consistent with the waiver legal retention requirement.
 
+### Accepted: Guest identity uses waiver-on-file lookup
+
+The existing manual process requires guests to sign a new liability form at every visit. The new system replaces this with a waiver-on-file model: a guest's first visit triggers waiver capture at the kiosk (aligned with the ODQ #8 guest-registration flow); on subsequent visits the kiosk looks up the guest by name and phone number and skips re-signing if a valid waiver is already on file.
+
+This requires two new tables: `guests` (persistent identity + waiver metadata, Section 5.8) and `guest_visits` (visit history for annual limit enforcement, Section 5.9). A `guest_id` FK is added to `activity_logs` to link payment and waiver-signing events to specific guests.
+
+The annual visit limit (≤ 2 per guest-member combination per calendar year) is enforced as a hard block — guests that reach the limit are turned away. No RSO override applies to this rule.
+
 ### Accepted: Async background workflows are unplanned
 
 The review identified that non-user-facing operations (dues reminders, waiver expiry warnings, service-hours promotion) have no processing layer defined. Captured as **Open Design Question #15**.
@@ -343,14 +459,15 @@ The following are unresolved before implementation begins. Each requires a delib
 | 2 | **Dues payment** | How are annual dues paid? **Stripe Terminal** (NFC, kiosk only) or **Stripe.js** (card element, personal device via Member Portal)? A personal-device flow requires a different Stripe integration from the Terminal SDK. |
 | 3 | **Service hours logging** | What is the endpoint and flow for recording service hours? Who initiates the log entry — the member self-reporting, an RSO verifying on-site, or an **Administrator**? What prevents false entries? |
 | 4 | **`training_level` promotion** | What triggers a level change — a manual **Administrator** action, an automated rule (e.g., `service_hours >= 6` auto-promotes Level 1 → Level 2), or both? What is the API endpoint? |
-| 5 | **Range Open / Close** | How is a range marked open or closed? Is there a `ranges` table with an `is_open` flag? What is the API endpoint and who calls it (Level 4+)? The check-in flow must refuse entry to a closed range — the schema and endpoint need to be defined before check-in can be implemented. |
+| 5 | **Range Open / Close** | ✅ Resolved — see Section 5.2 and Section 7.2. `ranges` table added; `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open` (Level 4+); soft close — RSO physically clears the range. Five ranges seeded: Rifle-Pistol, Skeet-Trap, Air-Rifle, Indoor-Archery, Outdoor-Archery (names provisional). |
 | 6 | **Member Portal read endpoints** | No GET endpoints are defined. The Member Portal needs to fetch member profile, `training_level`, `service_hours`, `dues_paid_until`, `waiver_signed_at`, and the QR badge token. These endpoints need to be added to Section 7. |
 | 7 | **Pairing Code generation** | `POST /v1/devices/pair` accepts a Pairing Code, but there is no defined flow for how a new tablet *generates* the code. Is this a one-time code displayed in the Admin Portal that the tablet manually enters, or does the tablet call an unauthenticated endpoint to request a code? |
 | 8 | **Guest Level 0 flow entry point** | Guests must pay a fee and sign a waiver at the kiosk. Does the kiosk allow starting this flow without scanning a QR code? The current check-in endpoint assumes a QR scan. A separate guest-registration flow — or a kiosk-initiated guest session — may be needed. |
 | 9 | **Real-time RSO check-in view** | The primary RSO view is the **kiosk lane dashboard** (Section 4), which shows live lane occupancy on the tablet itself. A secondary read-only view in the **Admin Portal** may also be needed for supervisory oversight across all ranges. The kiosk dashboard requires the same real-time data as check-in/check-out, so no additional push mechanism is needed if the kiosk re-fetches lane state after each transaction. A background polling interval (e.g., every 30s) is sufficient for the kiosk dashboard between transactions. |
 | 10 | **Offline operation architecture** | Member check-in and check-out must continue without internet connectivity. Proposed approach: the kiosk caches an encrypted local snapshot of active member QR tokens, `training_level`, and waiver/dues status at regular intervals while online. On connectivity loss, check-in validation runs against the local cache; events are queued and synced when connectivity restores. Guest payment (Stripe Terminal) requires connectivity and cannot be processed offline — policy decision needed: (a) refuse guest entry during outage, or (b) allow RSO to grant provisional entry at their discretion (no payment record until online). The caching strategy, encryption key management, and conflict-resolution on sync must be defined before kiosk implementation begins. |
 | 11 | **Violation override flow** | When a check-in fails a rule (guest limit exceeded, waiver expired, etc.), the kiosk enters violation alert state that only a Level 4+ RSO can clear. Two resolution paths are needed: (a) **Approve override** — RSO uses their own credential (PIN, NFC badge, or Admin Portal action) to allow entry anyway and record the exception; (b) **Deny entry** — RSO dismisses the alert, check-in is cancelled, lane remains available. The exact RSO authentication mechanism for clearing the alert (to prevent a user self-clearing) must be defined. |
-| 12 | **Lane configuration management** | Lane count per range is needed by the `lanes` table. How are lanes created and managed — static seed data in a DB migration, or configurable via the **Admin Portal**? If lane counts change (range expansion, temporary closure of lanes), the Admin Portal must support adding/removing/disabling lanes without a migration. |
+| 12 | **Lane configuration management** | ✅ Resolved — see Section 5.4 and Section 7.2. Initial counts seeded in bootstrap migration (Rifle-Pistol: 17 lanes); future changes via `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration. |
 | 13 | **Kiosk handoff model** | Two physical deployment models are viable: (a) **RSO-mediated** — RSO holds the tablet, hands it to arriving users for check-in, and takes it back on completion. The RSO is physically present at every check-in and can clear violation alerts directly on the device. (b) **Fixed-mount self-serve** — tablet is mounted at the range entrance; users self-scan. Violation alerts must be pushed to the RSO by another mechanism (e.g., audio alert, secondary RSO dashboard). The handoff model affects the violation-clearing UX, the physical mounting requirements, and whether the tablet needs a "return to RSO dashboard" post-check-in state. |
 | 14 | **Observability strategy** | ✅ Resolved — see Section 10. Structured JSON logging to **Amazon CloudWatch Logs**; X-Ray deferred; three alarms to admin **Amazon SNS** topic; 7-year log retention. |
 | 15 | **Async background workflow scope** | Several non-user-facing operations are currently unplanned: annual dues renewal reminders, waiver expiry warnings (e.g., 30-day advance SMS via **Amazon SNS**), service-hours promotion evaluation (`service_hours >= 6` → Level 2), and audit log export to **Amazon S3** for admin review. These are candidates for an async processing layer (**Amazon SQS** + **AWS Lambda** worker or **Amazon EventBridge Scheduler**). Decisions needed: (a) which events trigger which notifications; (b) whether promotion to Level 2 is fully automated or requires admin confirmation; (c) what the retry and dead-letter policy is for failed notification deliveries. |
+| 16 | **Guest lookup key** | The `guests` table (Section 5.8) uses `(first_name, last_name, phone)` as the composite lookup key and unique constraint. Open question: is this combination sufficient to uniquely identify a returning guest in practice, or should an email address also be collected? The answer determines the `UNIQUE` constraint on `guests` and the data-entry fields shown during the kiosk guest add-on step. Must be confirmed before the guest add-on UI and check-in Lambda are implemented. |
