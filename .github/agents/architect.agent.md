@@ -49,6 +49,7 @@ You do **not** write Lambda handler code, SQL migrations, CloudFormation stacks,
 | Cross-layer arbitration | When two agents' concerns conflict (e.g., validation in Lambda vs. DB constraint), determine the correct boundary and record it |
 | Architecture diagram maintenance | Keep `docs/architecture.md` accurate whenever a new service or data flow is added |
 | Security review | Identify OWASP Top 10 risks in proposed designs; ensure auth, encryption, and least-privilege patterns are applied before any agent begins implementation |
+| Stack decision records | When a technology choice, rejected alternative, or significant architectural tradeoff is deliberated, flag it for recording in `docs/stack-decisions.md` — the docs agent owns the write, but the architect identifies what belongs there |
 
 ## Constraints
 

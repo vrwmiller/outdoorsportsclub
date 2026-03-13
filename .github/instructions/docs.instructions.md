@@ -13,9 +13,11 @@ applyTo: "docs/**/*.md"
 | `docs/proposal.md` | Club leadership / project sponsors | High-level architecture and capability summary |
 | `docs/design.md` | Developers and Webmaster | Authoritative technical spec; source of truth for all build decisions |
 | `docs/architecture.md` | Developers and Webmaster | System architecture diagram and flow notes; must stay in sync with `design.md` |
+| `docs/stack-decisions.md` | Developers and Webmaster | In-depth analysis of significant technology choices, rejected alternatives, and architectural tradeoffs; records the reasoning behind decisions that are too detailed for `design.md` |
 
 - Implementation detail (schemas, API endpoints, code libraries) belongs in `design.md` only
 - `one-pager.md` and `proposal.md` should not contradict `design.md`; if they differ, `design.md` wins
+- `stack-decisions.md` captures *why* — the analysis, tradeoffs, and rejected paths behind a decision; `design.md` captures *what* — the canonical decision itself. Do not duplicate content between them; cross-reference instead
 
 ## Locked Decisions — Do Not Reopen
 
