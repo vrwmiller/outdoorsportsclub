@@ -805,17 +805,6 @@ Why Django was not chosen:
 * **Operational weight:** Running a full Django app for a mostly static or CDN-served frontend increases operational complexity compared with static/SSR hosting.
 * **Developer mismatch:** For a team centered on React/TypeScript, Django adds a cross-language integration surface and reduces frontend DX.
 
-When to prefer Next.js:
-
-* Teams focused on React/TypeScript who want component-driven development and CDN-first performance.
-* Sites needing SEO or mixed static/dynamic rendering with simple serverless APIs.
-
-When to prefer Django on other projects:
-
-* For Outdoor Sports Club, the frontend framework is a locked decision: **Next.js** hosted via **AWS Amplify Gen 2** — Django is not an option for this implementation.
-* For other projects, Django may be preferred for a Python-first monolith with deep server-side business logic, complex DB transactions, or where the built-in Django Admin is required for model management.
-* For other projects, Django may also suit teams that prefer a single-language (Python) stack and where server-side rendering is the primary rendering model.
-
 ## 10. Architecture Decisions — External Review Findings
 
 An independent architectural review was conducted against the design documented here. The following records which recommendations were accepted, rejected, or deferred, and why.
