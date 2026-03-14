@@ -546,7 +546,7 @@ Every layer of the stack is designed so that a transient failure — power inter
 
 * **Stripe Terminal in-flight recovery:** The Stripe Terminal SDK tracks the current PaymentIntent state on the device. If connectivity is lost mid-transaction (e.g., a network blip during NFC tap), the SDK can recover the PaymentIntent and confirm or cancel it on reconnect — the payment is not silently abandoned.
 
-* **Future async workflows:** Any background processing added in the future (dues reminders, waiver expiry notifications, audit log exports) must use **Amazon SQS** with a configured **Dead-Letter Queue (DLQ)**. This guarantees at-least-once delivery: if a worker Lambda fails, the message is retried up to the configured maximum before landing in the DLQ for inspection. Messages are never silently dropped.
+* **Future async workflows:** Any background processing added in the future must use **Amazon SQS** with a configured **Dead-Letter Queue (DLQ)** to guarantee at-least-once delivery — messages are never silently dropped.
 
 ## 7. API Outlines (AWS-Native / RESTful)
 
