@@ -565,10 +565,10 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
 
 | Method | Path | Auth |
 | :----- | :--- | :--- |
-| `GET` | `/v1/members/me` | Authenticated member, Level 1–6 |
-| `GET` | `/v1/members/me/badge` | Authenticated member, Level 1–6 |
-| `PATCH` | `/v1/members/me` | Authenticated member, Level 1–6 |
-| `POST` | `/v1/members/me/dues` | Authenticated member, Level 1–6 |
+| `GET` | `/v1/members/me` | **Authenticated member**, Level 1–6 |
+| `GET` | `/v1/members/me/badge` | **Authenticated member**, Level 1–6 |
+| `PATCH` | `/v1/members/me` | **Authenticated member**, Level 1–6 |
+| `POST` | `/v1/members/me/dues` | **Authenticated member**, Level 1–6 |
 
 ---
 
@@ -614,13 +614,13 @@ Personal-device path for annual dues payment via **Stripe.js** (card element —
 
 | Method | Path | Auth |
 | :----- | :--- | :--- |
-| `DELETE` | `/v1/kiosk/wait-list/{entry_id}` | Device Token |
-| `GET` | `/v1/kiosk/range/lanes` | Device Token |
-| `POST` | `/v1/kiosk/check-in` | Device Token |
-| `POST` | `/v1/kiosk/check-out` | Device Token |
-| `POST` | `/v1/kiosk/consumable-purchase` | Device Token |
-| `POST` | `/v1/kiosk/dues` | Device Token |
-| `POST` | `/v1/kiosk/guest-payment` | Device Token |
+| `DELETE` | `/v1/kiosk/wait-list/{entry_id}` | **Device Token** |
+| `GET` | `/v1/kiosk/range/lanes` | **Device Token** |
+| `POST` | `/v1/kiosk/check-in` | **Device Token** |
+| `POST` | `/v1/kiosk/check-out` | **Device Token** |
+| `POST` | `/v1/kiosk/consumable-purchase` | **Device Token** |
+| `POST` | `/v1/kiosk/dues` | **Device Token** |
+| `POST` | `/v1/kiosk/guest-payment` | **Device Token** |
 
 ---
 
@@ -696,17 +696,17 @@ Handles the full guest add-on flow for a single guest: (1) look up guest by `fir
 
 | Method | Path | Auth |
 | :----- | :--- | :--- |
-| `GET` | `/v1/admin/ranges/occupancy` | Level 4+ RSO |
-| `GET` | `/v1/admin/settings` | Level 5+ Administrator |
-| `PATCH` | `/v1/admin/lanes/{lane_id}` | Level 4+ RSO |
-| `PATCH` | `/v1/admin/members/reset-auth` | Level 6 Webmaster |
-| `PATCH` | `/v1/admin/members/{member_id}/level` | Level 5+ Administrator |
-| `PATCH` | `/v1/admin/members/{member_id}/service-hours` | Level 5+ Administrator |
-| `PATCH` | `/v1/admin/ranges/{range_id}/status` | Level 4+ RSO |
-| `PATCH` | `/v1/admin/settings` | Level 5+ Administrator |
-| `POST` | `/v1/admin/devices/pairing-code` | Level 6 Webmaster |
-| `POST` | `/v1/admin/lanes` | Level 4+ RSO |
-| `POST` | `/v1/admin/lanes/{lane_id}/checkout` | Level 4+ RSO |
+| `GET` | `/v1/admin/ranges/occupancy` | Level 4+ **RSO** |
+| `GET` | `/v1/admin/settings` | Level 5+ **Administrator** |
+| `PATCH` | `/v1/admin/lanes/{lane_id}` | Level 4+ **RSO** |
+| `PATCH` | `/v1/admin/members/reset-auth` | Level 6 **Webmaster** |
+| `PATCH` | `/v1/admin/members/{member_id}/level` | Level 5+ **Administrator** |
+| `PATCH` | `/v1/admin/members/{member_id}/service-hours` | Level 5+ **Administrator** |
+| `PATCH` | `/v1/admin/ranges/{range_id}/status` | Level 4+ **RSO** |
+| `PATCH` | `/v1/admin/settings` | Level 5+ **Administrator** |
+| `POST` | `/v1/admin/devices/pairing-code` | Level 6 **Webmaster** |
+| `POST` | `/v1/admin/lanes` | Level 4+ **RSO** |
+| `POST` | `/v1/admin/lanes/{lane_id}/checkout` | Level 4+ **RSO** |
 | `POST` | `/v1/devices/pair` | Unauthenticated (Pairing Code) |
 
 ---
@@ -745,7 +745,11 @@ Updates a lane's configuration or operational status. Accepts `lane_number` (ren
 PATCH /v1/admin/members/reset-auth
 ```
 
-Clears the `social_provider_id` in the **Cognito User Pool** for the specified `member_id`.
+Clears the `social_provider_id` in the **Cognito User Pool** for the specified `member_id`. Body: `{ member_id }`.
+
+**Returns:** `200 OK` or `404 Not Found`.
+
+---
 
 ```http
 PATCH /v1/admin/members/{member_id}/level
