@@ -532,6 +532,18 @@ A single-row configuration table. Stores club-wide scalars that Administrators m
 * **Zero-Trust Security:** Data is encrypted at rest and in transit via **AWS KMS**; no raw credit card data is ever stored on Club-managed systems.
 * **Authorization invariant — `training_level`:** Every Lambda that gates access by training level **must re-query `training_level` from Aurora** on every request. It must never be read from the Cognito JWT claim. The JWT is used only to identify the caller (via `sub`); the authoritative level is always the database row. A member's level can be revoked between token issuance and token expiry — reading the claim would miss that change.
 
+### Data durability
+
+Every layer of the stack is designed so that a transient failure — power interruption, Lambda timeout, network blip — cannot silently discard in-flight data.
+
+* **Aurora write quorum:** Aurora Serverless v2 writes to 4-of-6 storage nodes across three Availability Zones before acknowledging the write. A single node failure is transparent to the application.
+* **Atomic transactions:** Every kiosk operation that touches multiple tables (lane assignment, guest payment, wait list advance) executes inside a single Aurora transaction via the **RDS Data API**. A Lambda timeout or network interruption mid-write causes Aurora to roll the transaction back in full — no partial records.
+* **Client-side retry responsibility:** The kiosk and Member Portal must treat any `5xx` response as retriable. All write endpoints are designed to be duplicate-safe: idempotency keys (Stripe Payment Intent ID, `(member_id, activity_type, occurred_at)` composite) prevent duplicate records from retry storms.
+* **Offline check-in / check-out event queue:** If internet connectivity is unavailable when a member checks in or out, the kiosk writes the event to a durable local queue stored in encrypted persistent storage on the device. The event survives app restarts and power cycles. As soon as connectivity restores, the kiosk flushes the queue to Aurora via the normal `POST /v1/kiosk/check-in` and `POST /v1/kiosk/check-out` endpoints. `activity_logs` entries are insert-only and idempotent on `(member_id, activity_type, occurred_at)` so replaying queued events on reconnect cannot produce duplicate records. No check-in or check-out event is ever discarded due to a connectivity gap. See **ODQ #10** for the full offline architecture specification (cache encryption, key management, conflict resolution on sync).
+* **Stripe webhook durability:** Stripe retries failed webhook deliveries for up to 72 hours with exponential back-off. The webhook Lambda is idempotent on Payment Intent ID — a retry of an already-processed event is a no-op.
+* **Stripe Terminal in-flight recovery:** The Stripe Terminal SDK tracks PaymentIntent state on the device. If connectivity drops mid-transaction, the SDK recovers the PaymentIntent state on reconnect and completes or cancels cleanly — no duplicate charges.
+* **Future async workflows:** Any background processing added in future (e.g., audit log export per ODQ #15) must use **Amazon SQS** with a **Dead-Letter Queue (DLQ)**. Silent message drops — fire-and-forget Lambda invocations — are not permitted.
+
 ## 7. API Outlines (AWS-Native / RESTful)
 
 The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrated via **AWS Amplify**.
@@ -745,7 +757,17 @@ Each region runs an independent copy of the stack. Configuration drift — where
 
 ### The "Red Button" procedure
 
-In a full primary-region failure with active-active enabled: **Aurora Global Database** fails over and promotes a reader cluster in a secondary region to writer, and **Route 53** updates DNS to route traffic to the healthy regional endpoint. In single-region mode: the **Webmaster** deploys the stack to a new region using the IaC parameters and restores Aurora from **AWS Backup** or an Aurora point-in-time restore/snapshot. Target RTO: under 60 minutes from a cold start.
+**Operations continuity** during a full primary-region failure is acceptable — brief outage is tolerable, and manual fallbacks exist for the duration. The offline check-in/check-out event queue ensures no range access events are lost during the outage window.
+
+* **Active-active deployment:** Aurora Global Database fails over and promotes a reader cluster to writer; Route 53 updates DNS within ~30 seconds. Estimated outage window: **1–2 minutes**.
+* **Single-region deployment:** The Webmaster deploys the stack to a new region using the IaC parameters, then restores Aurora. Target RTO: **under 60 minutes** from cold start.
+
+**Data loss (RPO) is the primary concern** — once the system is back online, any records lost during the failure window cannot be recovered.
+
+* **Aurora PITR (preferred restore path):** Continuous backup; restore to any second within the 35-day window. In practice, RPO is approximately **5 minutes** — the maximum lag between the last durable write and the failure point.
+* **AWS Backup daily snapshot (last-resort path):** If PITR is unavailable (e.g., cluster corruption), the most recent daily snapshot can be restored. In the worst case this means up to **~24 hours** of data loss. The Webmaster must always attempt PITR before falling back to a daily snapshot.
+* **Active-active replication lag:** Aurora Global Database replication lag is typically under 1 second and is irreducible by design — this is the minimum achievable RPO for a regionally replicated writer.
+* **Formal RPO target:** The club has not yet defined an acceptable RPO threshold. See **ODQ #17**.
 
 ## 9. Architecture Decisions — Frontend Framework
 
@@ -887,3 +909,4 @@ The following are unresolved before implementation begins. Each requires a delib
 | 14 | **Observability strategy** | ✅ Resolved — see Section 10. Structured JSON logging to **Amazon CloudWatch Logs**; X-Ray deferred; three alarms to admin **Amazon SNS** topic; 7-year log retention. |
 | 15 | **Async background workflow scope** | Several non-user-facing operations are currently unplanned: annual dues renewal reminders, waiver expiry warnings (e.g., 30-day advance SMS via **Amazon SNS**), service-hours promotion evaluation (`service_hours >= 6` → Level 2), and audit log export to **Amazon S3** for admin review. These are candidates for an async processing layer (**Amazon SQS** + **AWS Lambda** worker or **Amazon EventBridge Scheduler**). Decisions needed: (a) which events trigger which notifications; (b) whether promotion to Level 2 is fully automated or requires admin confirmation; (c) what the retry and dead-letter policy is for failed notification deliveries. |
 | 16 | **Guest lookup key** | ✅ Resolved — `guests` uses `(first_name, last_name, phone, email)` as the composite lookup key and unique constraint (Section 5.8). Email is collected alongside name and phone during the kiosk guest add-on step. |
+| 17 | **Acceptable RPO and restore path policy** | The club has not yet defined a formal Recovery Point Objective (RPO) — how much data loss is tolerable in the worst-case failure scenario. Candidate targets: (a) ~5 minutes — PITR sole restore path; (b) ~24 hours — daily snapshot acceptable; (c) Zero tolerance — requires active-active not currently provisioned. Decision needed before production launch. |
