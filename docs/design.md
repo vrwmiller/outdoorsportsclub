@@ -873,39 +873,9 @@ This requires two new tables: `guests` (persistent identity + waiver metadata, S
 
 The annual visit limit (≤ 2 per guest-member combination per calendar year) is enforced as a hard block — guests that reach the limit are turned away. No RSO override applies to this rule.
 
-### Resolved: Member Portal read endpoints (ODQ #6)
-
-The Member Portal requires two authenticated GET endpoints. Both re-query Aurora on every request — no data is read from JWT claims.
-
-* `GET /v1/members/me` — returns `member_num`, `training_level`, `service_hours`, `dues_paid_until`, `waiver_signed_at`, `mobile_phone`.
-* `GET /v1/members/me/badge` — returns `member_num`; the frontend renders this as a QR code for kiosk scanning.
-
-### Resolved: Pairing Code generation (ODQ #7)
-
-The Admin Portal (Level 6 Webmaster) initiates device provisioning via `POST /v1/admin/devices/pairing-code`, which creates a `Pending-Pairing` device row and returns a 15-minute, single-use alphanumeric code. The Webmaster hands the code to the technician configuring the tablet; the tablet calls `POST /v1/devices/pair` to complete pairing and receive its Device Token. No unauthenticated endpoint exposes a code-request surface — all code generation is gated behind Level 6 auth. Pairing code and expiry are stored directly in the `devices` table (`pairing_code`, `pairing_code_expires_at`); both are cleared on successful pairing.
-
-### Resolved: Guest entry point (ODQ #8)
-
-Guests must be physically present with their sponsoring member and check in together at the same kiosk. There is no guest-only entry path. The guest add-on step (after the member's lane is assigned) is the exclusive entry point for guest registration and first-visit waiver capture. This fully covers the ODQ #8 scenario — no separate guest-initiated kiosk flow is needed.
-
-### Resolved: Real-time RSO check-in view (ODQ #9)
-
-Two surfaces serve different audiences:
-
-* **Kiosk lane dashboard** (existing) — shows occupancy for this kiosk's own range only. State is re-fetched after every check-in/check-out transaction and polled every 30 seconds between transactions. No push mechanism required.
-* **Admin Portal / mobile web cross-range view** (new) — supervisory read-only view of all ranges and their lane-level occupancy, served by `GET /v1/admin/ranges/occupancy` (Level 4+). Client polls at a suitable interval (e.g., 30 seconds). SSE/WebSockets are not needed at club-scale traffic.
-
-### Resolved: `training_level` promotion (ODQ #4)
-
-All training level changes are explicit **Administrator (Level 5+)** actions. There is no automated promotion rule. An Administrator reviews the member's record and calls `PATCH /v1/admin/members/{member_id}/level` with the new level; the change is recorded in `activity_logs` with `activity_type = 'Level-Change'`. This eliminates the need for an async promotion workflow, **Amazon EventBridge Scheduler**, or **Amazon SQS** for this purpose.
-
 ### Deferred: Service hours logging (ODQ #3)
 
 Range-qualified members (Level 3) earn their status by completing a minimum 6-hour volunteer service commitment — RSOs are themselves volunteers. RSO check-in and check-out events recorded in `activity_logs` provide an implicit audit trail of volunteer activity, but automated service-hour calculation and promotion workflows are not a primary function of this system version. The `service_hours` column is retained in `members` as a placeholder for a future integration. Level 1 → Level 2 promotion remains a manual Administrator action (see ODQ #4) until a dedicated service-hours tracking feature is scoped.
-
-### Accepted: Async background workflows are unplanned
-
-The review identified that non-user-facing operations (dues reminders, waiver expiry warnings, service-hours promotion) have no processing layer defined. Captured as **Open Design Question #15**.
 
 ## 11. Open Design Questions
 
