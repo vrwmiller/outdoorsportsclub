@@ -93,8 +93,9 @@ Tablets are standard RSO range equipment. The RSO carries the tablet, presents i
 | State | Description |
 | :--- | :--- |
 | **Idle** | Default view. Prompts the member to scan their QR badge. Displayed at startup and after every completed check-in, check-out, or cancelled workflow. |
-| **Check-in flow** | Initiated when a member scans their QR badge. System validates `training_level`, dues, and declared guest count. |
-| **RSO Dashboard** | Lane occupancy display for this kiosk's range: each lane shows `Available`, `Occupied` (with occupant name/member number and guest count), or `Closed`. Accessible from the idle screen via **RSO NFC badge scan**: the RSO taps their member badge; the kiosk reads `member_id`, queries `training_level` from Aurora, and admits access only if Level ≥ 4. The RSO's `member_id` is recorded as `actor_member_id` on any action taken within the dashboard. Lane state is re-fetched after every check-in and check-out transaction, and polled every 30 seconds. RSOs can close or re-open individual lanes directly from this view — for example, to take a lane out of service due to a physical hazard. Only `Available` lanes may be closed; an `Occupied` lane must be checked out before it can be closed. The RSO Dashboard also supports **administrative force-checkout**: the RSO can explicitly clear an occupied lane directly from the dashboard (e.g., after verifying the occupant has vacated during a weather closure or emergency). Force-checkout writes a `Range-Checkout` activity log entry with the RSO's `actor_member_id` for audit purposes, and advances the wait list if any entries are queued. |
+| **Check-in flow** | Initiated when a member scans their QR badge. System validates `training_level`, dues, and declared guest count. Level 4–6 members (RSOs and above) follow the same check-in path as any other member — they may occupy lanes on-shift or off-shift. |
+| **RSO role prompt** | When a Level 4+ badge is scanned from the idle screen, the kiosk presents a disambiguation screen before proceeding: **"Check In as Shooter"** or **"Open RSO Dashboard"**. Level 1–3 members see no prompt and proceed directly to check-in. This ensures RSOs who happen to be on duty are not forced into the dashboard when they want to shoot. |
+| **RSO Dashboard** | Lane occupancy display for this kiosk's range: each lane shows `Available`, `Occupied` (with occupant name/member number and guest count), or `Closed`. Accessible from the idle screen by a Level 4+ member selecting **"Open RSO Dashboard"** at the role prompt. The RSO's `member_id` is recorded as `actor_member_id` on any action taken within the dashboard. Lane state is re-fetched after every check-in and check-out transaction, and polled every 30 seconds. RSOs can close or re-open individual lanes directly from this view — for example, to take a lane out of service due to a physical hazard. Only `Available` lanes may be closed; an `Occupied` lane must be checked out before it can be closed. The RSO Dashboard also supports **administrative force-checkout**: the RSO can explicitly clear an occupied lane directly from the dashboard (e.g., after verifying the occupant has vacated during a weather closure or emergency). Force-checkout writes a `Range-Checkout` activity log entry with the RSO's `actor_member_id` for audit purposes, and advances the wait list if any entries are queued. |
 | **Guest add-on** | After a lane is assigned (either directly or after being called from the wait list), the kiosk runs the guest add-on flow for each declared guest: waiver check, annual-limit check, and payment via **Stripe Terminal**. No payment is taken before a lane is confirmed. |
 | **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The member cannot dismiss this screen. The RSO taps their own NFC badge to authenticate (Level ≥ 4 required); the kiosk then presents two choices: **(a) Approve override** — entry is allowed and the exception is recorded in `activity_logs` with the RSO's `member_id` as `actor_member_id`; **(b) Deny entry** — check-in is cancelled and the lane remains `Available`. |
 | **Lane assignment** | Once the member has declared their guest count and a lane is available, the system assigns the lane that maximises spacing from occupied groups based on the declared group size. The confirmed lane number is shown on screen. Guest waiver and payment are then processed per guest. |
@@ -106,6 +107,8 @@ Tablets are standard RSO range equipment. The RSO carries the tablet, presents i
 ```mermaid
 flowchart TD
     IDLE["Idle<br/>Scan QR badge to check in"]
+    RSO_PROMPT{"Level ≥ 4?"}
+    ROLE["Role prompt<br/>Check In as Shooter · Open RSO Dashboard"]
     RSO_DASH["RSO Dashboard<br/>Lane occupancy · range status"]
     SCAN["Member scans QR Badge"]
     T_LVL{"training_level ≥<br/>range minimum?"}
@@ -121,10 +124,13 @@ flowchart TD
     WL["Added to wait list<br/>guest count stored — no payment yet"]
     WL_CALLED["Lane opened —<br/>member called to kiosk"]
 
-    IDLE -->|RSO NFC badge scan| RSO_DASH
-    RSO_DASH -->|Exit| IDLE
     IDLE --> SCAN
-    SCAN --> T_LVL
+    SCAN --> RSO_PROMPT
+    RSO_PROMPT -->|Level 1–3| T_LVL
+    RSO_PROMPT -->|Level 4–6| ROLE
+    ROLE -->|Check In as Shooter| T_LVL
+    ROLE -->|Open RSO Dashboard| RSO_DASH
+    RSO_DASH -->|Exit| IDLE
     T_LVL -->|No| VIOL
     T_LVL -->|Yes| DUES
     DUES -->|Unpaid| VIOL
@@ -648,7 +654,7 @@ Returns current lane occupancy for the kiosk's own range (resolved from the Devi
 POST /v1/kiosk/check-in
 ```
 
-Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry transitions to `Checked-In` on successful lane assignment). If no `Available` lane exists, a `wait_list` row is inserted (storing `guest_count` for later scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If an `Available` lane exists, selects the one that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
+Triggered by a QR scan after a member selects **Check In as Shooter** at the role prompt (or immediately, for Level 1–3 members who see no prompt). Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry transitions to `Checked-In` on successful lane assignment). Level 4–6 members (RSOs and above) are subject to the same validation rules and may occupy lanes on-shift or off-shift. If no `Available` lane exists, a `wait_list` row is inserted (storing `guest_count` for later scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If an `Available` lane exists, selects the one that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
 
 **Returns:** `200 OK` with `{ lane_number }` (lane assigned), `202 Accepted` with `{ wait_position }` (range full — added to wait list), or `403 Forbidden` (e.g., "Level 3 Required", "Guests not permitted at this level").
 
@@ -1060,7 +1066,7 @@ The following are unresolved before implementation begins. Each requires a delib
 | 8 | **Guest Level 0 flow entry point** | ✅ Resolved — guests must be physically present with their sponsoring member; no independent guest entry path exists. The guest add-on step (after member lane assignment) is the exclusive entry point for first-visit waiver capture and payment. See Section 4 and Section 7.2. |
 | 9 | **Real-time RSO check-in view** | ✅ Resolved — kiosk shows local range occupancy (re-fetched after each transaction + 30s poll). Admin Portal / mobile web adds a cross-range supervisory view via `GET /v1/admin/ranges/occupancy` (Level 4+), polled at 30s. No push mechanism required. See Section 7.3. |
 | 10 | **Offline operation architecture** | Member check-in and check-out must continue without internet connectivity. Proposed approach: the kiosk caches an encrypted local snapshot of active member QR tokens, `training_level`, and waiver/dues status at regular intervals while online. On connectivity loss, check-in validation runs against the local cache; events are queued and synced when connectivity restores. Guest payment (Stripe Terminal) requires connectivity and cannot be processed offline — policy decision needed: (a) refuse guest entry during outage, or (b) allow RSO to grant provisional entry at their discretion (no payment record until online). The caching strategy, encryption key management, and conflict-resolution on sync must be defined before kiosk implementation begins. |
-| 11 | **Violation override flow** | ✅ Resolved — RSO taps own NFC badge (Level ≥ 4); logs `actor_member_id`. PIN rejected: observable, shareable, non-attributed. Same mechanism gates RSO Dashboard access. Approve: exception recorded in `activity_logs`; Deny: lane remains `Available`. See Section 4. |
+| 11 | **Violation override flow** | ✅ Resolved — RSO taps own NFC badge (Level ≥ 4); logs `actor_member_id`. PIN rejected: observable, shareable, non-attributed. Approve: exception recorded in `activity_logs`; Deny: lane remains `Available`. See Section 4. |
 | 12 | **Lane configuration management** | ✅ Resolved — see Section 5.4 and Section 7.2. Initial counts seeded in bootstrap migration (Rifle-Pistol: 17 lanes); future changes via `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration. |
 | 13 | **Kiosk handoff model** | ✅ Resolved — **RSO-mediated**: RSO carries the tablet, presents it to arriving members, taps own NFC badge for Dashboard access and violation resolution. Fixed-mount self-serve rejected — requires a separate RSO notification mechanism for alerts and introduces custody ambiguity. See Section 4. |
 | 14 | **Observability strategy** | ✅ Resolved — see Section 10. Structured JSON logging to **Amazon CloudWatch Logs**; X-Ray deferred; three alarms to admin **Amazon SNS** topic; 7-year log retention. |
