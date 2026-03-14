@@ -180,7 +180,7 @@ flowchart TD
 * **The "Safety Gate":** Automated blocking of check-ins for members with insufficient `training_level` for a specific range.
 * **Mandatory Check-Out:** Range users must check out before leaving. Check-out closes the lane assignment (including all guests) and logs a `Range-Checkout` event.
 * **Violation lock:** A failed check-in locks the screen in violation state. The RSO resolves — approve an override where policy allows, or deny entry. Only Level 4+ can clear a violation alert.
-* **Lane assignment:** Each member check-in assigns one available lane. Member and all their guests share that lane. When multiple lanes are available, the system selects the lane that maximises physical distance from all currently occupied lanes — preferring lanes whose nearest occupied neighbour is as far away as possible. This distributes groups across the range rather than clustering them adjacently. When all lanes are occupied the member is offered a wait list position instead of a hard block.
+* **Lane assignment:** Each member check-in assigns one available lane. Member and all their guests share that lane. Only lanes with `status = 'Available'` are eligible — `Occupied` and `Closed` lanes are excluded from selection. When multiple eligible lanes exist, the system selects the lane that maximises physical distance from all currently occupied lanes — preferring lanes whose nearest occupied neighbour is as far away as possible. This distributes groups across the range rather than clustering them adjacently. When no `Available` lanes exist (all lanes are either `Occupied` or `Closed`) the member is offered a wait list position instead of a hard block.
 * **Wait list:** When the range is full, the kiosk adds the member to the wait list for that range (`wait_list` table) and displays their queue position. When any lane is released via check-out, the system automatically advances the queue: the next `Waiting` entry is promoted to `Called`, the RSO Dashboard highlights the queued member, and (if the member has a `mobile_phone` on record) an **Amazon SNS** SMS is sent. The called entry expires after 5 minutes (`expires_at`); if not acted on it is marked `Expired` and the next entry is advanced. A member may cancel their wait list entry at any time from the kiosk screen.
 * **Guest accompaniment:** Guests must be physically present with and accompanied by their sponsoring member. A guest cannot arrive independently — there is no guest-only entry flow. The guest add-on step at the kiosk (after lane assignment) is the only entry point for guest registration and payment.
 * **Guest sponsorship:** A member may bring a maximum of **2 guests per range visit**. The limit is enforced per range — a member may not bring more than 2 guests on the same range at the same time. Guest count is stored in `lanes.guest_count` and checked at check-in.
@@ -359,17 +359,17 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | `id` | UUID (PK) | Unique lane identifier. |
 | `range_id` | UUID (FK) | FK to `ranges.id`. Replaces the former `range_tag` TEXT column. |
 | `lane_number` | SMALLINT | Lane number within the range (e.g., 1–17 for Rifle-Pistol). |
-| `status` | TEXT | `Available`, `Occupied` |
-| `guest_count` | SMALLINT | Number of guests currently sharing this lane with the sponsoring member (0–2). Always 0 when `status` is `Available`. |
+| `status` | TEXT | `Available`, `Occupied`, `Closed`. `Closed` lanes are removed from service by an RSO (e.g., physical hazard, maintenance) and are excluded from check-in assignment until re-opened. Only `Available` lanes may be transitioned to `Closed`; an `Occupied` lane must be checked out first. |
+| `guest_count` | SMALLINT | Number of guests currently sharing this lane with the sponsoring member (0–2). Always 0 when `status` is `Available` or `Closed`. |
 | `current_member_id` | UUID (FK, Nullable) | FK to `members.id`; set on check-in, cleared on check-out. Nullable only when the lane is `Available`. Guests must be accompanied by a member — the lane is assigned to the sponsoring member's ID for the duration of the guest's occupancy. A null value always means the lane is unoccupied. |
 | `checked_in_at` | TIMESTAMP (Nullable) | Time the lane was last claimed. |
 
 **Constraints and indexes:**
 
 * `UNIQUE (range_id, lane_number)` — no two lanes can share the same number within a range.
-* `CHECK (status IN ('Available', 'Occupied'))`
+* `CHECK (status IN ('Available', 'Occupied', 'Closed'))`
 * `CHECK (guest_count BETWEEN 0 AND 2)`
-* `CHECK (status = 'Available' AND current_member_id IS NULL AND guest_count = 0 OR status = 'Occupied' AND current_member_id IS NOT NULL AND guest_count BETWEEN 0 AND 2)` — enforces consistency between occupancy state, sponsoring member, and guest count.
+* `CHECK ((status IN ('Available', 'Closed') AND current_member_id IS NULL AND guest_count = 0) OR (status = 'Occupied' AND current_member_id IS NOT NULL AND guest_count BETWEEN 0 AND 2))` — enforces consistency between occupancy state, sponsoring member, and guest count. `Closed` lanes share the same null-member/zero-guest invariant as `Available` lanes.
 * `INDEX ON (range_id, status)` — supports finding available/occupied lanes for a range.
 * `INDEX ON (current_member_id)` — supports finding the lane a member is currently occupying.
 
@@ -575,8 +575,8 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Returns:** `201 Created` or `409 Conflict` (duplicate lane number).
 
 * **`PATCH /v1/admin/lanes/{lane_id}`** (**Level 4+** RSO)
-  * **Logic:** Updates lane status or disables a lane. Used for range reconfiguration without requiring a DB migration.
-  * **Returns:** `200 OK` or `404 Not Found`.
+  * **Logic:** Updates a lane's configuration or operational status. Accepts `lane_number` (renumbering) and/or `status` (`Available` or `Closed`). Setting `status = 'Closed'` takes a lane out of service — it will be excluded from all check-in assignment until re-opened (`status = 'Available'`). A lane with `status = 'Occupied'` cannot be closed directly; the occupant must check out first (`409 Conflict` returned). Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard.
+  * **Returns:** `200 OK`, `404 Not Found`, or `409 Conflict` (attempted disable of an occupied lane).
 
 * **`PATCH /v1/admin/members/{member_id}/level`** (**Level 5+** Administrator)
   * **Logic:** Updates `members.training_level` for the specified member. Requires `training_level` (0–6) in the request body. Re-queries the **target member's** current `training_level` from Aurora before applying the change and writes an `activity_logs` entry with `activity_type = 'Level-Change'`, `member_id` = target member, `actor_member_id` = the Administrator's `members.id` (resolved by looking up JWT `sub` in `members`). No automated promotion logic — all level changes are explicit Administrator actions.
