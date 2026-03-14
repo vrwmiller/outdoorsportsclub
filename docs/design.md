@@ -86,16 +86,17 @@ sequenceDiagram
 
 Staffed ranges (Rifle/Pistol, Skeet/Trap, and staffed Archery and Air Rifle) each have 2–3 tablet kiosks. Unstaffed ranges (outdoor Archery and indoor Air Rifle when not staffed) do not have kiosks — no check-in flow applies.
 
-The kiosk handoff model — whether the RSO holds the tablet and hands it to arriving users, or the tablet is fixed-mount and self-serve — is an **open design question (#13)**. Both models are supportable by the same underlying check-in flow; the difference is physical deployment and the violation-clearing mechanism.
+Tablets are standard RSO range equipment. The RSO carries the tablet, presents it to arriving members for check-in, and retains custody throughout their shift. The tablet is tracked as range equipment — the RSO on duty is responsible for its whereabouts. This is the **RSO-mediated** model: the RSO is physically present at every check-in transaction, can tap their own NFC badge immediately when a violation alert fires, and returns the tablet to Idle after each completed workflow.
 
 ### Kiosk states
 
 | State | Description |
 | :--- | :--- |
-| **RSO Dashboard** | Default view. Displays lane occupancy for this kiosk's range: each lane shows `Available` or the name/member number of the assigned occupant and their guest count. Lane state is re-fetched after every check-in and check-out transaction, and polled every 30 seconds between transactions. |
-| **Check-in flow** | Initiated by RSO. Member scans QR Badge; system validates `training_level`, dues, and declared guest count. |
+| **Idle** | Default view. Prompts the member to scan their QR badge. Displayed at startup and after every completed check-in, check-out, or cancelled workflow. |
+| **Check-in flow** | Initiated when a member scans their QR badge. System validates `training_level`, dues, and declared guest count. |
+| **RSO Dashboard** | Lane occupancy display for this kiosk's range: each lane shows `Available`, `Occupied` (with occupant name/member number and guest count), or `Closed`. Accessible from the idle screen via **RSO NFC badge scan**: the RSO taps their member badge; the kiosk reads `member_id`, queries `training_level` from Aurora, and admits access only if Level ≥ 4. The RSO's `member_id` is recorded as `actor_member_id` on any action taken within the dashboard. Lane state is re-fetched after every check-in and check-out transaction, and polled every 30 seconds. RSOs can close or re-open individual lanes directly from this view — for example, to take a lane out of service due to a physical hazard. Only `Available` lanes may be closed; an `Occupied` lane must be checked out before it can be closed. The RSO Dashboard also supports **administrative force-checkout**: the RSO can explicitly clear an occupied lane directly from the dashboard (e.g., after verifying the occupant has vacated during a weather closure or emergency). Force-checkout writes a `Range-Checkout` activity log entry with the RSO's `actor_member_id` for audit purposes, and advances the wait list if any entries are queued. |
 | **Guest add-on** | After a lane is assigned (either directly or after being called from the wait list), the kiosk runs the guest add-on flow for each declared guest: waiver check, annual-limit check, and payment via **Stripe Terminal**. No payment is taken before a lane is confirmed. |
-| **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The user cannot dismiss this screen — only the RSO can clear it by either resolving the issue or denying entry. |
+| **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The member cannot dismiss this screen. The RSO taps their own NFC badge to authenticate (Level ≥ 4 required); the kiosk then presents two choices: **(a) Approve override** — entry is allowed and the exception is recorded in `activity_logs` against the RSO's `member_id`; **(b) Deny entry** — check-in is cancelled and the lane remains `Available`. |
 | **Lane assignment** | Once the member has declared their guest count and a lane is available, the system assigns the lane that maximises spacing from occupied groups based on the declared group size. The confirmed lane number is shown on screen. Guest waiver and payment are then processed per guest. |
 | **Wait list** | Displayed when all lanes are occupied. The kiosk shows the member's current position in the queue. The member may cancel and leave at any time. When a lane opens, the kiosk calls the next member in the queue and advances to lane assignment. |
 | **Check-out flow** | RSO-initiated or user-initiated. Member scans QR Badge; open lane assignment (including all guests on that lane) is closed, the lane returns to `Available`, and the wait list is advanced if any entries are queued. |
@@ -104,7 +105,8 @@ The kiosk handoff model — whether the RSO holds the tablet and hands it to arr
 
 ```mermaid
 flowchart TD
-    DASH["RSO Dashboard<br/>Lane occupancy displayed"]
+    IDLE["Idle<br/>Scan QR badge to check in"]
+    RSO_DASH["RSO Dashboard<br/>Lane occupancy · range status"]
     SCAN["Member scans QR Badge"]
     T_LVL{"training_level ≥<br/>range minimum?"}
     DUES{"Dues current?"}
@@ -119,7 +121,9 @@ flowchart TD
     WL["Added to wait list<br/>guest count stored — no payment yet"]
     WL_CALLED["Lane opened —<br/>member called to kiosk"]
 
-    DASH --> SCAN
+    IDLE -->|RSO gesture| RSO_DASH
+    RSO_DASH -->|Exit| IDLE
+    IDLE --> SCAN
     SCAN --> T_LVL
     T_LVL -->|No| VIOL
     T_LVL -->|Yes| DUES
@@ -128,14 +132,14 @@ flowchart TD
     GUESTS --> LANE
     LANE -->|Available| ASSIGN
     LANE -->|None available| WL
-    WL -->|Member cancels| DASH
+    WL -->|Member cancels| IDLE
     WL -->|Lane opens| WL_CALLED --> ASSIGN
-    VIOL -->|RSO clears| DASH
+    VIOL -->|RSO clears| IDLE
     ASSIGN -->|0 guests| CONFIRM
     ASSIGN -->|1–2 guests| GUEST_FLOW --> CONFIRM
     CONFIRM --> CHECKOUT
     CHECKOUT --> CLOSE
-    CLOSE --> DASH
+    CLOSE --> IDLE
 ```
 
 ### Guest add-on flow
@@ -830,9 +834,9 @@ The following are unresolved before implementation begins. Each requires a delib
 | 8 | **Guest Level 0 flow entry point** | ✅ Resolved — guests must be physically present with their sponsoring member; no independent guest entry path exists. The guest add-on step (after member lane assignment) is the exclusive entry point for first-visit waiver capture and payment. See Section 4 and Section 7.2. |
 | 9 | **Real-time RSO check-in view** | ✅ Resolved — kiosk shows local range occupancy (re-fetched after each transaction + 30s poll). Admin Portal / mobile web adds a cross-range supervisory view via `GET /v1/admin/ranges/occupancy` (Level 4+), polled at 30s. No push mechanism required. See Section 7.3 and Section 10. |
 | 10 | **Offline operation architecture** | Member check-in and check-out must continue without internet connectivity. Proposed approach: the kiosk caches an encrypted local snapshot of active member QR tokens, `training_level`, and waiver/dues status at regular intervals while online. On connectivity loss, check-in validation runs against the local cache; events are queued and synced when connectivity restores. Guest payment (Stripe Terminal) requires connectivity and cannot be processed offline — policy decision needed: (a) refuse guest entry during outage, or (b) allow RSO to grant provisional entry at their discretion (no payment record until online). The caching strategy, encryption key management, and conflict-resolution on sync must be defined before kiosk implementation begins. |
-| 11 | **Violation override flow** | When a check-in fails a rule (guest limit exceeded, waiver expired, etc.), the kiosk enters violation alert state that only a Level 4+ RSO can clear. Two resolution paths are needed: (a) **Approve override** — RSO uses their own credential (PIN, NFC badge, or Admin Portal action) to allow entry anyway and record the exception; (b) **Deny entry** — RSO dismisses the alert, check-in is cancelled, lane remains available. The exact RSO authentication mechanism for clearing the alert (to prevent a user self-clearing) must be defined. |
+| 11 | **Violation override flow** | ✅ Resolved — RSO authenticates by tapping their own NFC badge on the kiosk. The kiosk reads `member_id`, queries `training_level` from Aurora, and proceeds only if Level ≥ 4. PIN was rejected: it is observable by the member standing at the kiosk, shareable between RSOs, and produces non-attributed audit log entries. NFC badge scan is unambiguous, non-shareable, and logs the specific RSO's `member_id` as `actor_member_id` for every override. The same mechanism gates RSO Dashboard access from the Idle screen. Two resolution paths: **(a) Approve override** — entry allowed, exception recorded in `activity_logs`; **(b) Deny entry** — check-in cancelled, lane remains `Available`. |
 | 12 | **Lane configuration management** | ✅ Resolved — see Section 5.4 and Section 7.2. Initial counts seeded in bootstrap migration (Rifle-Pistol: 17 lanes); future changes via `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration. |
-| 13 | **Kiosk handoff model** | Two physical deployment models are viable: (a) **RSO-mediated** — RSO holds the tablet, hands it to arriving users for check-in, and takes it back on completion. The RSO is physically present at every check-in and can clear violation alerts directly on the device. (b) **Fixed-mount self-serve** — tablet is mounted at the range entrance; users self-scan. Violation alerts must be pushed to the RSO by another mechanism (e.g., audio alert, secondary RSO dashboard). The handoff model affects the violation-clearing UX, the physical mounting requirements, and whether the tablet needs a "return to RSO dashboard" post-check-in state. |
+| 13 | **Kiosk handoff model** | ✅ Resolved — **RSO-mediated**. Tablets are standard RSO range equipment carried by the RSO on duty. The RSO presents the tablet to arriving members, retains custody, and is physically present at every check-in. The RSO taps their own NFC badge to access the RSO Dashboard or resolve a violation alert — no secondary notification channel required. Fixed-mount self-serve was rejected: it would require a separate RSO notification mechanism for violation alerts and introduces custody ambiguity. |
 | 14 | **Observability strategy** | ✅ Resolved — see Section 10. Structured JSON logging to **Amazon CloudWatch Logs**; X-Ray deferred; three alarms to admin **Amazon SNS** topic; 7-year log retention. |
 | 15 | **Async background workflow scope** | Several non-user-facing operations are currently unplanned: annual dues renewal reminders, waiver expiry warnings (e.g., 30-day advance SMS via **Amazon SNS**), service-hours promotion evaluation (`service_hours >= 6` → Level 2), and audit log export to **Amazon S3** for admin review. These are candidates for an async processing layer (**Amazon SQS** + **AWS Lambda** worker or **Amazon EventBridge Scheduler**). Decisions needed: (a) which events trigger which notifications; (b) whether promotion to Level 2 is fully automated or requires admin confirmation; (c) what the retry and dead-letter policy is for failed notification deliveries. |
 | 16 | **Guest lookup key** | ✅ Resolved — `guests` uses `(first_name, last_name, phone, email)` as the composite lookup key and unique constraint (Section 5.8). Email is collected alongside name and phone during the kiosk guest add-on step. |
