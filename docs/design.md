@@ -534,6 +534,15 @@ A single-row configuration table. Stores club-wide scalars that Administrators m
 
 Every layer of the stack is designed so that a transient failure — power interruption, Lambda timeout, network blip — cannot silently discard in-flight data.
 
+<table width="100%" cellpadding="8">
+<tr><td bgcolor="#dbeafe" align="center"><strong>🗄️ Aurora Write Quorum</strong> — 6-node replication across 3 AZs; write confirmed by 4 of 6 nodes before ACK</td></tr>
+<tr><td bgcolor="#c8dcfc" align="center"><strong>⚛️ Atomic Transactions</strong> — all multi-step DB ops execute in a single Aurora transaction; auto-rollback on Lambda failure</td></tr>
+<tr><td bgcolor="#b5d0fa" align="center"><strong>🔄 Client-Side Retry</strong> — kiosk and portal retry on 5xx; all write endpoints are idempotent</td></tr>
+<tr><td bgcolor="#a2c3f7" align="center"><strong>📴 Offline Event Queue</strong> — check-in/out events queued locally on connectivity loss; flushed automatically on reconnect</td></tr>
+<tr><td bgcolor="#8fb5f4" align="center"><strong>💳 Stripe Webhook Durability</strong> — Stripe retries failed webhook delivery up to 72 h; handler idempotent on Payment Intent ID</td></tr>
+<tr><td bgcolor="#7ca7f0" align="center"><strong>📡 Stripe Terminal Recovery</strong> — SDK recovers in-flight PaymentIntent after connectivity loss; payment never silently abandoned</td></tr>
+</table>
+
 * **Aurora write quorum:** Aurora Serverless v2 uses a distributed storage engine that replicates every write across six storage nodes in three Availability Zones. A write is only acknowledged to the application after at least four of those six nodes confirm it. A power failure or crash *after* acknowledgment cannot lose the write — it is already durable in multiple AZs before the Lambda returns.
 
 * **Atomic transactions:** All multi-step database operations (check-in, check-out, wait-list queue advance, payment confirmation) execute inside a single Aurora transaction via the RDS Data API. If a Lambda is interrupted or times out mid-transaction, Aurora automatically rolls back the incomplete transaction. The database is never left in a partial-write state — the operation either committed fully or did not commit at all.
@@ -561,7 +570,7 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
 | `PATCH` | `/v1/members/me` | Authenticated member, Level 1–6 |
 | `POST` | `/v1/members/me/dues` | Authenticated member, Level 1–6 |
 
-#### GET /v1/members/me
+---
 
 ```http
 GET /v1/members/me
@@ -571,7 +580,7 @@ Returns the authenticated member's own profile. `member_id` resolved from Cognit
 
 **Returns:** `200 OK` with `{ member_num, training_level, service_hours, dues_paid_until, waiver_signed_at, mobile_phone, annual_dues_cents }`.
 
-#### GET /v1/members/me/badge
+---
 
 ```http
 GET /v1/members/me/badge
@@ -581,7 +590,7 @@ Returns the member's `member_num` for QR code display in the Member Portal. The 
 
 **Returns:** `200 OK` with `{ member_num }`.
 
-#### PATCH /v1/members/me
+---
 
 ```http
 PATCH /v1/members/me
@@ -591,7 +600,7 @@ Updates the authenticated member's own editable profile fields. Accepted fields:
 
 **Returns:** `200 OK` with `{ home_phone, mobile_phone }`, `400 Bad Request` (invalid phone format), or `403 Forbidden`.
 
-#### POST /v1/members/me/dues
+---
 
 ```http
 POST /v1/members/me/dues
@@ -613,7 +622,7 @@ Personal-device path for annual dues payment via **Stripe.js** (card element —
 | `POST` | `/v1/kiosk/dues` | Device Token |
 | `POST` | `/v1/kiosk/guest-payment` | Device Token |
 
-#### DELETE /v1/kiosk/wait-list/{entry_id}
+---
 
 ```http
 DELETE /v1/kiosk/wait-list/{entry_id}
@@ -623,7 +632,7 @@ Cancels the calling member's active `wait_list` entry for this range. Sets `stat
 
 **Returns:** `200 OK` or `404 Not Found`.
 
-#### GET /v1/kiosk/range/lanes
+---
 
 ```http
 GET /v1/kiosk/range/lanes
@@ -633,7 +642,7 @@ Returns current lane occupancy for the kiosk's own range (resolved from the Devi
 
 **Returns:** `200 OK` with `{ range_id, name, is_open, lanes: [{ lane_id, lane_number, status, current_member_id, member_num, guest_count, checked_in_at }] }`. `member_num` and `checked_in_at` are `null` when `status` is `Available`.
 
-#### POST /v1/kiosk/check-in
+---
 
 ```http
 POST /v1/kiosk/check-in
@@ -643,7 +652,7 @@ Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `r
 
 **Returns:** `200 OK` with `{ lane_number }` (lane assigned), `202 Accepted` with `{ wait_position }` (range full — added to wait list), or `403 Forbidden` (e.g., "Level 3 Required", "Guests not permitted at this level").
 
-#### POST /v1/kiosk/check-out
+---
 
 ```http
 POST /v1/kiosk/check-out
@@ -653,7 +662,7 @@ Triggered by a QR scan at range exit. Validates an active open `Range-Checkin` e
 
 **Returns:** `200 OK` (Check-Out Logged) or `404 Not Found` (no open check-in on record).
 
-#### POST /v1/kiosk/consumable-purchase
+---
 
 ```http
 POST /v1/kiosk/consumable-purchase
@@ -663,7 +672,7 @@ Records one or more line items (item name, quantity, unit price) to `consumable_
 
 **Returns:** `200 OK` (Purchase Recorded) or `402 Payment Required` (Stripe payment failure).
 
-#### POST /v1/kiosk/dues
+---
 
 ```http
 POST /v1/kiosk/dues
@@ -673,7 +682,7 @@ Kiosk path for annual dues payment via **Stripe Terminal** — NFC Tap to Pay (p
 
 **Returns:** `200 OK` with `{ dues_paid_until }`, `402 Payment Required` (Stripe failure), or `404 Not Found` (unrecognised `member_num`).
 
-#### POST /v1/kiosk/guest-payment
+---
 
 ```http
 POST /v1/kiosk/guest-payment
@@ -700,7 +709,7 @@ Handles the full guest add-on flow for a single guest: (1) look up guest by `fir
 | `POST` | `/v1/admin/lanes/{lane_id}/checkout` | Level 4+ RSO |
 | `POST` | `/v1/devices/pair` | Unauthenticated (Pairing Code) |
 
-#### GET /v1/admin/ranges/occupancy
+---
 
 ```http
 GET /v1/admin/ranges/occupancy
@@ -710,7 +719,7 @@ Returns current lane occupancy for all ranges. Each entry includes `range_id`, `
 
 **Returns:** `200 OK` with an array of range occupancy objects.
 
-#### GET /v1/admin/settings
+---
 
 ```http
 GET /v1/admin/settings
@@ -720,7 +729,7 @@ Returns the current `club_settings` row.
 
 **Returns:** `200 OK` with `{ annual_dues_cents, updated_at, updated_by_member_id }`.
 
-#### PATCH /v1/admin/lanes/{lane_id}
+---
 
 ```http
 PATCH /v1/admin/lanes/{lane_id}
@@ -730,15 +739,13 @@ Updates a lane's configuration or operational status. Accepts `lane_number` (ren
 
 **Returns:** `200 OK`, `404 Not Found`, or `409 Conflict` (attempted close of an occupied lane).
 
-#### PATCH /v1/admin/members/reset-auth
+---
 
 ```http
 PATCH /v1/admin/members/reset-auth
 ```
 
 Clears the `social_provider_id` in the **Cognito User Pool** for the specified `member_id`.
-
-#### PATCH /v1/admin/members/{member_id}/level
 
 ```http
 PATCH /v1/admin/members/{member_id}/level
@@ -748,7 +755,7 @@ Updates `members.training_level` for the specified member. Requires `training_le
 
 **Returns:** `200 OK`, `400 Bad Request` (missing or out-of-range `training_level`), `403 Forbidden`, or `404 Not Found`.
 
-#### PATCH /v1/admin/members/{member_id}/service-hours
+---
 
 ```http
 PATCH /v1/admin/members/{member_id}/service-hours
@@ -758,7 +765,7 @@ Sets `members.service_hours` to the supplied value. Hours are maintained manuall
 
 **Returns:** `200 OK` with `{ service_hours }`, `400 Bad Request` (negative value), `403 Forbidden`, or `404 Not Found`.
 
-#### PATCH /v1/admin/ranges/{range_id}/status
+---
 
 ```http
 PATCH /v1/admin/ranges/{range_id}/status
@@ -768,7 +775,7 @@ Sets `ranges.is_open` to `true` or `false`. Callable from both the **Admin Porta
 
 **Returns:** `200 OK` or `403 Forbidden`.
 
-#### PATCH /v1/admin/settings
+---
 
 ```http
 PATCH /v1/admin/settings
@@ -778,7 +785,7 @@ Updates one or more fields in the `club_settings` row. Accepted fields: `annual_
 
 **Returns:** `200 OK` with `{ annual_dues_cents, updated_at }`, or `400 Bad Request` (negative or zero amount).
 
-#### POST /v1/admin/devices/pairing-code
+---
 
 ```http
 POST /v1/admin/devices/pairing-code
@@ -788,7 +795,7 @@ Creates a new device row in `devices` (status `Pending-Pairing`) with a cryptogr
 
 **Returns:** `201 Created` with `{ device_id, pairing_code, expires_at }`.
 
-#### POST /v1/admin/lanes
+---
 
 ```http
 POST /v1/admin/lanes
@@ -798,7 +805,7 @@ Creates a new lane for a range. `range_id` and `lane_number` required.
 
 **Returns:** `201 Created` or `409 Conflict` (duplicate lane number).
 
-#### POST /v1/admin/lanes/{lane_id}/checkout
+---
 
 ```http
 POST /v1/admin/lanes/{lane_id}/checkout
@@ -808,7 +815,7 @@ Administrative force-checkout. Clears the specified occupied lane — sets `stat
 
 **Returns:** `200 OK`, `403 Forbidden`, `404 Not Found`, or `409 Conflict` (lane not occupied).
 
-#### POST /v1/devices/pair
+---
 
 ```http
 POST /v1/devices/pair
