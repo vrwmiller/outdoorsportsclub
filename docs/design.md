@@ -177,8 +177,6 @@ flowchart TD
 
 ### Flow rules
 
-* **The "Safety Gate":** Automated blocking of check-ins for members with insufficient `training_level` for a specific range.
-* **Mandatory Check-Out:** Range users must check out before leaving. Check-out closes the lane assignment (including all guests) and logs a `Range-Checkout` event.
 * **Violation lock:** A failed check-in locks the screen in violation state. The RSO resolves — approve an override where policy allows, or deny entry. Only Level 4+ can clear a violation alert.
 * **Lane assignment:** Each member check-in assigns one available lane. Member and all their guests share that lane. Only lanes with `status = 'Available'` are eligible — `Occupied` and `Closed` lanes are excluded from selection. When multiple eligible lanes exist, the system selects the lane that maximises physical distance from all currently occupied lanes — preferring lanes whose nearest occupied neighbour is as far away as possible. This distributes groups across the range rather than clustering them adjacently. When no `Available` lanes exist (all lanes are either `Occupied` or `Closed`) the member is offered a wait list position instead of a hard block.
 * **Wait list:** When the range is full, the kiosk adds the member to the wait list for that range (`wait_list` table) and displays their queue position. When any lane is released via check-out, the system automatically advances the queue: the next `Waiting` entry is promoted to `Called`, the RSO Dashboard (if open) will surface the `Called` status on its next lane-occupancy poll, and (if the member has a `mobile_phone` on record) an **Amazon SNS** SMS is sent. The called entry expires after 5 minutes (`expires_at`); if not acted on it is marked `Expired` and the next entry is advanced. A member may cancel their wait list entry at any time from the kiosk screen.
@@ -548,7 +546,7 @@ Every layer of the stack is designed so that a transient failure — power inter
 
 * **Stripe Terminal in-flight recovery:** The Stripe Terminal SDK tracks the current PaymentIntent state on the device. If connectivity is lost mid-transaction (e.g., a network blip during NFC tap), the SDK can recover the PaymentIntent and confirm or cancel it on reconnect — the payment is not silently abandoned.
 
-* **Future async workflows:** Any background processing added in the future (dues reminders, waiver expiry notifications, audit log exports) must use **Amazon SQS** with a configured **Dead-Letter Queue (DLQ)**. This guarantees at-least-once delivery: if a worker Lambda fails, the message is retried up to the configured maximum before landing in the DLQ for inspection. Messages are never silently dropped.
+* **Future async workflows:** Any background processing added in the future must use **Amazon SQS** with a configured **Dead-Letter Queue (DLQ)** to guarantee at-least-once delivery — messages are never silently dropped.
 
 ## 7. API Outlines (AWS-Native / RESTful)
 
@@ -807,17 +805,6 @@ Why Django was not chosen:
 * **Operational weight:** Running a full Django app for a mostly static or CDN-served frontend increases operational complexity compared with static/SSR hosting.
 * **Developer mismatch:** For a team centered on React/TypeScript, Django adds a cross-language integration surface and reduces frontend DX.
 
-When to prefer Next.js:
-
-* Teams focused on React/TypeScript who want component-driven development and CDN-first performance.
-* Sites needing SEO or mixed static/dynamic rendering with simple serverless APIs.
-
-When to prefer Django on other projects:
-
-* For Outdoor Sports Club, the frontend framework is a locked decision: **Next.js** hosted via **AWS Amplify Gen 2** — Django is not an option for this implementation.
-* For other projects, Django may be preferred for a Python-first monolith with deep server-side business logic, complex DB transactions, or where the built-in Django Admin is required for model management.
-* For other projects, Django may also suit teams that prefer a single-language (Python) stack and where server-side rendering is the primary rendering model.
-
 ## 10. Architecture Decisions — External Review Findings
 
 An independent architectural review was conducted against the design documented here. The following records which recommendations were accepted, rejected, or deferred, and why.
@@ -873,39 +860,9 @@ This requires two new tables: `guests` (persistent identity + waiver metadata, S
 
 The annual visit limit (≤ 2 per guest-member combination per calendar year) is enforced as a hard block — guests that reach the limit are turned away. No RSO override applies to this rule.
 
-### Resolved: Member Portal read endpoints (ODQ #6)
-
-The Member Portal requires two authenticated GET endpoints. Both re-query Aurora on every request — no data is read from JWT claims.
-
-* `GET /v1/members/me` — returns `member_num`, `training_level`, `service_hours`, `dues_paid_until`, `waiver_signed_at`, `mobile_phone`.
-* `GET /v1/members/me/badge` — returns `member_num`; the frontend renders this as a QR code for kiosk scanning.
-
-### Resolved: Pairing Code generation (ODQ #7)
-
-The Admin Portal (Level 6 Webmaster) initiates device provisioning via `POST /v1/admin/devices/pairing-code`, which creates a `Pending-Pairing` device row and returns a 15-minute, single-use alphanumeric code. The Webmaster hands the code to the technician configuring the tablet; the tablet calls `POST /v1/devices/pair` to complete pairing and receive its Device Token. No unauthenticated endpoint exposes a code-request surface — all code generation is gated behind Level 6 auth. Pairing code and expiry are stored directly in the `devices` table (`pairing_code`, `pairing_code_expires_at`); both are cleared on successful pairing.
-
-### Resolved: Guest entry point (ODQ #8)
-
-Guests must be physically present with their sponsoring member and check in together at the same kiosk. There is no guest-only entry path. The guest add-on step (after the member's lane is assigned) is the exclusive entry point for guest registration and first-visit waiver capture. This fully covers the ODQ #8 scenario — no separate guest-initiated kiosk flow is needed.
-
-### Resolved: Real-time RSO check-in view (ODQ #9)
-
-Two surfaces serve different audiences:
-
-* **Kiosk lane dashboard** (existing) — shows occupancy for this kiosk's own range only. State is re-fetched after every check-in/check-out transaction and polled every 30 seconds between transactions. No push mechanism required.
-* **Admin Portal / mobile web cross-range view** (new) — supervisory read-only view of all ranges and their lane-level occupancy, served by `GET /v1/admin/ranges/occupancy` (Level 4+). Client polls at a suitable interval (e.g., 30 seconds). SSE/WebSockets are not needed at club-scale traffic.
-
-### Resolved: `training_level` promotion (ODQ #4)
-
-All training level changes are explicit **Administrator (Level 5+)** actions. There is no automated promotion rule. An Administrator reviews the member's record and calls `PATCH /v1/admin/members/{member_id}/level` with the new level; the change is recorded in `activity_logs` with `activity_type = 'Level-Change'`. This eliminates the need for an async promotion workflow, **Amazon EventBridge Scheduler**, or **Amazon SQS** for this purpose.
-
 ### Deferred: Service hours logging (ODQ #3)
 
 Range-qualified members (Level 3) earn their status by completing a minimum 6-hour volunteer service commitment — RSOs are themselves volunteers. RSO check-in and check-out events recorded in `activity_logs` provide an implicit audit trail of volunteer activity, but automated service-hour calculation and promotion workflows are not a primary function of this system version. The `service_hours` column is retained in `members` as a placeholder for a future integration. Level 1 → Level 2 promotion remains a manual Administrator action (see ODQ #4) until a dedicated service-hours tracking feature is scoped.
-
-### Accepted: Async background workflows are unplanned
-
-The review identified that non-user-facing operations (dues reminders, waiver expiry warnings, service-hours promotion) have no processing layer defined. Captured as **Open Design Question #15**.
 
 ## 11. Open Design Questions
 
@@ -914,19 +871,19 @@ The following are unresolved before implementation begins. Each requires a delib
 | # | Area | Question |
 | :--- | :--- | :--- |
 | 1 | **Waiver signing** | What API endpoint handles waiver capture and signature? What is the payload (PDF blob, digital signature string, member acknowledgement)? Which surface captures it — Kiosk only, or also Member Portal on personal devices? |
-| 2 | **Dues payment** | ✅ Resolved — two payment paths supported: (1) **Personal device** — Member Portal via **Stripe.js** (card element); `POST /v1/members/me/dues` creates a Payment Intent completed client-side. (2) **Kiosk** — **Stripe Terminal** NFC Tap to Pay; `POST /v1/kiosk/dues` processes payment on the tablet's NFC chip. Both paths set `members.dues_paid_until = December 31 of the current calendar year` (membership covers January 1 – December 31 regardless of payment date) and log a `Dues-Payment` activity. See Section 7.1 and Section 7.2. |
-| 3 | **Service hours logging** | ✅ Resolved — service hours are maintained manually by an Administrator via `PATCH /v1/admin/members/{member_id}/service-hours` (Level 5+). Hours may originate from any volunteer activity, including range shifts recorded in `activity_logs` and contributions outside the system. The Administrator is accountable for the value. When `service_hours >= 6`, the Administrator issues a separate `PATCH /v1/admin/members/{member_id}/level` to promote the member. No automated calculation, no async workflow, no EventBridge Scheduler required. `Service-Hours-Update` added to `activity_logs.activity_type`. See Section 7.3. |
-| 4 | **`training_level` promotion** | ✅ Resolved — manual Administrator action only. `PATCH /v1/admin/members/{member_id}/level` (Level 5+); change recorded in `activity_logs`. No automated rule, no async infra required. See Section 7.3 and Section 10. |
+| 2 | **Dues payment** | ✅ Resolved — two paths: personal-device via Stripe.js (`POST /v1/members/me/dues`); kiosk via Stripe Terminal (`POST /v1/kiosk/dues`). Both set `dues_paid_until` to Dec 31 of payment year; confirmation handled exclusively by the `payment_intent.succeeded` webhook on both paths. See Section 7.1 and Section 7.2. |
+| 3 | **Service hours logging** | ✅ Resolved — manually maintained by Administrator via `PATCH /v1/admin/members/{member_id}/service-hours` (Level 5+); promotion via a separate level-change call to keep a human in the loop. `Service-Hours-Update` in `activity_logs`. See Section 7.3. |
+| 4 | **`training_level` promotion** | ✅ Resolved — manual Administrator action only. `PATCH /v1/admin/members/{member_id}/level` (Level 5+); change recorded in `activity_logs`. No automated rule, no async infra required. See Section 7.3. |
 | 5 | **Range Open / Close** | ✅ Resolved — see Section 5.2 and Section 7.2. `ranges` table added; `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open` (Level 4+); soft close — RSO physically clears the range. Five ranges seeded: Rifle-Pistol, Skeet-Trap, Air-Rifle, Indoor-Archery, Outdoor-Archery (names provisional). |
 | 6 | **Member Portal read endpoints** | ✅ Resolved — `GET /v1/members/me` and `GET /v1/members/me/badge` added to Section 7.1. Both re-query Aurora on every request; no data read from JWT claims. |
 | 7 | **Pairing Code generation** | ✅ Resolved — Admin Portal (Level 6) calls `POST /v1/admin/devices/pairing-code` to generate a 15-minute single-use code stored in `devices.pairing_code`. Tablet calls `POST /v1/devices/pair` to complete pairing. No unauthenticated code-request surface. See Section 5.3 and Section 7.3. |
 | 8 | **Guest Level 0 flow entry point** | ✅ Resolved — guests must be physically present with their sponsoring member; no independent guest entry path exists. The guest add-on step (after member lane assignment) is the exclusive entry point for first-visit waiver capture and payment. See Section 4 and Section 7.2. |
-| 9 | **Real-time RSO check-in view** | ✅ Resolved — kiosk shows local range occupancy (re-fetched after each transaction + 30s poll). Admin Portal / mobile web adds a cross-range supervisory view via `GET /v1/admin/ranges/occupancy` (Level 4+), polled at 30s. No push mechanism required. See Section 7.3 and Section 10. |
+| 9 | **Real-time RSO check-in view** | ✅ Resolved — kiosk shows local range occupancy (re-fetched after each transaction + 30s poll). Admin Portal / mobile web adds a cross-range supervisory view via `GET /v1/admin/ranges/occupancy` (Level 4+), polled at 30s. No push mechanism required. See Section 7.3. |
 | 10 | **Offline operation architecture** | Member check-in and check-out must continue without internet connectivity. Proposed approach: the kiosk caches an encrypted local snapshot of active member QR tokens, `training_level`, and waiver/dues status at regular intervals while online. On connectivity loss, check-in validation runs against the local cache; events are queued and synced when connectivity restores. Guest payment (Stripe Terminal) requires connectivity and cannot be processed offline — policy decision needed: (a) refuse guest entry during outage, or (b) allow RSO to grant provisional entry at their discretion (no payment record until online). The caching strategy, encryption key management, and conflict-resolution on sync must be defined before kiosk implementation begins. |
-| 11 | **Violation override flow** | ✅ Resolved — RSO authenticates by tapping their own NFC badge on the kiosk. The kiosk reads `member_id`, queries `training_level` from Aurora, and proceeds only if Level ≥ 4. PIN was rejected: it is observable by the member standing at the kiosk, shareable between RSOs, and produces non-attributed audit log entries. NFC badge scan is unambiguous, non-shareable, and logs the specific RSO's `member_id` as `actor_member_id` for every override. The same mechanism gates RSO Dashboard access from the Idle screen. Two resolution paths: **(a) Approve override** — entry allowed, exception recorded in `activity_logs`; **(b) Deny entry** — check-in cancelled, lane remains `Available`. |
+| 11 | **Violation override flow** | ✅ Resolved — RSO taps own NFC badge (Level ≥ 4); logs `actor_member_id`. PIN rejected: observable, shareable, non-attributed. Same mechanism gates RSO Dashboard access. Approve: exception recorded in `activity_logs`; Deny: lane remains `Available`. See Section 4. |
 | 12 | **Lane configuration management** | ✅ Resolved — see Section 5.4 and Section 7.2. Initial counts seeded in bootstrap migration (Rifle-Pistol: 17 lanes); future changes via `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration. |
-| 13 | **Kiosk handoff model** | ✅ Resolved — **RSO-mediated**. Tablets are standard RSO range equipment carried by the RSO on duty. The RSO presents the tablet to arriving members, retains custody, and is physically present at every check-in. The RSO taps their own NFC badge to access the RSO Dashboard or resolve a violation alert — no secondary notification channel required. Fixed-mount self-serve was rejected: it would require a separate RSO notification mechanism for violation alerts and introduces custody ambiguity. |
+| 13 | **Kiosk handoff model** | ✅ Resolved — **RSO-mediated**: RSO carries the tablet, presents it to arriving members, taps own NFC badge for Dashboard access and violation resolution. Fixed-mount self-serve rejected — requires a separate RSO notification mechanism for alerts and introduces custody ambiguity. See Section 4. |
 | 14 | **Observability strategy** | ✅ Resolved — see Section 10. Structured JSON logging to **Amazon CloudWatch Logs**; X-Ray deferred; three alarms to admin **Amazon SNS** topic; 7-year log retention. |
-| 15 | **Async background workflow scope** | ✅ Resolved — scope is narrowed to a single workflow: **daily audit log export**. Dues renewal reminders, waiver expiry warnings, and service-hours evaluation are all out of scope (see ODQ #3). Implementation: **Amazon EventBridge Scheduler** fires once per day and publishes a message to an **Amazon SQS** queue; that queue triggers the Lambda (the DLQ is configured on the SQS queue). The Lambda queries `activity_logs` for the prior day's records and writes a newline-delimited JSON file to **Amazon S3** (`audit-logs/{YYYY}/{MM}/{DD}.ndjson`). If the Lambda fails, SQS retries delivery up to the configured maximum before routing the message to the DLQ for inspection — providing at-least-once durability. S3 object retention: **365 days** (S3 Lifecycle rule — objects expire automatically after one year). Note: the 365-day limit applies to the derived export files only; the source data (`activity_logs` rows in Aurora) is retained as long as the database exists, and CloudWatch Logs retain Lambda execution logs for **7 years** per the observability policy (Section 10). The S3 export is a convenience snapshot for operational review and is not the authoritative record. Export is append-only and idempotent on date partition — re-running for the same date overwrites the same S3 key. |
+| 15 | **Async background workflow scope** | ✅ Resolved — daily audit log export only. EventBridge Scheduler → SQS → Lambda → S3 (`audit-logs/{YYYY}/{MM}/{DD}.ndjson`); DLQ on the SQS queue. S3 retention 365 days (export files only; Aurora rows and CloudWatch Logs retained longer per observability policy). Idempotent on date partition. |
 | 16 | **Guest lookup key** | ✅ Resolved — `guests` uses `(first_name, last_name, phone, email)` as the composite lookup key and unique constraint (Section 5.8). Email is collected alongside name and phone during the kiosk guest add-on step. |
 | 17 | **Acceptable RPO and restore path policy** | The club has not yet defined a formal Recovery Point Objective (RPO) — how much data loss is tolerable in the worst-case failure scenario. The answer determines which restore path the Webmaster must use and whether the current backup strategy is sufficient. Candidate targets: (a) **~5 minutes** — Aurora PITR is the sole restore path; the daily AWS Backup snapshot is retained only for compliance/archival purposes and may never be used for a primary restore. (b) **~24 hours** — the daily snapshot is acceptable as the primary restore path; PITR is a nice-to-have. (c) **Zero tolerance** — requires Aurora Global Database active-active (multi-region writer) and synchronous replication, which is not currently provisioned. The RPO target also affects how the kiosk offline event queue is scoped: if RPO is ~5 minutes, queued offline events that cannot be flushed within that window may need to be escalated differently than events queued during a routine brief outage. Decision needed before production launch. |
