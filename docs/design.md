@@ -552,102 +552,179 @@ Every layer of the stack is designed so that a transient failure — power inter
 
 The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrated via **AWS Amplify**.
 
-### **7.1 Member Portal Operations**
+### 7.1 Member Portal Operations
 
-* **`GET /v1/members/me`** (**Authenticated member**, Level 1–6)
-  * **Logic:** Returns the authenticated member's own profile. `member_id` resolved from Cognito JWT `sub`; all fields queried from Aurora — never from the JWT claims. Also reads `club_settings.annual_dues_cents` so the Member Portal can display the current dues amount before the member initiates payment.
-  * **Returns:** `200 OK` with `{ member_num, training_level, service_hours, dues_paid_until, waiver_signed_at, mobile_phone, annual_dues_cents }`.
+| Method | Path | Auth |
+| :----- | :--- | :--- |
+| `GET` | `/v1/members/me` | Authenticated member, Level 1–6 |
+| `GET` | `/v1/members/me/badge` | Authenticated member, Level 1–6 |
+| `PATCH` | `/v1/members/me` | Authenticated member, Level 1–6 |
+| `POST` | `/v1/members/me/dues` | Authenticated member, Level 1–6 |
 
-* **`GET /v1/members/me/badge`** (**Authenticated member**, Level 1–6)
-  * **Logic:** Returns the member's `member_num` for QR code display in the Member Portal. The frontend renders the `member_num` as a QR code; the kiosk scans and resolves it via `POST /v1/kiosk/check-in`.
-  * **Returns:** `200 OK` with `{ member_num }`.
+#### GET /v1/members/me
 
-* **`PATCH /v1/members/me`** (**Authenticated member**, Level 1–6)
-  * **Logic:** Updates the authenticated member's own editable profile fields. Accepted fields: `home_phone`, `mobile_phone`. `mobile_phone` is validated and normalised to E.164 format before storage — invalid numbers are rejected with `400 Bad Request`. Fields not present in the request body are left unchanged. `member_num`, `email`, `training_level`, `service_hours`, `dues_paid_until`, and `waiver_signed_at` are not updatable through this endpoint.
-  * **Returns:** `200 OK` with the updated `{ home_phone, mobile_phone }`, `400 Bad Request` (invalid phone format), or `403 Forbidden`.
+Returns the authenticated member's own profile. `member_id` resolved from Cognito JWT `sub`; all fields queried from Aurora — never from JWT claims. Also reads `club_settings.annual_dues_cents` so the Member Portal can display the current dues amount before the member initiates payment.
 
-* **`POST /v1/members/me/dues`** (**Authenticated member**, Level 1–6)
-  * **Logic:** Personal-device path. Initiates an annual dues payment via **Stripe.js** (card element — no NFC hardware required). The Lambda reads `annual_dues_cents` from `club_settings`, creates a **Stripe Payment Intent** for that amount, and returns the `client_secret` to the frontend. The Member Portal completes the card transaction client-side using the Stripe.js SDK. On payment confirmation, a Stripe webhook (`payment_intent.succeeded`) triggers a Lambda that sets `members.dues_paid_until = December 31 of the current calendar year` and appends an `activity_logs` entry with `activity_type = 'Dues-Payment'` (`device_id = NULL`). The webhook handler is idempotent — duplicate events for the same Payment Intent ID are ignored.
-  * **Returns:** `200 OK` with `{ client_secret, annual_dues_cents }`, or `402 Payment Required` if Stripe rejects the request.
+**Returns:** `200 OK` with `{ member_num, training_level, service_hours, dues_paid_until, waiver_signed_at, mobile_phone, annual_dues_cents }`.
 
-### **7.2 Kiosk Operations**
+#### GET /v1/members/me/badge
 
-* **`GET /v1/kiosk/range/lanes`** (**Device Token** authenticated)
-  * **Logic:** Returns current lane occupancy for the kiosk's own range (resolved from the Device Token's `range_id`). Used by the RSO Dashboard for the initial load, post-transaction re-fetch, and the 30-second background poll between transactions.
-  * **Returns:** `200 OK` with `{ range_id, name, is_open, lanes: [{ lane_id, lane_number, status, current_member_id, member_num, guest_count, checked_in_at }] }`. `member_num` and `checked_in_at` are `null` when `status` is `Available`.
+Returns the member's `member_num` for QR code display in the Member Portal. The frontend renders the `member_num` as a QR code; the kiosk scans and resolves it via `POST /v1/kiosk/check-in`.
 
-* **`POST /v1/kiosk/check-in`**
-  * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry is transitioned to `Checked-In` on successful lane assignment). If no lanes have `status = 'Available'` (all are `Occupied` or `Closed`), a `wait_list` row is inserted (storing `guest_count` for later lane scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If an `Available` lane exists, selects the one that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
-  * **Returns:** `200 OK` with `{ lane_number }` (lane assigned), `202 Accepted` with `{ wait_position }` (range full — added to wait list), or `403 Forbidden` (e.g., "Level 3 Required", "Guests not permitted at this level").
+**Returns:** `200 OK` with `{ member_num }`.
 
-* **`POST /v1/kiosk/check-out`**
-  * **Logic:** Triggered by a QR scan at range exit. Validates an active open `Range-Checkin` exists for the member on that device; clears the lane; writes a `Range-Checkout` record to `activity_logs`. After the lane is freed, advances the wait list: queries the next `Waiting` entry for this range ordered by `position`, sets its `status = Called`, records `called_at`, sets `expires_at = called_at + 5 minutes`, and (if the member has a `mobile_phone`) publishes an **Amazon SNS** SMS notification. The RSO Dashboard's 30-second poll surfaces the `Called` entry automatically.
-  * **Returns:** `200 OK` (Check-Out Logged) or `404 Not Found` (no open check-in on record).
+#### PATCH /v1/members/me
 
-* **`DELETE /v1/kiosk/wait-list/{entry_id}`** (**Device Token** authenticated)
-  * **Logic:** Cancels the calling member's active `wait_list` entry for this range. Sets `status = Cancelled`; recalculates `position` for all remaining `Waiting` entries in the range. The device's `range_id` must match the entry's `range_id` — a kiosk cannot cancel entries for a different range.
-  * **Returns:** `200 OK` or `404 Not Found`.
+Updates the authenticated member's own editable profile fields. Accepted fields: `home_phone`, `mobile_phone`. `mobile_phone` is validated and normalised to E.164 format before storage — invalid numbers are rejected with `400 Bad Request`. Fields not present in the request body are left unchanged; `member_num`, `email`, `training_level`, `service_hours`, `dues_paid_until`, and `waiver_signed_at` are not updatable through this endpoint.
 
-* **`POST /v1/kiosk/guest-payment`**
-  * **Logic:** Handles the full guest add-on flow for a single guest: (1) look up guest by `first_name`, `last_name`, and `phone` in `guests` — create a new record if not found; (2) check `guests.waiver_signed_at` — prompt waiver capture at the kiosk if no record exists or the waiver has expired; (3) query `guest_visits` for this guest-member combination in the current calendar year — if count ≥ 2, return `403 Forbidden` (hard block; no RSO override applies); (4) process the guest fee via **Stripe Terminal SDK** — NFC Tap to Pay (primary) or paired card reader (fallback); (5) insert a `guest_visits` row; (6) create an `activity_logs` entry with `guest_id` populated.
-  * **Returns:** `200 OK`, `403 Forbidden` (annual limit reached), or `402 Payment Required` (Stripe failure).
+**Returns:** `200 OK` with `{ home_phone, mobile_phone }`, `400 Bad Request` (invalid phone format), or `403 Forbidden`.
 
-* **`POST /v1/kiosk/consumable-purchase`**
-  * **Logic:** Records one or more line items (item name, quantity, unit price) to `consumable_purchases`; processes payment via **Stripe Terminal SDK** — NFC Tap to Pay (primary) or paired card reader (fallback). `member_id` is optional — omit for anonymous guest purchases.
-  * **Returns:** `200 OK` (Purchase Recorded) or `402 Payment Required` (Stripe payment failure).
+#### POST /v1/members/me/dues
 
-* **`POST /v1/kiosk/dues`** (**Device Token** authenticated)
-  * **Logic:** Kiosk path for annual dues payment via **Stripe Terminal** — NFC Tap to Pay (primary) or paired card reader (fallback). The request body carries the `member_num` (resolved from the scanned QR badge). The Lambda: (1) resolves the member from `member_num`; (2) reads `annual_dues_cents` from `club_settings`; (3) creates a **Stripe Terminal** PaymentIntent and processes it through the Terminal SDK (NFC primary, card reader fallback). Dues confirmation — setting `members.dues_paid_until = December 31 of the current calendar year` and appending a `Dues-Payment` entry to `activity_logs` with `device_id` set to the kiosk's device ID — is handled exclusively by the `payment_intent.succeeded` webhook, identical to the personal-device path. The webhook is idempotent on Payment Intent ID.
-  * **Returns:** `200 OK` with `{ dues_paid_until }`, `402 Payment Required` (Stripe failure), or `404 Not Found` (unrecognised `member_num`).
+Personal-device path for annual dues payment via **Stripe.js** (card element — no NFC hardware required). The Lambda reads `annual_dues_cents` from `club_settings`, creates a **Stripe Payment Intent**, and returns the `client_secret` to the frontend, which completes the card transaction client-side. On payment confirmation, the `payment_intent.succeeded` webhook sets `members.dues_paid_until = December 31 of the current calendar year` and appends a `Dues-Payment` entry to `activity_logs` (`device_id = NULL`). The webhook is idempotent — duplicate events for the same Payment Intent ID are ignored.
 
-### **7.3 Administrative & Recovery**
+**Returns:** `200 OK` with `{ client_secret, annual_dues_cents }`, or `402 Payment Required` if Stripe rejects the request.
 
-* **`GET /v1/admin/ranges/occupancy`** (**Level 4+** RSO)
-  * **Logic:** Returns current lane occupancy for all ranges. Each range entry includes `range_id`, `name`, `is_open`, and a list of lanes with their `status`, `lane_number`, `current_member_id` (if occupied), and `guest_count`. Intended for the supervisory cross-range view in the **Admin Portal** and mobile web. Polled by the client at a suitable interval (e.g., 30 seconds). No push mechanism required.
-  * **Returns:** `200 OK` with an array of range occupancy objects.
+### 7.2 Kiosk Operations
 
-* **`PATCH /v1/admin/members/reset-auth`** (**Level 6** **Webmaster** Only)
-  * **Logic:** Clears the `social_provider_id` in the **Cognito User Pool** for the specific `member_id`.
+| Method | Path | Auth |
+| :----- | :--- | :--- |
+| `GET` | `/v1/kiosk/range/lanes` | Device Token |
+| `POST` | `/v1/kiosk/check-in` | Device Token |
+| `POST` | `/v1/kiosk/check-out` | Device Token |
+| `DELETE` | `/v1/kiosk/wait-list/{entry_id}` | Device Token |
+| `POST` | `/v1/kiosk/guest-payment` | Device Token |
+| `POST` | `/v1/kiosk/consumable-purchase` | Device Token |
+| `POST` | `/v1/kiosk/dues` | Device Token |
 
-* **`POST /v1/admin/devices/pairing-code`** (**Level 6** **Webmaster** Only)
-  * **Logic:** Creates a new device row in `devices` (status `Pending-Pairing`) with a cryptographically random alphanumeric pairing code and a 15-minute expiry. The `location_tag` and `range_id` are set at this point. The Admin Portal displays the generated code for the Webmaster to hand to the technician configuring the tablet. A device row with an unexpired code for the same `location_tag` is rejected — preventing duplicate device creation.
-  * **Returns:** `201 Created` with `{ device_id, pairing_code, expires_at }`.
+#### GET /v1/kiosk/range/lanes
 
-* **`POST /v1/devices/pair`** (Unauthenticated — identified by Pairing Code)
-  * **Logic:** Called by the tablet during initial setup. Validates the supplied `pairing_code` against `devices` — rejects if not found, already used, or expired. On success: generates a `device_token`, stores its salted hash in `devices.device_token`, sets `status = Active`, and clears `pairing_code` and `pairing_code_expires_at`. Returns the raw token to the tablet, which stores it in secure storage. This is the only time the raw token is transmitted.
-  * **Returns:** `200 OK` with `{ device_token }` or `400 Bad Request` (invalid/expired code).
+Returns current lane occupancy for the kiosk's own range (resolved from the Device Token's `range_id`). Used by the RSO Dashboard for the initial load, post-transaction re-fetch, and the 30-second background poll between transactions.
 
-* **`PATCH /v1/admin/ranges/{range_id}/status`** (**Level 4+** RSO)
-  * **Logic:** Sets `ranges.is_open` to `true` or `false`. Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard. Closing a range is always a soft operation — lane occupancy is preserved exactly as it is at the moment of closure regardless of the reason. Five closure scenarios are recognised: **daily-close** (end of operating day), **weather** (conditions unsafe or unsuitable), **partial** (a subset of lanes taken out of service — note: partial closure is handled at the lane level via `PATCH /v1/admin/lanes/{lane_id}` setting `status = 'Closed'`; `is_open` is not set to `false` for a partial closure while other lanes remain available), **incident** (safety event), and **other** (RSO discretion). The RSO Dashboard remains functional and continues displaying live lane occupancy while `is_open = false`, allowing the RSO to retain full visibility of who is on the range and clear lanes explicitly as each occupant vacates.
-  * **Returns:** `200 OK` or `403 Forbidden`.
+**Returns:** `200 OK` with `{ range_id, name, is_open, lanes: [{ lane_id, lane_number, status, current_member_id, member_num, guest_count, checked_in_at }] }`. `member_num` and `checked_in_at` are `null` when `status` is `Available`.
 
-* **`POST /v1/admin/lanes/{lane_id}/checkout`** (**Level 4+** RSO)
-  * **Logic:** Administrative force-checkout. Clears the specified occupied lane — sets `status = 'Available'`, clears `current_member_id`, `guest_count`, and `checked_in_at` — and writes a `Range-Checkout` entry to `activity_logs` with `actor_member_id` set to the RSO's `members.id` (resolved from JWT `sub`) for a full audit trail. After clearing the lane, advances the wait list identically to a standard member-initiated check-out: promotes the next `Waiting` entry to `Called`, records `called_at`, sets `expires_at`, and sends an **Amazon SNS** SMS if the member has a `mobile_phone` on record. Returns `409 Conflict` if the lane is not currently `Occupied` — only occupied lanes can be force-checked out; `Available` and `Closed` lanes are rejected.
-  * **Returns:** `200 OK`, `403 Forbidden`, `404 Not Found`, or `409 Conflict` (lane not occupied).
+#### POST /v1/kiosk/check-in
 
-* **`POST /v1/admin/lanes`** (**Level 4+** RSO)
-  * **Logic:** Creates a new lane for a range. `range_id` and `lane_number` required.
-  * **Returns:** `201 Created` or `409 Conflict` (duplicate lane number).
+Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry transitions to `Checked-In` on successful lane assignment). If no `Available` lane exists, a `wait_list` row is inserted (storing `guest_count` for later scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If an `Available` lane exists, selects the one that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
 
-* **`PATCH /v1/admin/lanes/{lane_id}`** (**Level 4+** RSO)
-  * **Logic:** Updates a lane's configuration or operational status. Accepts `lane_number` (renumbering) and/or `status` (`Available` or `Closed`). Setting `status = 'Closed'` takes a lane out of service — it will be excluded from all check-in assignment until re-opened (`status = 'Available'`). A lane with `status = 'Occupied'` cannot be closed directly; the occupant must check out first (`409 Conflict` returned). Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard.
-  * **Returns:** `200 OK`, `404 Not Found`, or `409 Conflict` (attempted disable of an occupied lane).
+**Returns:** `200 OK` with `{ lane_number }` (lane assigned), `202 Accepted` with `{ wait_position }` (range full — added to wait list), or `403 Forbidden` (e.g., "Level 3 Required", "Guests not permitted at this level").
 
-* **`PATCH /v1/admin/members/{member_id}/level`** (**Level 5+** Administrator)
-  * **Logic:** Updates `members.training_level` for the specified member. Requires `training_level` (0–6) in the request body. Re-queries the **target member's** current `training_level` from Aurora before applying the change and writes an `activity_logs` entry with `activity_type = 'Level-Change'`, `member_id` = target member, `actor_member_id` = the Administrator's `members.id` (resolved by looking up JWT `sub` in `members`). No automated promotion logic — all level changes are explicit Administrator actions.
-  * **Returns:** `200 OK`, `400 Bad Request` (missing or out-of-range `training_level`), `403 Forbidden`, or `404 Not Found`.
+#### POST /v1/kiosk/check-out
 
-* **`PATCH /v1/admin/members/{member_id}/service-hours`** (**Level 5+** Administrator)
-  * **Logic:** Sets `members.service_hours` for the specified member to the value supplied in the request body. Service hours are maintained manually by an Administrator — the system does not calculate them automatically. Hours may originate from any tracked volunteer activity (range shifts visible in `activity_logs`, event work, maintenance, or other contributions recorded outside the system). The Administrator is accountable for the accuracy of the value. When the threshold is met (`service_hours >= 6`), the Administrator issues a separate `PATCH /v1/admin/members/{member_id}/level` call to promote the member — the two steps are intentionally distinct to keep a human in the loop. Writes an `activity_logs` entry with `activity_type = 'Service-Hours-Update'`, `member_id` = target member, `actor_member_id` = the Administrator's `members.id`.
-  * **Returns:** `200 OK` with `{ service_hours }`, `400 Bad Request` (negative value), `403 Forbidden`, or `404 Not Found`.
+Triggered by a QR scan at range exit. Validates an active open `Range-Checkin` exists for the member on that device; clears the lane; writes a `Range-Checkout` record to `activity_logs`. After the lane is freed, advances the wait list: queries the next `Waiting` entry for this range ordered by `position`, sets its `status = Called`, records `called_at`, sets `expires_at = called_at + 5 minutes`, and (if the member has a `mobile_phone`) publishes an **Amazon SNS** SMS notification. The RSO Dashboard's 30-second poll surfaces the `Called` entry automatically.
 
-* **`GET /v1/admin/settings`** (**Level 5+** Administrator)
-  * **Logic:** Returns the current `club_settings` row.
-  * **Returns:** `200 OK` with `{ annual_dues_cents, updated_at, updated_by_member_id }`.
+**Returns:** `200 OK` (Check-Out Logged) or `404 Not Found` (no open check-in on record).
 
-* **`PATCH /v1/admin/settings`** (**Level 5+** Administrator)
-  * **Logic:** Updates one or more fields in the `club_settings` row. Accepted fields: `annual_dues_cents`. Sets `updated_at = NOW()` and `updated_by_member_id` to the Administrator's `members.id` (resolved from JWT `sub`). Does not affect in-flight Stripe Payment Intents — any Payment Intent already created retains the amount from when it was initiated.
-  * **Returns:** `200 OK` with the updated `{ annual_dues_cents, updated_at }`, or `400 Bad Request` (negative or zero amount).
+#### DELETE /v1/kiosk/wait-list/{entry_id}
+
+Cancels the calling member's active `wait_list` entry for this range. Sets `status = Cancelled`; recalculates `position` for all remaining `Waiting` entries in the range. The device's `range_id` must match the entry's `range_id` — a kiosk cannot cancel entries for a different range.
+
+**Returns:** `200 OK` or `404 Not Found`.
+
+#### POST /v1/kiosk/guest-payment
+
+Handles the full guest add-on flow for a single guest: (1) look up guest by `first_name`, `last_name`, and `phone` in `guests` — create a new record if not found; (2) check `guests.waiver_signed_at` — prompt waiver capture at the kiosk if no record exists or the waiver has expired; (3) query `guest_visits` for this guest-member combination in the current calendar year — if count ≥ 2, return `403 Forbidden` (hard block; no RSO override applies); (4) process the guest fee via **Stripe Terminal SDK** — NFC Tap to Pay (primary) or paired card reader (fallback); (5) insert a `guest_visits` row; (6) create an `activity_logs` entry with `guest_id` populated.
+
+**Returns:** `200 OK`, `403 Forbidden` (annual limit reached), or `402 Payment Required` (Stripe failure).
+
+#### POST /v1/kiosk/consumable-purchase
+
+Records one or more line items (item name, quantity, unit price) to `consumable_purchases` and processes payment via **Stripe Terminal SDK** — NFC Tap to Pay (primary) or paired card reader (fallback). `member_id` is optional — omit for anonymous guest purchases.
+
+**Returns:** `200 OK` (Purchase Recorded) or `402 Payment Required` (Stripe payment failure).
+
+#### POST /v1/kiosk/dues
+
+Kiosk path for annual dues payment via **Stripe Terminal** — NFC Tap to Pay (primary) or paired card reader (fallback). The request body carries the `member_num` (resolved from the scanned QR badge). The Lambda resolves the member from `member_num`, reads `annual_dues_cents` from `club_settings`, and creates and processes a **Stripe Terminal** PaymentIntent through the Terminal SDK. Dues confirmation — setting `members.dues_paid_until = December 31 of the current calendar year` and appending a `Dues-Payment` entry to `activity_logs` with the kiosk's `device_id` — is handled exclusively by the `payment_intent.succeeded` webhook, identical to the personal-device path. The webhook is idempotent on Payment Intent ID.
+
+**Returns:** `200 OK` with `{ dues_paid_until }`, `402 Payment Required` (Stripe failure), or `404 Not Found` (unrecognised `member_num`).
+
+### 7.3 Administrative & Recovery
+
+| Method | Path | Auth |
+| :----- | :--- | :--- |
+| `GET` | `/v1/admin/ranges/occupancy` | Level 4+ RSO |
+| `PATCH` | `/v1/admin/members/reset-auth` | Level 6 Webmaster |
+| `POST` | `/v1/admin/devices/pairing-code` | Level 6 Webmaster |
+| `POST` | `/v1/devices/pair` | Unauthenticated (Pairing Code) |
+| `PATCH` | `/v1/admin/ranges/{range_id}/status` | Level 4+ RSO |
+| `POST` | `/v1/admin/lanes/{lane_id}/checkout` | Level 4+ RSO |
+| `POST` | `/v1/admin/lanes` | Level 4+ RSO |
+| `PATCH` | `/v1/admin/lanes/{lane_id}` | Level 4+ RSO |
+| `PATCH` | `/v1/admin/members/{member_id}/level` | Level 5+ Administrator |
+| `PATCH` | `/v1/admin/members/{member_id}/service-hours` | Level 5+ Administrator |
+| `GET` | `/v1/admin/settings` | Level 5+ Administrator |
+| `PATCH` | `/v1/admin/settings` | Level 5+ Administrator |
+
+#### GET /v1/admin/ranges/occupancy
+
+Returns current lane occupancy for all ranges. Each entry includes `range_id`, `name`, `is_open`, and a list of lanes with their `status`, `lane_number`, `current_member_id` (if occupied), and `guest_count`. Intended for the supervisory cross-range view in the **Admin Portal** and mobile web; polled by the client at a suitable interval (e.g., 30 seconds). No push mechanism required.
+
+**Returns:** `200 OK` with an array of range occupancy objects.
+
+#### PATCH /v1/admin/members/reset-auth
+
+Clears the `social_provider_id` in the **Cognito User Pool** for the specified `member_id`.
+
+#### POST /v1/admin/devices/pairing-code
+
+Creates a new device row in `devices` (status `Pending-Pairing`) with a cryptographically random alphanumeric pairing code and a 15-minute expiry. The `location_tag` and `range_id` are set at this point. The Admin Portal displays the generated code for the Webmaster to hand to the technician configuring the tablet. A device row with an unexpired code for the same `location_tag` is rejected to prevent duplicate device creation.
+
+**Returns:** `201 Created` with `{ device_id, pairing_code, expires_at }`.
+
+#### POST /v1/devices/pair
+
+Called by the tablet during initial setup. Validates the supplied `pairing_code` against `devices` — rejects if not found, already used, or expired. On success: generates a `device_token`, stores its salted hash in `devices.device_token`, sets `status = Active`, and clears `pairing_code` and `pairing_code_expires_at`. Returns the raw token to the tablet for storage in secure storage. This is the only time the raw token is transmitted.
+
+**Returns:** `200 OK` with `{ device_token }` or `400 Bad Request` (invalid/expired code).
+
+#### PATCH /v1/admin/ranges/{range_id}/status
+
+Sets `ranges.is_open` to `true` or `false`. Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard. Closing a range is always a soft operation — lane occupancy is preserved exactly as it is at the moment of closure. Five closure scenarios are recognised: **daily-close** (end of operating day), **weather** (conditions unsafe or unsuitable), **partial** (handled at the lane level via `PATCH /v1/admin/lanes/{lane_id}` — `is_open` is not set to `false` while other lanes remain available), **incident** (safety event), and **other** (RSO discretion). The RSO Dashboard remains functional and continues displaying live lane occupancy while `is_open = false`.
+
+**Returns:** `200 OK` or `403 Forbidden`.
+
+#### POST /v1/admin/lanes/{lane_id}/checkout
+
+Administrative force-checkout. Clears the specified occupied lane — sets `status = 'Available'`, clears `current_member_id`, `guest_count`, and `checked_in_at` — and writes a `Range-Checkout` entry to `activity_logs` with `actor_member_id` set to the RSO's `members.id` (resolved from JWT `sub`). After clearing the lane, advances the wait list identically to a standard check-out: promotes the next `Waiting` entry to `Called`, records `called_at`, sets `expires_at`, and sends an **Amazon SNS** SMS if the member has a `mobile_phone`. Returns `409 Conflict` if the lane is not `Occupied` — `Available` and `Closed` lanes are rejected.
+
+**Returns:** `200 OK`, `403 Forbidden`, `404 Not Found`, or `409 Conflict` (lane not occupied).
+
+#### POST /v1/admin/lanes
+
+Creates a new lane for a range. `range_id` and `lane_number` required.
+
+**Returns:** `201 Created` or `409 Conflict` (duplicate lane number).
+
+#### PATCH /v1/admin/lanes/{lane_id}
+
+Updates a lane's configuration or operational status. Accepts `lane_number` (renumbering) and/or `status` (`Available` or `Closed`). Setting `status = 'Closed'` takes a lane out of service — excluded from all check-in assignment until re-opened. A lane with `status = 'Occupied'` cannot be closed — the occupant must check out first. Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard.
+
+**Returns:** `200 OK`, `404 Not Found`, or `409 Conflict` (attempted close of an occupied lane).
+
+#### PATCH /v1/admin/members/{member_id}/level
+
+Updates `members.training_level` for the specified member. Requires `training_level` (0–6) in the request body. Re-queries the target member's current `training_level` from Aurora before applying the change and writes a `Level-Change` entry to `activity_logs` with `member_id` = target member and `actor_member_id` = the Administrator's `members.id` (resolved from JWT `sub`). No automated promotion logic — all level changes are explicit Administrator actions.
+
+**Returns:** `200 OK`, `400 Bad Request` (missing or out-of-range `training_level`), `403 Forbidden`, or `404 Not Found`.
+
+#### PATCH /v1/admin/members/{member_id}/service-hours
+
+Sets `members.service_hours` to the supplied value. Hours are maintained manually — the system does not calculate them automatically. They may originate from any volunteer activity (range shifts in `activity_logs`, event work, or contributions outside the system). When the threshold is met (`service_hours >= 6`), the Administrator issues a separate level-change call to promote the member — the two steps are intentionally distinct to keep a human in the loop. Writes a `Service-Hours-Update` entry to `activity_logs` with `actor_member_id` = the Administrator's `members.id`.
+
+**Returns:** `200 OK` with `{ service_hours }`, `400 Bad Request` (negative value), `403 Forbidden`, or `404 Not Found`.
+
+#### GET /v1/admin/settings
+
+Returns the current `club_settings` row.
+
+**Returns:** `200 OK` with `{ annual_dues_cents, updated_at, updated_by_member_id }`.
+
+#### PATCH /v1/admin/settings
+
+Updates one or more fields in the `club_settings` row. Accepted fields: `annual_dues_cents`. Sets `updated_at = NOW()` and `updated_by_member_id` to the Administrator's `members.id` (resolved from JWT `sub`). Does not affect in-flight Stripe Payment Intents — any Payment Intent already created retains the amount from when it was initiated.
+
+**Returns:** `200 OK` with `{ annual_dues_cents, updated_at }`, or `400 Bad Request` (negative or zero amount).
 
 ## 8. High Availability, Multi-Region & Disaster Recovery
 
