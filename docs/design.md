@@ -73,7 +73,7 @@ sequenceDiagram
 
 ## 3. Member Identity & Recovery Protocol
 
-* **Personal Devices:** Members use **Social Login (Google/Facebook)** via **AWS Cognito** on their own phones/computers to access the portal and pay annual dues.
+* **Personal Devices:** Members use **Social Login (Google/Facebook)** via **AWS Cognito** on their own phones/computers to access the **Member Portal**. The portal is the primary self-service surface for members: it displays their profile and dues standing, allows them to update contact details and phone number, enables online dues payment via **Stripe.js** (card element — no NFC hardware required), and displays their QR badge for range check-in. The portal is designed to be extended with additional member-facing features over time.
 * **Account Recovery (The "Un-Link" Protocol):** If a member loses access to their social account, the **Webmaster (Level 6)** executes the following:
     1. **Identity Verification:** Member presents their physical badge/ID to an **Admin** or **Webmaster**.
     2. **Token Reset:** The **Webmaster** clears the `social_provider_id` in the **Cognito User Pool** for that record.
@@ -280,8 +280,15 @@ erDiagram
         TIMESTAMP called_at
         TIMESTAMP expires_at
     }
+    club_settings {
+        BOOLEAN singleton PK
+        INTEGER annual_dues_cents
+        TIMESTAMP updated_at
+        UUID updated_by_member_id FK
+    }
 
     members }o--|| training_level_policies : "level lookup"
+    members ||--o{ club_settings : "last updated by"
     ranges ||--o{ devices : "assigned to"
     ranges ||--o{ lanes : "contains"
     members ||--o{ lanes : "occupies"
@@ -311,7 +318,7 @@ erDiagram
 | `social_provider_id` | TEXT (Nullable) | Linked Google/Facebook ID (Cleared during **Recovery**). |
 | `service_hours` | DECIMAL(5,2) | Running total for **Level 1** promotion tracking. |
 | `waiver_signed_at` | TIMESTAMP | Used to calculate the 1-year automated expiration. |
-| `dues_paid_until` | DATE | Date-based flag for membership standing. |
+| `dues_paid_until` | DATE | Membership standing flag. Always set to December 31 of the year in which dues are paid — membership covers the full calendar year (January 1 – December 31) regardless of payment date. |
 | `home_phone` | TEXT (Nullable) | Home telephone number. |
 | `mobile_phone` | TEXT (Nullable) | Mobile number in E.164 format (e.g., `+15551234567`); validated/normalized for **Amazon SNS** delivery of SMS range alerts. |
 
@@ -378,12 +385,12 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | Column | Type | Description |
 | :--- | :--- | :--- |
 | `id` | BIGINT (PK) | High-volume log ID. |
-| `member_id` | UUID (FK) | The member performing the action for kiosk-originated events (`Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`). For `Level-Change` events: the **target member** whose level was changed. |
-| `actor_member_id` | UUID (FK, Nullable) | The Administrator who performed the action. Populated for `Level-Change` events (resolved from JWT `sub` → `members.id` at write time); `NULL` for all kiosk-originated event types where `member_id` is the actor. |
-| `device_id` | UUID (FK, Nullable) | Reference to the `devices` table. `NULL` for non-kiosk events (e.g., `Level-Change` actions performed from the Admin Portal). |
-| `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`, `Level-Change` |
-| `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; `NULL` for `Waiver-Signed` and `Level-Change` events which have no lane context. |
-| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` events only and linked to the lane/visit via `lane_id`. |
+| `member_id` | UUID (FK) | The member performing the action for kiosk-originated events (`Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`). For `Level-Change` events: the **target member** whose level was changed. For portal-originated events (`Dues-Payment` via personal device): the paying member. |
+| `actor_member_id` | UUID (FK, Nullable) | The Administrator who performed the action. Populated for `Level-Change` events (resolved from JWT `sub` → `members.id` at write time); `NULL` for all kiosk-originated event types and member portal event types where `member_id` is the actor. |
+| `device_id` | UUID (FK, Nullable) | Reference to the `devices` table. `NULL` for non-kiosk events (`Level-Change` performed from the Admin Portal; `Dues-Payment` completed via the Member Portal personal-device path). |
+| `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`, `Level-Change`, `Dues-Payment` |
+| `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; `NULL` for `Waiver-Signed`, `Level-Change`, and `Dues-Payment` events which have no lane context. |
+| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` and `Dues-Payment` events. For `Guest-Payment`, linked to the lane/visit via `lane_id`. For `Dues-Payment`, `lane_id` is `NULL` — the Payment Intent is linked directly to the member via `member_id`. |
 | `guest_id` | UUID (FK, Nullable) | FK to `guests.id`; populated for `Guest-Payment` and `Waiver-Signed` events involving a guest. Null for all other activity types. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
 
@@ -502,6 +509,22 @@ One row per queued member per range visit attempt. Created when all lanes are oc
 * `INDEX ON (range_id, status, position)` — queue advance query: `WHERE range_id = $1 AND status = 'Waiting' ORDER BY position LIMIT 1`.
 * `INDEX ON (member_id, status)` — member cancellation and status lookup.
 
+### **5.11 Table: `club_settings`**
+
+A single-row configuration table. Stores club-wide scalars that Administrators may change over time without a schema migration. The singleton constraint ensures exactly one row always exists.
+
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `singleton` | BOOLEAN (PK) | Always `TRUE`. `CHECK (singleton = TRUE)` enforces a single-row invariant. |
+| `annual_dues_cents` | INTEGER | Annual membership dues in US cents (e.g., `7500` = $75.00). Stored as an integer to avoid floating-point rounding. Used by `POST /v1/members/me/dues` to create the Stripe Payment Intent amount. |
+| `updated_at` | TIMESTAMP | Timestamp of the last change. |
+| `updated_by_member_id` | UUID (FK, Nullable) | FK to `members.id` — the Administrator who last updated the row. |
+
+**Constraints:**
+
+* `CHECK (singleton = TRUE)` — enforces single-row invariant.
+* `CHECK (annual_dues_cents > 0)` — dues must be a positive amount.
+
 ## 6. Infrastructure & Security (AWS)
 
 * **Storage:** Signed waivers are stored in **Amazon S3** with **S3 Object Lock** (Compliance Mode) to prevent tampering or accidental deletion.
@@ -516,12 +539,20 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
 ### **7.1 Member Portal Operations**
 
 * **`GET /v1/members/me`** (**Authenticated member**, Level 1–6)
-  * **Logic:** Returns the authenticated member's own profile. `member_id` resolved from Cognito JWT `sub`; all fields queried from Aurora — never from the JWT claims.
-  * **Returns:** `200 OK` with `{ member_num, training_level, service_hours, dues_paid_until, waiver_signed_at, mobile_phone }`.
+  * **Logic:** Returns the authenticated member's own profile. `member_id` resolved from Cognito JWT `sub`; all fields queried from Aurora — never from the JWT claims. Also reads `club_settings.annual_dues_cents` so the Member Portal can display the current dues amount before the member initiates payment.
+  * **Returns:** `200 OK` with `{ member_num, training_level, service_hours, dues_paid_until, waiver_signed_at, mobile_phone, annual_dues_cents }`.
 
 * **`GET /v1/members/me/badge`** (**Authenticated member**, Level 1–6)
   * **Logic:** Returns the member's `member_num` for QR code display in the Member Portal. The frontend renders the `member_num` as a QR code; the kiosk scans and resolves it via `POST /v1/kiosk/check-in`.
   * **Returns:** `200 OK` with `{ member_num }`.
+
+* **`PATCH /v1/members/me`** (**Authenticated member**, Level 1–6)
+  * **Logic:** Updates the authenticated member's own editable profile fields. Accepted fields: `home_phone`, `mobile_phone`. `mobile_phone` is validated and normalised to E.164 format before storage — invalid numbers are rejected with `400 Bad Request`. Fields not present in the request body are left unchanged. `member_num`, `email`, `training_level`, `service_hours`, `dues_paid_until`, and `waiver_signed_at` are not updatable through this endpoint.
+  * **Returns:** `200 OK` with the updated `{ home_phone, mobile_phone }`, `400 Bad Request` (invalid phone format), or `403 Forbidden`.
+
+* **`POST /v1/members/me/dues`** (**Authenticated member**, Level 1–6)
+  * **Logic:** Personal-device path. Initiates an annual dues payment via **Stripe.js** (card element — no NFC hardware required). The Lambda reads `annual_dues_cents` from `club_settings`, creates a **Stripe Payment Intent** for that amount, and returns the `client_secret` to the frontend. The Member Portal completes the card transaction client-side using the Stripe.js SDK. On payment confirmation, a Stripe webhook (`payment_intent.succeeded`) triggers a Lambda that sets `members.dues_paid_until = December 31 of the current calendar year` and appends an `activity_logs` entry with `activity_type = 'Dues-Payment'` (`device_id = NULL`). The webhook handler is idempotent — duplicate events for the same Payment Intent ID are ignored.
+  * **Returns:** `200 OK` with `{ client_secret, annual_dues_cents }`, or `402 Payment Required` if Stripe rejects the request.
 
 ### **7.2 Kiosk Operations**
 
@@ -585,6 +616,14 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
 * **`PATCH /v1/admin/members/{member_id}/level`** (**Level 5+** Administrator)
   * **Logic:** Updates `members.training_level` for the specified member. Requires `training_level` (0–6) in the request body. Re-queries the **target member's** current `training_level` from Aurora before applying the change and writes an `activity_logs` entry with `activity_type = 'Level-Change'`, `member_id` = target member, `actor_member_id` = the Administrator's `members.id` (resolved by looking up JWT `sub` in `members`). No automated promotion logic — all level changes are explicit Administrator actions.
   * **Returns:** `200 OK`, `400 Bad Request` (missing or out-of-range `training_level`), `403 Forbidden`, or `404 Not Found`.
+
+* **`GET /v1/admin/settings`** (**Level 5+** Administrator)
+  * **Logic:** Returns the current `club_settings` row.
+  * **Returns:** `200 OK` with `{ annual_dues_cents, updated_at, updated_by_member_id }`.
+
+* **`PATCH /v1/admin/settings`** (**Level 5+** Administrator)
+  * **Logic:** Updates one or more fields in the `club_settings` row. Accepted fields: `annual_dues_cents`. Sets `updated_at = NOW()` and `updated_by_member_id` to the Administrator's `members.id` (resolved from JWT `sub`). Does not affect in-flight Stripe Payment Intents — any Payment Intent already created retains the amount from when it was initiated.
+  * **Returns:** `200 OK` with the updated `{ annual_dues_cents, updated_at }`, or `400 Bad Request` (negative or zero amount).
 
 ## 8. High Availability, Multi-Region & Disaster Recovery
 
@@ -829,7 +868,7 @@ The following are unresolved before implementation begins. Each requires a delib
 | # | Area | Question |
 | :--- | :--- | :--- |
 | 1 | **Waiver signing** | What API endpoint handles waiver capture and signature? What is the payload (PDF blob, digital signature string, member acknowledgement)? Which surface captures it — Kiosk only, or also Member Portal on personal devices? |
-| 2 | **Dues payment** | How are annual dues paid? **Stripe Terminal** (NFC, kiosk only) or **Stripe.js** (card element, personal device via Member Portal)? A personal-device flow requires a different Stripe integration from the Terminal SDK. |
+| 2 | **Dues payment** | ✅ Resolved — two payment paths supported: (1) **Personal device** — Member Portal via **Stripe.js** (card element); `POST /v1/members/me/dues` creates a Payment Intent completed client-side. (2) **Kiosk** — **Stripe Terminal** NFC Tap to Pay; `POST /v1/kiosk/dues` processes payment on the tablet's NFC chip. Both paths set `members.dues_paid_until = December 31 of the current calendar year` (membership covers January 1 – December 31 regardless of payment date) and log a `Dues-Payment` activity. See Section 7.1 and Section 7.2. |
 | 3 | **Service hours logging** | ⏸ Deferred — RSO check-in/check-out events in `activity_logs` serve as an implicit volunteer audit trail. Automated service-hour calculation and promotion are not in scope for this version. `service_hours` retained in `members` as a placeholder. Level 1 → Level 2 promotion remains a manual Administrator action until a dedicated feature is scoped. See Section 10. |
 | 4 | **`training_level` promotion** | ✅ Resolved — manual Administrator action only. `PATCH /v1/admin/members/{member_id}/level` (Level 5+); change recorded in `activity_logs`. No automated rule, no async infra required. See Section 7.3 and Section 10. |
 | 5 | **Range Open / Close** | ✅ Resolved — see Section 5.2 and Section 7.2. `ranges` table added; `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open` (Level 4+); soft close — RSO physically clears the range. Five ranges seeded: Rifle-Pistol, Skeet-Trap, Air-Rifle, Indoor-Archery, Outdoor-Archery (names provisional). |
