@@ -323,7 +323,7 @@ All physical ranges have a row in this table, regardless of whether they are cur
 | :--- | :--- | :--- |
 | `id` | UUID (PK) | Unique range identifier. |
 | `name` | TEXT (Unique) | Human-readable range name (e.g., `Rifle-Pistol`, `Skeet-Trap`). |
-| `is_open` | BOOLEAN | `true` when the range is open for check-in. Closing a range prevents new check-ins; existing occupants are not force-cleared — the RSO conducts a physical closing procedure to ensure the range is vacated before locking the gate. |
+| `is_open` | BOOLEAN | `true` when the range is open for check-in. Closing a range prevents new check-ins but does not affect existing lane occupancy — lane state is preserved exactly as it is at the moment of closure. Five closure scenarios are recognised: **daily-close** (end of operating day), **weather** (outdoor range conditions unsafe or unsuitable), **partial** (a subset of lanes taken out of service — handled at the lane level via `lanes.status = 'Closed'` rather than this flag; `is_open` remains `true` while other lanes remain available), **incident** (safety event requiring the range to stop accepting new shooters mid-session), and **other** (RSO discretion). In all cases the RSO retains full visibility of who is on the range via the RSO Dashboard and clears lanes explicitly using the administrative force-checkout as each occupant vacates. |
 | `min_training_level` | SMALLINT (0-6) | Minimum `training_level` required to check in at this range. Applied at check-in time; authoritative value always queried from this table, never from the device or JWT. |
 
 **Initial seed data:**
@@ -567,8 +567,12 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Returns:** `200 OK` with `{ device_token }` or `400 Bad Request` (invalid/expired code).
 
 * **`PATCH /v1/admin/ranges/{range_id}/status`** (**Level 4+** RSO)
-  * **Logic:** Sets `ranges.is_open` to `true` or `false`. Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard. Closing a range does not force-clear active lanes — the RSO conducts a physical closing procedure to verify the range is vacated before locking the gate. The RSO dashboard continues to display current lane occupancy while `is_open = false` to support this procedure.
+  * **Logic:** Sets `ranges.is_open` to `true` or `false`. Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard. Closing a range is always a soft operation — lane occupancy is preserved exactly as it is at the moment of closure regardless of the reason. Five closure scenarios are recognised: **daily-close** (end of operating day), **weather** (conditions unsafe or unsuitable), **partial** (a subset of lanes taken out of service — note: partial closure is handled at the lane level via `PATCH /v1/admin/lanes/{lane_id}` setting `status = 'Closed'`; `is_open` is not set to `false` for a partial closure while other lanes remain available), **incident** (safety event), and **other** (RSO discretion). The RSO Dashboard remains functional and continues displaying live lane occupancy while `is_open = false`, allowing the RSO to retain full visibility of who is on the range and clear lanes explicitly as each occupant vacates.
   * **Returns:** `200 OK` or `403 Forbidden`.
+
+* **`POST /v1/admin/lanes/{lane_id}/checkout`** (**Level 4+** RSO)
+  * **Logic:** Administrative force-checkout. Clears the specified occupied lane — sets `status = 'Available'`, clears `current_member_id`, `guest_count`, and `checked_in_at` — and writes a `Range-Checkout` entry to `activity_logs` with `actor_member_id` set to the RSO's `members.id` (resolved from JWT `sub`) for a full audit trail. After clearing the lane, advances the wait list identically to a standard member-initiated check-out: promotes the next `Waiting` entry to `Called`, records `called_at`, sets `expires_at`, and sends an **Amazon SNS** SMS if the member has a `mobile_phone` on record. Returns `409 Conflict` if the lane is not currently `Occupied` — only occupied lanes can be force-checked out; `Available` and `Closed` lanes are rejected.
+  * **Returns:** `200 OK`, `403 Forbidden`, `404 Not Found`, or `409 Conflict` (lane not occupied).
 
 * **`POST /v1/admin/lanes`** (**Level 4+** RSO)
   * **Logic:** Creates a new lane for a range. `range_id` and `lane_number` required.
@@ -739,7 +743,7 @@ The review independently confirmed the need for a `ranges` table. Both questions
 
 * A `ranges` table (Section 5.2) is the authoritative source for open/close state and `min_training_level` per range. `min_training_level` moves from `devices` to `ranges`.
 * `lanes.range_tag` (TEXT) is replaced by `lanes.range_id` (UUID FK to `ranges.id`).
-* Range open/close is a soft operation: `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open`; existing check-ins are not force-cleared. The RSO physically ensures the range is vacated during the closing procedure.
+* Range open/close is a soft operation: `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open`; lane occupancy is always preserved at closure. Five closure scenarios: **daily-close**, **weather**, **partial** (lane-level via `PATCH /v1/admin/lanes/{lane_id}` — `is_open` stays `true`), **incident**, **other**. RSO clears lanes explicitly via `POST /v1/admin/lanes/{lane_id}/checkout` as each occupant vacates — full audit trail maintained.
 * The endpoint is callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard (Level 4+).
 * Initial seed: Rifle-Pistol (17 lanes), Skeet-Trap, Air-Rifle, Indoor-Archery, Outdoor-Archery. All seed as closed. `min_training_level` values TBD.
 * Lane counts are seeded in the bootstrap migration; future changes use `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration.
