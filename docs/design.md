@@ -73,7 +73,7 @@ sequenceDiagram
 
 ## 3. Member Identity & Recovery Protocol
 
-* **Personal Devices:** Members use **Social Login (Google/Facebook)** via **AWS Cognito** on their own phones/computers to access the portal and pay annual dues.
+* **Personal Devices:** Members use **Social Login (Google/Facebook)** via **AWS Cognito** on their own phones/computers to access the **Member Portal**. The portal is the primary self-service surface for members: it displays their profile and dues standing, allows them to update contact details and phone number, enables online dues payment via **Stripe.js** (card element — no NFC hardware required), and displays their QR badge for range check-in. The portal is designed to be extended with additional member-facing features over time.
 * **Account Recovery (The "Un-Link" Protocol):** If a member loses access to their social account, the **Webmaster (Level 6)** executes the following:
     1. **Identity Verification:** Member presents their physical badge/ID to an **Admin** or **Webmaster**.
     2. **Token Reset:** The **Webmaster** clears the `social_provider_id` in the **Cognito User Pool** for that record.
@@ -86,16 +86,17 @@ sequenceDiagram
 
 Staffed ranges (Rifle/Pistol, Skeet/Trap, and staffed Archery and Air Rifle) each have 2–3 tablet kiosks. Unstaffed ranges (outdoor Archery and indoor Air Rifle when not staffed) do not have kiosks — no check-in flow applies.
 
-The kiosk handoff model — whether the RSO holds the tablet and hands it to arriving users, or the tablet is fixed-mount and self-serve — is an **open design question (#13)**. Both models are supportable by the same underlying check-in flow; the difference is physical deployment and the violation-clearing mechanism.
+Tablets are standard RSO range equipment. The RSO carries the tablet, presents it to arriving members for check-in, and retains custody throughout their shift. The tablet is tracked as range equipment — the RSO on duty is responsible for its whereabouts. This is the **RSO-mediated** model: the RSO is physically present at every check-in transaction, can tap their own NFC badge immediately when a violation alert fires, and returns the tablet to Idle after each completed workflow.
 
 ### Kiosk states
 
 | State | Description |
 | :--- | :--- |
-| **RSO Dashboard** | Default view. Displays lane occupancy for this kiosk's range: each lane shows `Available` or the name/member number of the assigned occupant and their guest count. Lane state is re-fetched after every check-in and check-out transaction, and polled every 30 seconds between transactions. |
-| **Check-in flow** | Initiated by RSO. Member scans QR Badge; system validates `training_level`, dues, and declared guest count. |
+| **Idle** | Default view. Prompts the member to scan their QR badge. Displayed at startup and after every completed check-in, check-out, or cancelled workflow. |
+| **Check-in flow** | Initiated when a member scans their QR badge. System validates `training_level`, dues, and declared guest count. |
+| **RSO Dashboard** | Lane occupancy display for this kiosk's range: each lane shows `Available`, `Occupied` (with occupant name/member number and guest count), or `Closed`. Accessible from the idle screen via **RSO NFC badge scan**: the RSO taps their member badge; the kiosk reads `member_id`, queries `training_level` from Aurora, and admits access only if Level ≥ 4. The RSO's `member_id` is recorded as `actor_member_id` on any action taken within the dashboard. Lane state is re-fetched after every check-in and check-out transaction, and polled every 30 seconds. RSOs can close or re-open individual lanes directly from this view — for example, to take a lane out of service due to a physical hazard. Only `Available` lanes may be closed; an `Occupied` lane must be checked out before it can be closed. The RSO Dashboard also supports **administrative force-checkout**: the RSO can explicitly clear an occupied lane directly from the dashboard (e.g., after verifying the occupant has vacated during a weather closure or emergency). Force-checkout writes a `Range-Checkout` activity log entry with the RSO's `actor_member_id` for audit purposes, and advances the wait list if any entries are queued. |
 | **Guest add-on** | After a lane is assigned (either directly or after being called from the wait list), the kiosk runs the guest add-on flow for each declared guest: waiver check, annual-limit check, and payment via **Stripe Terminal**. No payment is taken before a lane is confirmed. |
-| **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The user cannot dismiss this screen — only the RSO can clear it by either resolving the issue or denying entry. |
+| **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The member cannot dismiss this screen. The RSO taps their own NFC badge to authenticate (Level ≥ 4 required); the kiosk then presents two choices: **(a) Approve override** — entry is allowed and the exception is recorded in `activity_logs` with the RSO's `member_id` as `actor_member_id`; **(b) Deny entry** — check-in is cancelled and the lane remains `Available`. |
 | **Lane assignment** | Once the member has declared their guest count and a lane is available, the system assigns the lane that maximises spacing from occupied groups based on the declared group size. The confirmed lane number is shown on screen. Guest waiver and payment are then processed per guest. |
 | **Wait list** | Displayed when all lanes are occupied. The kiosk shows the member's current position in the queue. The member may cancel and leave at any time. When a lane opens, the kiosk calls the next member in the queue and advances to lane assignment. |
 | **Check-out flow** | RSO-initiated or user-initiated. Member scans QR Badge; open lane assignment (including all guests on that lane) is closed, the lane returns to `Available`, and the wait list is advanced if any entries are queued. |
@@ -104,7 +105,8 @@ The kiosk handoff model — whether the RSO holds the tablet and hands it to arr
 
 ```mermaid
 flowchart TD
-    DASH["RSO Dashboard<br/>Lane occupancy displayed"]
+    IDLE["Idle<br/>Scan QR badge to check in"]
+    RSO_DASH["RSO Dashboard<br/>Lane occupancy · range status"]
     SCAN["Member scans QR Badge"]
     T_LVL{"training_level ≥<br/>range minimum?"}
     DUES{"Dues current?"}
@@ -119,7 +121,9 @@ flowchart TD
     WL["Added to wait list<br/>guest count stored — no payment yet"]
     WL_CALLED["Lane opened —<br/>member called to kiosk"]
 
-    DASH --> SCAN
+    IDLE -->|RSO NFC badge scan| RSO_DASH
+    RSO_DASH -->|Exit| IDLE
+    IDLE --> SCAN
     SCAN --> T_LVL
     T_LVL -->|No| VIOL
     T_LVL -->|Yes| DUES
@@ -128,14 +132,14 @@ flowchart TD
     GUESTS --> LANE
     LANE -->|Available| ASSIGN
     LANE -->|None available| WL
-    WL -->|Member cancels| DASH
+    WL -->|Member cancels| IDLE
     WL -->|Lane opens| WL_CALLED --> ASSIGN
-    VIOL -->|RSO clears| DASH
+    VIOL -->|RSO clears| IDLE
     ASSIGN -->|0 guests| CONFIRM
     ASSIGN -->|1–2 guests| GUEST_FLOW --> CONFIRM
     CONFIRM --> CHECKOUT
     CHECKOUT --> CLOSE
-    CLOSE --> DASH
+    CLOSE --> IDLE
 ```
 
 ### Guest add-on flow
@@ -152,7 +156,7 @@ flowchart TD
     WAIVER_CAP["Capture waiver<br/>acknowledgement at kiosk"]
     LIMIT_CHK{"Visits this year<br/>with this member < 2?"}
     HARD_BLOCK["403 Forbidden<br/>Annual limit reached<br/>No RSO override applies"]
-    PAYMENT["Guest fee via<br/>Stripe Terminal — NFC"]
+    PAYMENT["Guest fee via<br/>Stripe Terminal — NFC or card"]
     PAY_OK{"Payment confirmed?"}
     PAY_FAIL["402 Payment Required"]
     INSERT["Insert guest_visits row<br/>Log to activity_logs"]
@@ -176,15 +180,15 @@ flowchart TD
 * **The "Safety Gate":** Automated blocking of check-ins for members with insufficient `training_level` for a specific range.
 * **Mandatory Check-Out:** Range users must check out before leaving. Check-out closes the lane assignment (including all guests) and logs a `Range-Checkout` event.
 * **Violation lock:** A failed check-in locks the screen in violation state. The RSO resolves — approve an override where policy allows, or deny entry. Only Level 4+ can clear a violation alert.
-* **Lane assignment:** Each member check-in assigns one available lane. Member and all their guests share that lane. When multiple lanes are available, the system selects the lane that maximises physical distance from all currently occupied lanes — preferring lanes whose nearest occupied neighbour is as far away as possible. This distributes groups across the range rather than clustering them adjacently. When all lanes are occupied the member is offered a wait list position instead of a hard block.
-* **Wait list:** When the range is full, the kiosk adds the member to the wait list for that range (`wait_list` table) and displays their queue position. When any lane is released via check-out, the system automatically advances the queue: the next `Waiting` entry is promoted to `Called`, the RSO Dashboard highlights the queued member, and (if the member has a `mobile_phone` on record) an **Amazon SNS** SMS is sent. The called entry expires after 5 minutes (`expires_at`); if not acted on it is marked `Expired` and the next entry is advanced. A member may cancel their wait list entry at any time from the kiosk screen.
+* **Lane assignment:** Each member check-in assigns one available lane. Member and all their guests share that lane. Only lanes with `status = 'Available'` are eligible — `Occupied` and `Closed` lanes are excluded from selection. When multiple eligible lanes exist, the system selects the lane that maximises physical distance from all currently occupied lanes — preferring lanes whose nearest occupied neighbour is as far away as possible. This distributes groups across the range rather than clustering them adjacently. When no `Available` lanes exist (all lanes are either `Occupied` or `Closed`) the member is offered a wait list position instead of a hard block.
+* **Wait list:** When the range is full, the kiosk adds the member to the wait list for that range (`wait_list` table) and displays their queue position. When any lane is released via check-out, the system automatically advances the queue: the next `Waiting` entry is promoted to `Called`, the RSO Dashboard (if open) will surface the `Called` status on its next lane-occupancy poll, and (if the member has a `mobile_phone` on record) an **Amazon SNS** SMS is sent. The called entry expires after 5 minutes (`expires_at`); if not acted on it is marked `Expired` and the next entry is advanced. A member may cancel their wait list entry at any time from the kiosk screen.
 * **Guest accompaniment:** Guests must be physically present with and accompanied by their sponsoring member. A guest cannot arrive independently — there is no guest-only entry flow. The guest add-on step at the kiosk (after lane assignment) is the only entry point for guest registration and payment.
 * **Guest sponsorship:** A member may bring a maximum of **2 guests per range visit**. The limit is enforced per range — a member may not bring more than 2 guests on the same range at the same time. Guest count is stored in `lanes.guest_count` and checked at check-in.
 * **Guest check-in order:** The member declares guest count (0, 1, or 2) before the lane check. The declared count is used to score lane selection but no guest processing occurs at this stage. Once a lane is assigned — either immediately or after being called from the wait list — the kiosk runs the guest add-on flow for each guest: waiver acknowledgement, annual-limit check, and payment via **Stripe Terminal** (Tap to Pay). Either the guest or the sponsoring member may pay. If the member was on the wait list and declines or leaves before a lane opens, no payment has been taken.
-* **Cashless Guest Fees:** Integrated "Tap-to-Pay" (NFC) via mobile tablets at the range, powered by the **Stripe Terminal SDK**. No additional card reader hardware is required — the tablet's built-in NFC chip acts as the payment terminal.
+* **Cashless Kiosk Payments:** All kiosk payments (guest fees, annual dues, consumables) are processed via the **Stripe Terminal SDK**. NFC Tap to Pay — using the tablet's built-in NFC chip — is the primary method; no reader hardware is required for the NFC path. For members who cannot present a contactless payment, a **Stripe Terminal hardware reader** (e.g., Stripe Reader M2, connected via Bluetooth) paired to the kiosk tablet provides card insert and swipe as a fallback. Neither raw card data nor card numbers are ever stored on Club-managed systems.
 * **Consumable Sales:** Members and guests may purchase consumables (e.g., targets, canned soda, coffee) at the kiosk. Each transaction is recorded in the `consumable_purchases` table with full line-item detail. Payment is processed via **Stripe Terminal SDK** (Tap to Pay). **Known Limitation:** There is no reliable physical process to verify that recorded quantities match items actually dispensed; the system records what is entered at the kiosk but cannot enforce inventory accuracy.
 * **Time-Bound Waivers:** Automated re-signing triggers for Safety Waivers based on 1-year expiration logic.
-* **Tablet Hardware Requirement:** Kiosk tablets **must have an accessible NFC chip** to support Tap to Pay. Most modern Android tablets and iPads qualify. Budget or older Android tablets may omit NFC — verify hardware specs before purchasing.
+* **Tablet Hardware Requirement:** Kiosk tablets **must have an accessible NFC chip** to support Tap to Pay as the primary payment method. Most modern Android tablets and iPads qualify. Budget or older Android tablets may omit NFC — verify hardware specs before purchasing. For card-insert/swipe fallback, a **Stripe Terminal hardware reader** (e.g., Stripe Reader M2) is paired to each kiosk tablet via Bluetooth. The fallback reader is optional but recommended for each kiosk station.
 
 ### Offline operation
 
@@ -276,6 +280,12 @@ erDiagram
         TIMESTAMP called_at
         TIMESTAMP expires_at
     }
+    club_settings {
+        BOOLEAN singleton PK
+        INTEGER annual_dues_cents
+        TIMESTAMP updated_at
+        UUID updated_by_member_id FK
+    }
 
     members }o--|| training_level_policies : "level lookup"
     ranges ||--o{ devices : "assigned to"
@@ -294,6 +304,7 @@ erDiagram
     members ||--o{ wait_list : "queued"
     ranges ||--o{ wait_list : "for"
     devices ||--o{ wait_list : "at"
+    members ||--o| club_settings : "last updated by"
 ```
 
 ### **5.1 Table: `members`**
@@ -307,7 +318,7 @@ erDiagram
 | `social_provider_id` | TEXT (Nullable) | Linked Google/Facebook ID (Cleared during **Recovery**). |
 | `service_hours` | DECIMAL(5,2) | Running total for **Level 1** promotion tracking. |
 | `waiver_signed_at` | TIMESTAMP | Used to calculate the 1-year automated expiration. |
-| `dues_paid_until` | DATE | Date-based flag for membership standing. |
+| `dues_paid_until` | DATE | Membership standing flag. Always set to December 31 of the year in which dues are paid — membership covers the full calendar year (January 1 – December 31) regardless of payment date. |
 | `home_phone` | TEXT (Nullable) | Home telephone number. |
 | `mobile_phone` | TEXT (Nullable) | Mobile number in E.164 format (e.g., `+15551234567`); validated/normalized for **Amazon SNS** delivery of SMS range alerts. |
 
@@ -319,7 +330,7 @@ All physical ranges have a row in this table, regardless of whether they are cur
 | :--- | :--- | :--- |
 | `id` | UUID (PK) | Unique range identifier. |
 | `name` | TEXT (Unique) | Human-readable range name (e.g., `Rifle-Pistol`, `Skeet-Trap`). |
-| `is_open` | BOOLEAN | `true` when the range is open for check-in. Closing a range prevents new check-ins; existing occupants are not force-cleared — the RSO conducts a physical closing procedure to ensure the range is vacated before locking the gate. |
+| `is_open` | BOOLEAN | `true` when the range is open for check-in. Closing a range prevents new check-ins but does not affect existing lane occupancy — lane state is preserved exactly as it is at the moment of closure. Five closure scenarios are recognised: **daily-close** (end of operating day), **weather** (outdoor range conditions unsafe or unsuitable), **partial** (a subset of lanes taken out of service — handled at the lane level via `lanes.status = 'Closed'` rather than this flag; `is_open` remains `true` while other lanes remain available), **incident** (safety event requiring the range to stop accepting new shooters mid-session), and **other** (RSO discretion). In all cases the RSO retains full visibility of who is on the range via the RSO Dashboard and clears lanes explicitly using the administrative force-checkout as each occupant vacates. |
 | `min_training_level` | SMALLINT (0-6) | Minimum `training_level` required to check in at this range. Applied at check-in time; authoritative value always queried from this table, never from the device or JWT. |
 
 **Initial seed data:**
@@ -355,17 +366,17 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | `id` | UUID (PK) | Unique lane identifier. |
 | `range_id` | UUID (FK) | FK to `ranges.id`. Replaces the former `range_tag` TEXT column. |
 | `lane_number` | SMALLINT | Lane number within the range (e.g., 1–17 for Rifle-Pistol). |
-| `status` | TEXT | `Available`, `Occupied` |
-| `guest_count` | SMALLINT | Number of guests currently sharing this lane with the sponsoring member (0–2). Always 0 when `status` is `Available`. |
+| `status` | TEXT | `Available`, `Occupied`, `Closed`. `Closed` lanes are removed from service by an RSO (e.g., physical hazard, maintenance) and are excluded from check-in assignment until re-opened. Only `Available` lanes may be transitioned to `Closed`; an `Occupied` lane must be checked out first. |
+| `guest_count` | SMALLINT | Number of guests currently sharing this lane with the sponsoring member (0–2). Always 0 when `status` is `Available` or `Closed`. |
 | `current_member_id` | UUID (FK, Nullable) | FK to `members.id`; set on check-in, cleared on check-out. Nullable only when the lane is `Available`. Guests must be accompanied by a member — the lane is assigned to the sponsoring member's ID for the duration of the guest's occupancy. A null value always means the lane is unoccupied. |
 | `checked_in_at` | TIMESTAMP (Nullable) | Time the lane was last claimed. |
 
 **Constraints and indexes:**
 
 * `UNIQUE (range_id, lane_number)` — no two lanes can share the same number within a range.
-* `CHECK (status IN ('Available', 'Occupied'))`
+* `CHECK (status IN ('Available', 'Occupied', 'Closed'))`
 * `CHECK (guest_count BETWEEN 0 AND 2)`
-* `CHECK (status = 'Available' AND current_member_id IS NULL AND guest_count = 0 OR status = 'Occupied' AND current_member_id IS NOT NULL AND guest_count BETWEEN 0 AND 2)` — enforces consistency between occupancy state, sponsoring member, and guest count.
+* `CHECK ((status IN ('Available', 'Closed') AND current_member_id IS NULL AND guest_count = 0) OR (status = 'Occupied' AND current_member_id IS NOT NULL AND guest_count BETWEEN 0 AND 2))` — enforces consistency between occupancy state, sponsoring member, and guest count. `Closed` lanes share the same null-member/zero-guest invariant as `Available` lanes.
 * `INDEX ON (range_id, status)` — supports finding available/occupied lanes for a range.
 * `INDEX ON (current_member_id)` — supports finding the lane a member is currently occupying.
 
@@ -374,12 +385,12 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | Column | Type | Description |
 | :--- | :--- | :--- |
 | `id` | BIGINT (PK) | High-volume log ID. |
-| `member_id` | UUID (FK) | The member performing the action for kiosk-originated events (`Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`). For `Level-Change` events: the **target member** whose level was changed. |
-| `actor_member_id` | UUID (FK, Nullable) | The Administrator who performed the action. Populated for `Level-Change` events (resolved from JWT `sub` → `members.id` at write time); `NULL` for all kiosk-originated event types where `member_id` is the actor. |
-| `device_id` | UUID (FK, Nullable) | Reference to the `devices` table. `NULL` for non-kiosk events (e.g., `Level-Change` actions performed from the Admin Portal). |
-| `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`, `Level-Change` |
-| `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; `NULL` for `Waiver-Signed` and `Level-Change` events which have no lane context. |
-| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` events only and linked to the lane/visit via `lane_id`. |
+| `member_id` | UUID (FK) | The member performing the action for kiosk-originated events (`Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`) and portal-originated events (`Dues-Payment`). For `Level-Change` and `Service-Hours-Update` events: the **target member** whose record was changed. |
+| `actor_member_id` | UUID (FK, Nullable) | The Administrator who performed the action. Populated for `Level-Change` events (resolved from JWT `sub` → `members.id` at write time); `NULL` for all kiosk-originated and member portal event types where `member_id` is the actor. |
+| `device_id` | UUID (FK, Nullable) | Reference to the `devices` table. `NULL` for non-kiosk events (`Level-Change` and `Service-Hours-Update` performed from the Admin Portal; `Dues-Payment` completed via the Member Portal personal-device path). Populated for kiosk-originated events including `Dues-Payment` completed at the kiosk via Stripe Terminal. |
+| `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`, `Level-Change`, `Dues-Payment`, `Service-Hours-Update` |
+| `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; `NULL` for `Waiver-Signed`, `Level-Change`, `Dues-Payment`, and `Service-Hours-Update` events which have no lane context. |
+| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` and `Dues-Payment` events. Linked to the lane/visit via `lane_id` for guest payments; `lane_id` is `NULL` for dues payments. |
 | `guest_id` | UUID (FK, Nullable) | FK to `guests.id`; populated for `Guest-Payment` and `Waiver-Signed` events involving a guest. Null for all other activity types. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
 
@@ -498,12 +509,46 @@ One row per queued member per range visit attempt. Created when all lanes are oc
 * `INDEX ON (range_id, status, position)` — queue advance query: `WHERE range_id = $1 AND status = 'Waiting' ORDER BY position LIMIT 1`.
 * `INDEX ON (member_id, status)` — member cancellation and status lookup.
 
+### **5.11 Table: `club_settings`**
+
+A single-row configuration table. Stores club-wide scalars that Administrators may change over time without a schema migration. The singleton constraint ensures exactly one row always exists.
+
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `singleton` | BOOLEAN (PK) | Always `TRUE`. `CHECK (singleton = TRUE)` enforces a single-row invariant. |
+| `annual_dues_cents` | INTEGER | Annual membership dues in US cents (e.g., `7500` = $75.00). Stored as an integer to avoid floating-point rounding. Used by `POST /v1/members/me/dues` to create the Stripe Payment Intent amount. |
+| `updated_at` | TIMESTAMP | Timestamp of the last change. |
+| `updated_by_member_id` | UUID (FK, Nullable) | FK to `members.id` — the Administrator who last updated the row. |
+
+**Constraints:**
+
+* `CHECK (singleton = TRUE)` — enforces single-row invariant.
+* `CHECK (annual_dues_cents > 0)` — dues must be a positive amount.
+
 ## 6. Infrastructure & Security (AWS)
 
 * **Storage:** Signed waivers are stored in **Amazon S3** with **S3 Object Lock** (Compliance Mode) to prevent tampering or accidental deletion.
 * **Notifications:** Urgent safety alerts or range closures are pushed via **Amazon SNS** (SMS) to ensure reach to 100% of members.
 * **Zero-Trust Security:** Data is encrypted at rest and in transit via **AWS KMS**; no raw credit card data is ever stored on Club-managed systems.
 * **Authorization invariant — `training_level`:** Every Lambda that gates access by training level **must re-query `training_level` from Aurora** on every request. It must never be read from the Cognito JWT claim. The JWT is used only to identify the caller (via `sub`); the authoritative level is always the database row. A member's level can be revoked between token issuance and token expiry — reading the claim would miss that change.
+
+### Data durability
+
+Every layer of the stack is designed so that a transient failure — power interruption, Lambda timeout, network blip — cannot silently discard in-flight data.
+
+* **Aurora write quorum:** Aurora Serverless v2 uses a distributed storage engine that replicates every write across six storage nodes in three Availability Zones. A write is only acknowledged to the application after at least four of those six nodes confirm it. A power failure or crash *after* acknowledgment cannot lose the write — it is already durable in multiple AZs before the Lambda returns.
+
+* **Atomic transactions:** All multi-step database operations (check-in, check-out, wait-list queue advance, payment confirmation) execute inside a single Aurora transaction via the RDS Data API. If a Lambda is interrupted or times out mid-transaction, Aurora automatically rolls back the incomplete transaction. The database is never left in a partial-write state — the operation either committed fully or did not commit at all.
+
+* **Client-side retry responsibility:** API Gateway does not automatically retry a Lambda invocation that fails mid-execution. The kiosk and Member Portal must treat any `5xx` response as retriable. All write endpoints are designed to be safe to retry: check-in and check-out use the member's existing `activity_logs` record to detect duplicates; payment endpoints are idempotent on Stripe's `payment_intent_id`.
+
+* **Offline check-in / check-out event queue:** If internet connectivity is unavailable when a member checks in or out, the kiosk writes the event to a durable local queue stored in encrypted persistent storage on the device. The event survives app restarts and power cycles. As soon as connectivity restores, the kiosk flushes the queue to Aurora via the normal `POST /v1/kiosk/check-in` and `POST /v1/kiosk/check-out` endpoints. `activity_logs` entries are insert-only and idempotent on `(member_id, activity_type, timestamp)` so replaying queued events on reconnect cannot produce duplicate records. No check-in or check-out event is ever discarded due to a connectivity gap. See **ODQ #10** for the full offline architecture specification (cache encryption, key management, conflict resolution on sync).
+
+* **Stripe webhook durability:** Stripe retries a failed `payment_intent.succeeded` webhook delivery for up to 72 hours with exponential backoff. The webhook Lambda handler is idempotent on Payment Intent ID — duplicate deliveries of the same event are detected and ignored, so a payment is never double-applied even if the webhook fires multiple times.
+
+* **Stripe Terminal in-flight recovery:** The Stripe Terminal SDK tracks the current PaymentIntent state on the device. If connectivity is lost mid-transaction (e.g., a network blip during NFC tap), the SDK can recover the PaymentIntent and confirm or cancel it on reconnect — the payment is not silently abandoned.
+
+* **Future async workflows:** Any background processing added in the future (dues reminders, waiver expiry notifications, audit log exports) must use **Amazon SQS** with a configured **Dead-Letter Queue (DLQ)**. This guarantees at-least-once delivery: if a worker Lambda fails, the message is retried up to the configured maximum before landing in the DLQ for inspection. Messages are never silently dropped.
 
 ## 7. API Outlines (AWS-Native / RESTful)
 
@@ -512,12 +557,20 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
 ### **7.1 Member Portal Operations**
 
 * **`GET /v1/members/me`** (**Authenticated member**, Level 1–6)
-  * **Logic:** Returns the authenticated member's own profile. `member_id` resolved from Cognito JWT `sub`; all fields queried from Aurora — never from the JWT claims.
-  * **Returns:** `200 OK` with `{ member_num, training_level, service_hours, dues_paid_until, waiver_signed_at, mobile_phone }`.
+  * **Logic:** Returns the authenticated member's own profile. `member_id` resolved from Cognito JWT `sub`; all fields queried from Aurora — never from the JWT claims. Also reads `club_settings.annual_dues_cents` so the Member Portal can display the current dues amount before the member initiates payment.
+  * **Returns:** `200 OK` with `{ member_num, training_level, service_hours, dues_paid_until, waiver_signed_at, mobile_phone, annual_dues_cents }`.
 
 * **`GET /v1/members/me/badge`** (**Authenticated member**, Level 1–6)
   * **Logic:** Returns the member's `member_num` for QR code display in the Member Portal. The frontend renders the `member_num` as a QR code; the kiosk scans and resolves it via `POST /v1/kiosk/check-in`.
   * **Returns:** `200 OK` with `{ member_num }`.
+
+* **`PATCH /v1/members/me`** (**Authenticated member**, Level 1–6)
+  * **Logic:** Updates the authenticated member's own editable profile fields. Accepted fields: `home_phone`, `mobile_phone`. `mobile_phone` is validated and normalised to E.164 format before storage — invalid numbers are rejected with `400 Bad Request`. Fields not present in the request body are left unchanged. `member_num`, `email`, `training_level`, `service_hours`, `dues_paid_until`, and `waiver_signed_at` are not updatable through this endpoint.
+  * **Returns:** `200 OK` with the updated `{ home_phone, mobile_phone }`, `400 Bad Request` (invalid phone format), or `403 Forbidden`.
+
+* **`POST /v1/members/me/dues`** (**Authenticated member**, Level 1–6)
+  * **Logic:** Personal-device path. Initiates an annual dues payment via **Stripe.js** (card element — no NFC hardware required). The Lambda reads `annual_dues_cents` from `club_settings`, creates a **Stripe Payment Intent** for that amount, and returns the `client_secret` to the frontend. The Member Portal completes the card transaction client-side using the Stripe.js SDK. On payment confirmation, a Stripe webhook (`payment_intent.succeeded`) triggers a Lambda that sets `members.dues_paid_until = December 31 of the current calendar year` and appends an `activity_logs` entry with `activity_type = 'Dues-Payment'` (`device_id = NULL`). The webhook handler is idempotent — duplicate events for the same Payment Intent ID are ignored.
+  * **Returns:** `200 OK` with `{ client_secret, annual_dues_cents }`, or `402 Payment Required` if Stripe rejects the request.
 
 ### **7.2 Kiosk Operations**
 
@@ -526,7 +579,7 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Returns:** `200 OK` with `{ range_id, name, is_open, lanes: [{ lane_id, lane_number, status, current_member_id, member_num, guest_count, checked_in_at }] }`. `member_num` and `checked_in_at` are `null` when `status` is `Available`.
 
 * **`POST /v1/kiosk/check-in`**
-  * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry is transitioned to `Checked-In` on successful lane assignment). If all lanes are occupied, a `wait_list` row is inserted (storing `guest_count` for later lane scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If a lane is available, selects the lane that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
+  * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry is transitioned to `Checked-In` on successful lane assignment). If no lanes have `status = 'Available'` (all are `Occupied` or `Closed`), a `wait_list` row is inserted (storing `guest_count` for later lane scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If an `Available` lane exists, selects the one that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
   * **Returns:** `200 OK` with `{ lane_number }` (lane assigned), `202 Accepted` with `{ wait_position }` (range full — added to wait list), or `403 Forbidden` (e.g., "Level 3 Required", "Guests not permitted at this level").
 
 * **`POST /v1/kiosk/check-out`**
@@ -538,12 +591,16 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Returns:** `200 OK` or `404 Not Found`.
 
 * **`POST /v1/kiosk/guest-payment`**
-  * **Logic:** Handles the full guest add-on flow for a single guest: (1) look up guest by `first_name`, `last_name`, and `phone` in `guests` — create a new record if not found; (2) check `guests.waiver_signed_at` — prompt waiver capture at the kiosk if no record exists or the waiver has expired; (3) query `guest_visits` for this guest-member combination in the current calendar year — if count ≥ 2, return `403 Forbidden` (hard block; no RSO override applies); (4) process the guest fee via **Stripe Terminal SDK** (Tap to Pay on tablet NFC); (5) insert a `guest_visits` row; (6) create an `activity_logs` entry with `guest_id` populated.
+  * **Logic:** Handles the full guest add-on flow for a single guest: (1) look up guest by `first_name`, `last_name`, and `phone` in `guests` — create a new record if not found; (2) check `guests.waiver_signed_at` — prompt waiver capture at the kiosk if no record exists or the waiver has expired; (3) query `guest_visits` for this guest-member combination in the current calendar year — if count ≥ 2, return `403 Forbidden` (hard block; no RSO override applies); (4) process the guest fee via **Stripe Terminal SDK** — NFC Tap to Pay (primary) or paired card reader (fallback); (5) insert a `guest_visits` row; (6) create an `activity_logs` entry with `guest_id` populated.
   * **Returns:** `200 OK`, `403 Forbidden` (annual limit reached), or `402 Payment Required` (Stripe failure).
 
 * **`POST /v1/kiosk/consumable-purchase`**
-  * **Logic:** Records one or more line items (item name, quantity, unit price) to `consumable_purchases`; processes payment via **Stripe Terminal SDK** (Tap to Pay). `member_id` is optional — omit for anonymous guest purchases.
+  * **Logic:** Records one or more line items (item name, quantity, unit price) to `consumable_purchases`; processes payment via **Stripe Terminal SDK** — NFC Tap to Pay (primary) or paired card reader (fallback). `member_id` is optional — omit for anonymous guest purchases.
   * **Returns:** `200 OK` (Purchase Recorded) or `402 Payment Required` (Stripe payment failure).
+
+* **`POST /v1/kiosk/dues`** (**Device Token** authenticated)
+  * **Logic:** Kiosk path for annual dues payment via **Stripe Terminal** — NFC Tap to Pay (primary) or paired card reader (fallback). The request body carries the `member_num` (resolved from the scanned QR badge). The Lambda: (1) resolves the member from `member_num`; (2) reads `annual_dues_cents` from `club_settings`; (3) creates a **Stripe Terminal** PaymentIntent and processes it through the Terminal SDK (NFC primary, card reader fallback). Dues confirmation — setting `members.dues_paid_until = December 31 of the current calendar year` and appending a `Dues-Payment` entry to `activity_logs` with `device_id` set to the kiosk's device ID — is handled exclusively by the `payment_intent.succeeded` webhook, identical to the personal-device path. The webhook is idempotent on Payment Intent ID.
+  * **Returns:** `200 OK` with `{ dues_paid_until }`, `402 Payment Required` (Stripe failure), or `404 Not Found` (unrecognised `member_num`).
 
 ### **7.3 Administrative & Recovery**
 
@@ -563,20 +620,36 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Returns:** `200 OK` with `{ device_token }` or `400 Bad Request` (invalid/expired code).
 
 * **`PATCH /v1/admin/ranges/{range_id}/status`** (**Level 4+** RSO)
-  * **Logic:** Sets `ranges.is_open` to `true` or `false`. Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard. Closing a range does not force-clear active lanes — the RSO conducts a physical closing procedure to verify the range is vacated before locking the gate. The RSO dashboard continues to display current lane occupancy while `is_open = false` to support this procedure.
+  * **Logic:** Sets `ranges.is_open` to `true` or `false`. Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard. Closing a range is always a soft operation — lane occupancy is preserved exactly as it is at the moment of closure regardless of the reason. Five closure scenarios are recognised: **daily-close** (end of operating day), **weather** (conditions unsafe or unsuitable), **partial** (a subset of lanes taken out of service — note: partial closure is handled at the lane level via `PATCH /v1/admin/lanes/{lane_id}` setting `status = 'Closed'`; `is_open` is not set to `false` for a partial closure while other lanes remain available), **incident** (safety event), and **other** (RSO discretion). The RSO Dashboard remains functional and continues displaying live lane occupancy while `is_open = false`, allowing the RSO to retain full visibility of who is on the range and clear lanes explicitly as each occupant vacates.
   * **Returns:** `200 OK` or `403 Forbidden`.
+
+* **`POST /v1/admin/lanes/{lane_id}/checkout`** (**Level 4+** RSO)
+  * **Logic:** Administrative force-checkout. Clears the specified occupied lane — sets `status = 'Available'`, clears `current_member_id`, `guest_count`, and `checked_in_at` — and writes a `Range-Checkout` entry to `activity_logs` with `actor_member_id` set to the RSO's `members.id` (resolved from JWT `sub`) for a full audit trail. After clearing the lane, advances the wait list identically to a standard member-initiated check-out: promotes the next `Waiting` entry to `Called`, records `called_at`, sets `expires_at`, and sends an **Amazon SNS** SMS if the member has a `mobile_phone` on record. Returns `409 Conflict` if the lane is not currently `Occupied` — only occupied lanes can be force-checked out; `Available` and `Closed` lanes are rejected.
+  * **Returns:** `200 OK`, `403 Forbidden`, `404 Not Found`, or `409 Conflict` (lane not occupied).
 
 * **`POST /v1/admin/lanes`** (**Level 4+** RSO)
   * **Logic:** Creates a new lane for a range. `range_id` and `lane_number` required.
   * **Returns:** `201 Created` or `409 Conflict` (duplicate lane number).
 
 * **`PATCH /v1/admin/lanes/{lane_id}`** (**Level 4+** RSO)
-  * **Logic:** Updates lane status or disables a lane. Used for range reconfiguration without requiring a DB migration.
-  * **Returns:** `200 OK` or `404 Not Found`.
+  * **Logic:** Updates a lane's configuration or operational status. Accepts `lane_number` (renumbering) and/or `status` (`Available` or `Closed`). Setting `status = 'Closed'` takes a lane out of service — it will be excluded from all check-in assignment until re-opened (`status = 'Available'`). A lane with `status = 'Occupied'` cannot be closed directly; the occupant must check out first (`409 Conflict` returned). Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard.
+  * **Returns:** `200 OK`, `404 Not Found`, or `409 Conflict` (attempted disable of an occupied lane).
 
 * **`PATCH /v1/admin/members/{member_id}/level`** (**Level 5+** Administrator)
   * **Logic:** Updates `members.training_level` for the specified member. Requires `training_level` (0–6) in the request body. Re-queries the **target member's** current `training_level` from Aurora before applying the change and writes an `activity_logs` entry with `activity_type = 'Level-Change'`, `member_id` = target member, `actor_member_id` = the Administrator's `members.id` (resolved by looking up JWT `sub` in `members`). No automated promotion logic — all level changes are explicit Administrator actions.
   * **Returns:** `200 OK`, `400 Bad Request` (missing or out-of-range `training_level`), `403 Forbidden`, or `404 Not Found`.
+
+* **`PATCH /v1/admin/members/{member_id}/service-hours`** (**Level 5+** Administrator)
+  * **Logic:** Sets `members.service_hours` for the specified member to the value supplied in the request body. Service hours are maintained manually by an Administrator — the system does not calculate them automatically. Hours may originate from any tracked volunteer activity (range shifts visible in `activity_logs`, event work, maintenance, or other contributions recorded outside the system). The Administrator is accountable for the accuracy of the value. When the threshold is met (`service_hours >= 6`), the Administrator issues a separate `PATCH /v1/admin/members/{member_id}/level` call to promote the member — the two steps are intentionally distinct to keep a human in the loop. Writes an `activity_logs` entry with `activity_type = 'Service-Hours-Update'`, `member_id` = target member, `actor_member_id` = the Administrator's `members.id`.
+  * **Returns:** `200 OK` with `{ service_hours }`, `400 Bad Request` (negative value), `403 Forbidden`, or `404 Not Found`.
+
+* **`GET /v1/admin/settings`** (**Level 5+** Administrator)
+  * **Logic:** Returns the current `club_settings` row.
+  * **Returns:** `200 OK` with `{ annual_dues_cents, updated_at, updated_by_member_id }`.
+
+* **`PATCH /v1/admin/settings`** (**Level 5+** Administrator)
+  * **Logic:** Updates one or more fields in the `club_settings` row. Accepted fields: `annual_dues_cents`. Sets `updated_at = NOW()` and `updated_by_member_id` to the Administrator's `members.id` (resolved from JWT `sub`). Does not affect in-flight Stripe Payment Intents — any Payment Intent already created retains the amount from when it was initiated.
+  * **Returns:** `200 OK` with the updated `{ annual_dues_cents, updated_at }`, or `400 Bad Request` (negative or zero amount).
 
 ## 8. High Availability, Multi-Region & Disaster Recovery
 
@@ -694,7 +767,27 @@ Each region runs an independent copy of the stack. Configuration drift — where
 
 ### The "Red Button" procedure
 
-In a full primary-region failure with active-active enabled: **Aurora Global Database** fails over and promotes a reader cluster in a secondary region to writer, and **Route 53** updates DNS to route traffic to the healthy regional endpoint. In single-region mode: the **Webmaster** deploys the stack to a new region using the IaC parameters and restores Aurora from **AWS Backup** or an Aurora point-in-time restore/snapshot. Target RTO: under 60 minutes from a cold start.
+In a full primary-region failure with active-active enabled: **Aurora Global Database** fails over and promotes a reader cluster in a secondary region to writer, and **Route 53** updates DNS to route traffic to the healthy regional endpoint. In single-region mode: the **Webmaster** deploys the stack to a new region using the IaC parameters and restores Aurora from an **Aurora point-in-time restore** (preferred) or **AWS Backup** daily snapshot as a last resort. Target RTO: under 60 minutes from a cold start.
+
+**Operations continuity during the procedure:**
+
+A technology outage does not halt range operations. The club has established written manual procedures that can sustain operations during a system outage. A brief outage — short enough that the line to enter the range absorbs the gap — is acceptable. The kiosk offline event queue (see *Data durability*) captures check-in and check-out events during any connectivity loss and flushes them automatically on reconnect. For operations that cannot queue (admin actions, level changes, dues payments, guest payments), staff fall back to manual procedures and reconcile records after the system restores.
+
+* **Active-active failover:** Aurora promotes the secondary region in approximately 1–2 minutes; Route 53 DNS propagates within the configured TTL. This window is within the acceptable operational tolerance.
+
+* **Single-region restore:** The full RTO target is under 60 minutes. This is a longer stoppage that may exceed the tolerance of a busy range day. The restore path and its time cost should be rehearsed so the Webmaster can execute it confidently under pressure.
+
+**Data loss is the primary concern (RPO):**
+
+The acceptable RPO — how much data the club is willing to lose in a worst-case failure — has not been formally defined. The restore path chosen directly determines the actual RPO:
+
+* **Aurora PITR (preferred):** Restores to within approximately 5 minutes of the failure. Transaction logs are continuously streamed to S3 and are available as long as the Aurora cluster's storage is accessible.
+
+* **AWS Backup daily snapshot (last resort):** Taken at 02:00 UTC. In a worst-case failure immediately before the snapshot window, up to approximately 24 hours of writes could be unrecoverable. **The Webmaster must always attempt PITR first and fall back to the daily snapshot only if PITR is unavailable.**
+
+* **Active-active replication lag:** Aurora Global Database replicates across regions with a typical lag under one second. Writes acknowledged on the primary but not yet replicated at the exact moment of a hard failure can be lost. This window cannot be eliminated — it is an inherent property of asynchronous cross-region replication.
+
+The formal RPO target (e.g., "no more than 5 minutes of data loss") and the conditions under which each restore path is used must be defined before the system goes to production. See **Open Design Question #17**.
 
 ## 9. Architecture Decisions — Frontend Framework
 
@@ -735,7 +828,7 @@ The review independently confirmed the need for a `ranges` table. Both questions
 
 * A `ranges` table (Section 5.2) is the authoritative source for open/close state and `min_training_level` per range. `min_training_level` moves from `devices` to `ranges`.
 * `lanes.range_tag` (TEXT) is replaced by `lanes.range_id` (UUID FK to `ranges.id`).
-* Range open/close is a soft operation: `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open`; existing check-ins are not force-cleared. The RSO physically ensures the range is vacated during the closing procedure.
+* Range open/close is a soft operation: `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open`; lane occupancy is always preserved at closure. Five closure scenarios: **daily-close**, **weather**, **partial** (lane-level via `PATCH /v1/admin/lanes/{lane_id}` — `is_open` stays `true`), **incident**, **other**. RSO clears lanes explicitly via `POST /v1/admin/lanes/{lane_id}/checkout` as each occupant vacates — full audit trail maintained.
 * The endpoint is callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard (Level 4+).
 * Initial seed: Rifle-Pistol (17 lanes), Skeet-Trap, Air-Rifle, Indoor-Archery, Outdoor-Archery. All seed as closed. `min_training_level` values TBD.
 * Lane counts are seeded in the bootstrap migration; future changes use `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration.
@@ -821,8 +914,8 @@ The following are unresolved before implementation begins. Each requires a delib
 | # | Area | Question |
 | :--- | :--- | :--- |
 | 1 | **Waiver signing** | What API endpoint handles waiver capture and signature? What is the payload (PDF blob, digital signature string, member acknowledgement)? Which surface captures it — Kiosk only, or also Member Portal on personal devices? |
-| 2 | **Dues payment** | How are annual dues paid? **Stripe Terminal** (NFC, kiosk only) or **Stripe.js** (card element, personal device via Member Portal)? A personal-device flow requires a different Stripe integration from the Terminal SDK. |
-| 3 | **Service hours logging** | ⏸ Deferred — RSO check-in/check-out events in `activity_logs` serve as an implicit volunteer audit trail. Automated service-hour calculation and promotion are not in scope for this version. `service_hours` retained in `members` as a placeholder. Level 1 → Level 2 promotion remains a manual Administrator action until a dedicated feature is scoped. See Section 10. |
+| 2 | **Dues payment** | ✅ Resolved — two payment paths supported: (1) **Personal device** — Member Portal via **Stripe.js** (card element); `POST /v1/members/me/dues` creates a Payment Intent completed client-side. (2) **Kiosk** — **Stripe Terminal** NFC Tap to Pay; `POST /v1/kiosk/dues` processes payment on the tablet's NFC chip. Both paths set `members.dues_paid_until = December 31 of the current calendar year` (membership covers January 1 – December 31 regardless of payment date) and log a `Dues-Payment` activity. See Section 7.1 and Section 7.2. |
+| 3 | **Service hours logging** | ✅ Resolved — service hours are maintained manually by an Administrator via `PATCH /v1/admin/members/{member_id}/service-hours` (Level 5+). Hours may originate from any volunteer activity, including range shifts recorded in `activity_logs` and contributions outside the system. The Administrator is accountable for the value. When `service_hours >= 6`, the Administrator issues a separate `PATCH /v1/admin/members/{member_id}/level` to promote the member. No automated calculation, no async workflow, no EventBridge Scheduler required. `Service-Hours-Update` added to `activity_logs.activity_type`. See Section 7.3. |
 | 4 | **`training_level` promotion** | ✅ Resolved — manual Administrator action only. `PATCH /v1/admin/members/{member_id}/level` (Level 5+); change recorded in `activity_logs`. No automated rule, no async infra required. See Section 7.3 and Section 10. |
 | 5 | **Range Open / Close** | ✅ Resolved — see Section 5.2 and Section 7.2. `ranges` table added; `PATCH /v1/admin/ranges/{range_id}/status` sets `is_open` (Level 4+); soft close — RSO physically clears the range. Five ranges seeded: Rifle-Pistol, Skeet-Trap, Air-Rifle, Indoor-Archery, Outdoor-Archery (names provisional). |
 | 6 | **Member Portal read endpoints** | ✅ Resolved — `GET /v1/members/me` and `GET /v1/members/me/badge` added to Section 7.1. Both re-query Aurora on every request; no data read from JWT claims. |
@@ -830,9 +923,10 @@ The following are unresolved before implementation begins. Each requires a delib
 | 8 | **Guest Level 0 flow entry point** | ✅ Resolved — guests must be physically present with their sponsoring member; no independent guest entry path exists. The guest add-on step (after member lane assignment) is the exclusive entry point for first-visit waiver capture and payment. See Section 4 and Section 7.2. |
 | 9 | **Real-time RSO check-in view** | ✅ Resolved — kiosk shows local range occupancy (re-fetched after each transaction + 30s poll). Admin Portal / mobile web adds a cross-range supervisory view via `GET /v1/admin/ranges/occupancy` (Level 4+), polled at 30s. No push mechanism required. See Section 7.3 and Section 10. |
 | 10 | **Offline operation architecture** | Member check-in and check-out must continue without internet connectivity. Proposed approach: the kiosk caches an encrypted local snapshot of active member QR tokens, `training_level`, and waiver/dues status at regular intervals while online. On connectivity loss, check-in validation runs against the local cache; events are queued and synced when connectivity restores. Guest payment (Stripe Terminal) requires connectivity and cannot be processed offline — policy decision needed: (a) refuse guest entry during outage, or (b) allow RSO to grant provisional entry at their discretion (no payment record until online). The caching strategy, encryption key management, and conflict-resolution on sync must be defined before kiosk implementation begins. |
-| 11 | **Violation override flow** | When a check-in fails a rule (guest limit exceeded, waiver expired, etc.), the kiosk enters violation alert state that only a Level 4+ RSO can clear. Two resolution paths are needed: (a) **Approve override** — RSO uses their own credential (PIN, NFC badge, or Admin Portal action) to allow entry anyway and record the exception; (b) **Deny entry** — RSO dismisses the alert, check-in is cancelled, lane remains available. The exact RSO authentication mechanism for clearing the alert (to prevent a user self-clearing) must be defined. |
+| 11 | **Violation override flow** | ✅ Resolved — RSO authenticates by tapping their own NFC badge on the kiosk. The kiosk reads `member_id`, queries `training_level` from Aurora, and proceeds only if Level ≥ 4. PIN was rejected: it is observable by the member standing at the kiosk, shareable between RSOs, and produces non-attributed audit log entries. NFC badge scan is unambiguous, non-shareable, and logs the specific RSO's `member_id` as `actor_member_id` for every override. The same mechanism gates RSO Dashboard access from the Idle screen. Two resolution paths: **(a) Approve override** — entry allowed, exception recorded in `activity_logs`; **(b) Deny entry** — check-in cancelled, lane remains `Available`. |
 | 12 | **Lane configuration management** | ✅ Resolved — see Section 5.4 and Section 7.2. Initial counts seeded in bootstrap migration (Rifle-Pistol: 17 lanes); future changes via `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration. |
-| 13 | **Kiosk handoff model** | Two physical deployment models are viable: (a) **RSO-mediated** — RSO holds the tablet, hands it to arriving users for check-in, and takes it back on completion. The RSO is physically present at every check-in and can clear violation alerts directly on the device. (b) **Fixed-mount self-serve** — tablet is mounted at the range entrance; users self-scan. Violation alerts must be pushed to the RSO by another mechanism (e.g., audio alert, secondary RSO dashboard). The handoff model affects the violation-clearing UX, the physical mounting requirements, and whether the tablet needs a "return to RSO dashboard" post-check-in state. |
+| 13 | **Kiosk handoff model** | ✅ Resolved — **RSO-mediated**. Tablets are standard RSO range equipment carried by the RSO on duty. The RSO presents the tablet to arriving members, retains custody, and is physically present at every check-in. The RSO taps their own NFC badge to access the RSO Dashboard or resolve a violation alert — no secondary notification channel required. Fixed-mount self-serve was rejected: it would require a separate RSO notification mechanism for violation alerts and introduces custody ambiguity. |
 | 14 | **Observability strategy** | ✅ Resolved — see Section 10. Structured JSON logging to **Amazon CloudWatch Logs**; X-Ray deferred; three alarms to admin **Amazon SNS** topic; 7-year log retention. |
-| 15 | **Async background workflow scope** | Several non-user-facing operations are currently unplanned: annual dues renewal reminders, waiver expiry warnings (e.g., 30-day advance SMS via **Amazon SNS**), service-hours promotion evaluation (`service_hours >= 6` → Level 2), and audit log export to **Amazon S3** for admin review. These are candidates for an async processing layer (**Amazon SQS** + **AWS Lambda** worker or **Amazon EventBridge Scheduler**). Decisions needed: (a) which events trigger which notifications; (b) whether promotion to Level 2 is fully automated or requires admin confirmation; (c) what the retry and dead-letter policy is for failed notification deliveries. |
+| 15 | **Async background workflow scope** | ✅ Resolved — scope is narrowed to a single workflow: **daily audit log export**. Dues renewal reminders, waiver expiry warnings, and service-hours evaluation are all out of scope (see ODQ #3). Implementation: **Amazon EventBridge Scheduler** fires once per day and publishes a message to an **Amazon SQS** queue; that queue triggers the Lambda (the DLQ is configured on the SQS queue). The Lambda queries `activity_logs` for the prior day's records and writes a newline-delimited JSON file to **Amazon S3** (`audit-logs/{YYYY}/{MM}/{DD}.ndjson`). If the Lambda fails, SQS retries delivery up to the configured maximum before routing the message to the DLQ for inspection — providing at-least-once durability. S3 object retention: **365 days** (S3 Lifecycle rule — objects expire automatically after one year). Note: the 365-day limit applies to the derived export files only; the source data (`activity_logs` rows in Aurora) is retained as long as the database exists, and CloudWatch Logs retain Lambda execution logs for **7 years** per the observability policy (Section 10). The S3 export is a convenience snapshot for operational review and is not the authoritative record. Export is append-only and idempotent on date partition — re-running for the same date overwrites the same S3 key. |
 | 16 | **Guest lookup key** | ✅ Resolved — `guests` uses `(first_name, last_name, phone, email)` as the composite lookup key and unique constraint (Section 5.8). Email is collected alongside name and phone during the kiosk guest add-on step. |
+| 17 | **Acceptable RPO and restore path policy** | The club has not yet defined a formal Recovery Point Objective (RPO) — how much data loss is tolerable in the worst-case failure scenario. The answer determines which restore path the Webmaster must use and whether the current backup strategy is sufficient. Candidate targets: (a) **~5 minutes** — Aurora PITR is the sole restore path; the daily AWS Backup snapshot is retained only for compliance/archival purposes and may never be used for a primary restore. (b) **~24 hours** — the daily snapshot is acceptable as the primary restore path; PITR is a nice-to-have. (c) **Zero tolerance** — requires Aurora Global Database active-active (multi-region writer) and synchronous replication, which is not currently provisioned. The RPO target also affects how the kiosk offline event queue is scoped: if RPO is ~5 minutes, queued offline events that cannot be flushed within that window may need to be escalated differently than events queued during a routine brief outage. Decision needed before production launch. |
