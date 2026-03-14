@@ -288,7 +288,6 @@ erDiagram
     }
 
     members }o--|| training_level_policies : "level lookup"
-    members ||--o{ club_settings : "last updated by"
     ranges ||--o{ devices : "assigned to"
     ranges ||--o{ lanes : "contains"
     members ||--o{ lanes : "occupies"
@@ -305,6 +304,7 @@ erDiagram
     members ||--o{ wait_list : "queued"
     ranges ||--o{ wait_list : "for"
     devices ||--o{ wait_list : "at"
+    members ||--o{ club_settings : "last updated by"
 ```
 
 ### **5.1 Table: `members`**
@@ -385,12 +385,12 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | Column | Type | Description |
 | :--- | :--- | :--- |
 | `id` | BIGINT (PK) | High-volume log ID. |
-| `member_id` | UUID (FK) | The member performing the action for kiosk-originated events (`Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`). For `Level-Change` and `Service-Hours-Update` events: the **target member** whose record was changed. For portal-originated events (`Dues-Payment` via personal device): the paying member. |
-| `actor_member_id` | UUID (FK, Nullable) | The Administrator who performed the action. Populated for `Level-Change` events (resolved from JWT `sub` → `members.id` at write time); `NULL` for all kiosk-originated event types and member portal event types where `member_id` is the actor. |
-| `device_id` | UUID (FK, Nullable) | Reference to the `devices` table. `NULL` for non-kiosk events (`Level-Change` and `Service-Hours-Update` performed from the Admin Portal; `Dues-Payment` completed via the Member Portal personal-device path). |
+| `member_id` | UUID (FK) | The member performing the action for kiosk-originated events (`Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`) and portal-originated events (`Dues-Payment`). For `Level-Change` and `Service-Hours-Update` events: the **target member** whose record was changed. |
+| `actor_member_id` | UUID (FK, Nullable) | The Administrator who performed the action. Populated for `Level-Change` events (resolved from JWT `sub` → `members.id` at write time); `NULL` for all kiosk-originated and member portal event types where `member_id` is the actor. |
+| `device_id` | UUID (FK, Nullable) | Reference to the `devices` table. `NULL` for non-kiosk events (`Level-Change` and `Service-Hours-Update` performed from the Admin Portal; `Dues-Payment` completed via the Member Portal personal-device path). Populated for kiosk-originated events including `Dues-Payment` completed at the kiosk via Stripe Terminal. |
 | `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`, `Level-Change`, `Dues-Payment`, `Service-Hours-Update` |
 | `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; `NULL` for `Waiver-Signed`, `Level-Change`, `Dues-Payment`, and `Service-Hours-Update` events which have no lane context. |
-| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` and `Dues-Payment` events. For `Guest-Payment`, linked to the lane/visit via `lane_id`. For `Dues-Payment`, `lane_id` is `NULL` — the Payment Intent is linked directly to the member via `member_id`. |
+| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` and `Dues-Payment` events. Linked to the lane/visit via `lane_id` for guest payments; `lane_id` is `NULL` for dues payments. |
 | `guest_id` | UUID (FK, Nullable) | FK to `guests.id`; populated for `Guest-Payment` and `Waiver-Signed` events involving a guest. Null for all other activity types. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
 
@@ -536,13 +536,19 @@ A single-row configuration table. Stores club-wide scalars that Administrators m
 
 Every layer of the stack is designed so that a transient failure — power interruption, Lambda timeout, network blip — cannot silently discard in-flight data.
 
-* **Aurora write quorum:** Aurora Serverless v2 writes to 4-of-6 storage nodes across three Availability Zones before acknowledging the write. A single node failure is transparent to the application.
-* **Atomic transactions:** Every kiosk operation that touches multiple tables (lane assignment, guest payment, wait list advance) executes inside a single Aurora transaction via the **RDS Data API**. A Lambda timeout or network interruption mid-write causes Aurora to roll the transaction back in full — no partial records.
-* **Client-side retry responsibility:** The kiosk and Member Portal must treat any `5xx` response as retriable. All write endpoints are designed to be duplicate-safe: idempotency keys (Stripe Payment Intent ID, `(member_id, activity_type, occurred_at)` composite) prevent duplicate records from retry storms.
+* **Aurora write quorum:** Aurora Serverless v2 uses a distributed storage engine that replicates every write across six storage nodes in three Availability Zones. A write is only acknowledged to the application after at least four of those six nodes confirm it. A power failure or crash *after* acknowledgment cannot lose the write — it is already durable in multiple AZs before the Lambda returns.
+
+* **Atomic transactions:** All multi-step database operations (check-in, check-out, wait-list queue advance, payment confirmation) execute inside a single Aurora transaction via the RDS Data API. If a Lambda is interrupted or times out mid-transaction, Aurora automatically rolls back the incomplete transaction. The database is never left in a partial-write state — the operation either committed fully or did not commit at all.
+
+* **Client-side retry responsibility:** API Gateway does not automatically retry a Lambda invocation that fails mid-execution. The kiosk and Member Portal must treat any `5xx` response as retriable. All write endpoints are designed to be safe to retry: check-in and check-out use the member's existing `activity_logs` record to detect duplicates; payment endpoints are idempotent on Stripe's `payment_intent_id`.
+
 * **Offline check-in / check-out event queue:** If internet connectivity is unavailable when a member checks in or out, the kiosk writes the event to a durable local queue stored in encrypted persistent storage on the device. The event survives app restarts and power cycles. As soon as connectivity restores, the kiosk flushes the queue to Aurora via the normal `POST /v1/kiosk/check-in` and `POST /v1/kiosk/check-out` endpoints. `activity_logs` entries are insert-only and idempotent on `(member_id, activity_type, occurred_at)` so replaying queued events on reconnect cannot produce duplicate records. No check-in or check-out event is ever discarded due to a connectivity gap. See **ODQ #10** for the full offline architecture specification (cache encryption, key management, conflict resolution on sync).
-* **Stripe webhook durability:** Stripe retries failed webhook deliveries for up to 72 hours with exponential back-off. The webhook Lambda is idempotent on Payment Intent ID — a retry of an already-processed event is a no-op.
-* **Stripe Terminal in-flight recovery:** The Stripe Terminal SDK tracks PaymentIntent state on the device. If connectivity drops mid-transaction, the SDK recovers the PaymentIntent state on reconnect and completes or cancels cleanly — no duplicate charges.
-* **Future async workflows:** Any background processing added in future (e.g., audit log export per ODQ #15) must use **Amazon SQS** with a **Dead-Letter Queue (DLQ)**. Silent message drops — fire-and-forget Lambda invocations — are not permitted.
+
+* **Stripe webhook durability:** Stripe retries a failed `payment_intent.succeeded` webhook delivery for up to 72 hours with exponential backoff. The webhook Lambda handler is idempotent on Payment Intent ID — duplicate deliveries of the same event are detected and ignored, so a payment is never double-applied even if the webhook fires multiple times.
+
+* **Stripe Terminal in-flight recovery:** The Stripe Terminal SDK tracks the current PaymentIntent state on the device. If connectivity is lost mid-transaction (e.g., a network blip during NFC tap), the SDK can recover the PaymentIntent and confirm or cancel it on reconnect — the payment is not silently abandoned.
+
+* **Future async workflows:** Any background processing added in the future (dues reminders, waiver expiry notifications, audit log exports) must use **Amazon SQS** with a configured **Dead-Letter Queue (DLQ)**. This guarantees at-least-once delivery: if a worker Lambda fails, the message is retried up to the configured maximum before landing in the DLQ for inspection. Messages are never silently dropped.
 
 ## 7. API Outlines (AWS-Native / RESTful)
 
@@ -573,7 +579,7 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Returns:** `200 OK` with `{ range_id, name, is_open, lanes: [{ lane_id, lane_number, status, current_member_id, member_num, guest_count, checked_in_at }] }`. `member_num` and `checked_in_at` are `null` when `status` is `Available`.
 
 * **`POST /v1/kiosk/check-in`**
-  * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry is transitioned to `Checked-In` on successful lane assignment). If no lanes have `status = 'Available'` (all are `Occupied` or `Closed`), a `wait_list` row is inserted (storing `guest_count` for later lane scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If a lane is available, selects the lane that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
+  * **Logic:** Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry is transitioned to `Checked-In` on successful lane assignment). If no lanes have `status = 'Available'` (all are `Occupied` or `Closed`), a `wait_list` row is inserted (storing `guest_count` for later lane scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If an `Available` lane exists, selects the one that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
   * **Returns:** `200 OK` with `{ lane_number }` (lane assigned), `202 Accepted` with `{ wait_position }` (range full — added to wait list), or `403 Forbidden` (e.g., "Level 3 Required", "Guests not permitted at this level").
 
 * **`POST /v1/kiosk/check-out`**
@@ -614,7 +620,7 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
   * **Returns:** `200 OK` with `{ device_token }` or `400 Bad Request` (invalid/expired code).
 
 * **`PATCH /v1/admin/ranges/{range_id}/status`** (**Level 4+** RSO)
-  * **Logic:** Sets `ranges.is_open` to `true` or `false`. Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard. Closing a range is always a soft operation — lane occupancy is preserved exactly as it is at the moment of closure regardless of the reason. Five closure scenarios are recognised: **daily-close** (end of operating day), **weather** (conditions unsafe or unsuitable), **partial** (a subset of lanes taken out of service — note: partial closure is handled at the lane level via `PATCH /v1/admin/lanes/{lane_id}` setting `status = 'Closed'`; `is_open` is not set to `false` for a partial closure while other lanes remain available), **incident** (safety event), and **other** (RSO discretion). The RSO Dashboard remains functional and continues displaying live lane occupancy while `is_open = false`, allowing the RSO to retain full visibility of who is on the range and clear lanes explicitly as each occupant vacates.
+  * **Logic:** Sets `ranges.is_open` to `true` or `false`. Callable from both the **Admin Portal** and the **Kiosk View** RSO dashboard. Closing a range is always a soft operation — lane occupancy is preserved exactly as it is at the moment of closure regardless of the reason. Five closure scenarios are recognised: **daily-close** (end of operating day), **weather** (conditions unsafe or unsuitable), **partial** (a subset of lanes taken out of service — note: partial closure is handled at the lane level via `PATCH /v1/admin/lanes/{lane_id}` setting `status = 'Closed'`; `is_open` is not set to `false` for a partial closure while other lanes remain available), **incident** (safety event), and **other** (RSO discretion). The RSO Dashboard remains functional and continues displaying live lane occupancy while `is_open = false`, allowing the RSO to retains full visibility of who is on the range and clear lanes explicitly as each occupant vacates.
   * **Returns:** `200 OK` or `403 Forbidden`.
 
 * **`POST /v1/admin/lanes/{lane_id}/checkout`** (**Level 4+** RSO)
@@ -761,17 +767,27 @@ Each region runs an independent copy of the stack. Configuration drift — where
 
 ### The "Red Button" procedure
 
-**Operations continuity** during a full primary-region failure is acceptable — brief outage is tolerable, and manual fallbacks exist for the duration. The offline check-in/check-out event queue ensures no range access events are lost during the outage window.
+In a full primary-region failure with active-active enabled: **Aurora Global Database** fails over and promotes a reader cluster in a secondary region to writer, and **Route 53** updates DNS to route traffic to the healthy regional endpoint. In single-region mode: the **Webmaster** deploys the stack to a new region using the IaC parameters and restores Aurora from an **Aurora point-in-time restore** (preferred) or **AWS Backup** daily snapshot as a last resort. Target RTO: under 60 minutes from a cold start.
 
-* **Active-active deployment:** Aurora Global Database fails over and promotes a reader cluster to writer; Route 53 updates DNS within ~30 seconds. Estimated outage window: **1–2 minutes**.
-* **Single-region deployment:** The Webmaster deploys the stack to a new region using the IaC parameters, then restores Aurora. Target RTO: **under 60 minutes** from cold start.
+**Operations continuity during the procedure:**
 
-**Data loss (RPO) is the primary concern** — once the system is back online, any records lost during the failure window cannot be recovered.
+A technology outage does not halt range operations. The club has established written manual procedures that can sustain operations during a system outage. A brief outage — short enough that the line to enter the range absorbs the gap — is acceptable. The kiosk offline event queue (see *Data durability*) captures check-in and check-out events during any connectivity loss and flushes them automatically on reconnect. For operations that cannot queue (admin actions, level changes, dues payments, guest payments), staff fall back to manual procedures and reconcile records after the system restores.
 
-* **Aurora PITR (preferred restore path):** Continuous backup; restore to any second within the 35-day window. In practice, RPO is approximately **5 minutes** — the maximum lag between the last durable write and the failure point.
-* **AWS Backup daily snapshot (last-resort path):** If PITR is unavailable (e.g., cluster corruption), the most recent daily snapshot can be restored. In the worst case this means up to **~24 hours** of data loss. The Webmaster must always attempt PITR before falling back to a daily snapshot.
-* **Active-active replication lag:** Aurora Global Database replication lag is typically under 1 second and is irreducible by design — this is the minimum achievable RPO for a regionally replicated writer.
-* **Formal RPO target:** The club has not yet defined an acceptable RPO threshold. See **ODQ #17**.
+* **Active-active failover:** Aurora promotes the secondary region in approximately 1–2 minutes; Route 53 DNS propagates within the configured TTL. This window is within the acceptable operational tolerance.
+
+* **Single-region restore:** The full RTO target is under 60 minutes. This is a longer stoppage that may exceed the tolerance of a busy range day. The restore path and its time cost should be rehearsed so the Webmaster can execute it confidently under pressure.
+
+**Data loss is the primary concern (RPO):**
+
+The acceptable RPO — how much data the club is willing to lose in a worst-case failure — has not been formally defined. The restore path chosen directly determines the actual RPO:
+
+* **Aurora PITR (preferred):** Restores to within approximately 5 minutes of the failure. Transaction logs are continuously streamed to S3 and are available as long as the Aurora cluster's storage is accessible.
+
+* **AWS Backup daily snapshot (last resort):** Taken at 02:00 UTC. In a worst-case failure immediately before the snapshot window, up to approximately 24 hours of writes could be unrecoverable. **The Webmaster must always attempt PITR first and fall back to the daily snapshot only if PITR is unavailable.**
+
+* **Active-active replication lag:** Aurora Global Database replicates across regions with a typical lag under one second. Writes acknowledged on the primary but not yet replicated at the exact moment of a hard failure can be lost. This window cannot be eliminated — it is an inherent property of asynchronous cross-region replication.
+
+The formal RPO target (e.g., "no more than 5 minutes of data loss") and the conditions under which each restore path is used must be defined before the system goes to production. See **Open Design Question #17**.
 
 ## 9. Architecture Decisions — Frontend Framework
 
@@ -883,9 +899,9 @@ Two surfaces serve different audiences:
 
 All training level changes are explicit **Administrator (Level 5+)** actions. There is no automated promotion rule. An Administrator reviews the member's record and calls `PATCH /v1/admin/members/{member_id}/level` with the new level; the change is recorded in `activity_logs` with `activity_type = 'Level-Change'`. This eliminates the need for an async promotion workflow, **Amazon EventBridge Scheduler**, or **Amazon SQS** for this purpose.
 
-### Resolved: Service hours logging (ODQ #3)
+### Deferred: Service hours logging (ODQ #3)
 
-Service hours are maintained manually by an Administrator via `PATCH /v1/admin/members/{member_id}/service-hours` (Level 5+). Hours may originate from any volunteer activity, including range shifts recorded in `activity_logs` and contributions outside the system. The Administrator is accountable for the accuracy of the value. When `service_hours >= 6`, the Administrator issues a separate `PATCH /v1/admin/members/{member_id}/level` to promote the member — the two steps are intentionally distinct to keep a human in the loop. `Service-Hours-Update` added to `activity_logs.activity_type`. See Section 7.3.
+Range-qualified members (Level 3) earn their status by completing a minimum 6-hour volunteer service commitment — RSOs are themselves volunteers. RSO check-in and check-out events recorded in `activity_logs` provide an implicit audit trail of volunteer activity, but automated service-hour calculation and promotion workflows are not a primary function of this system version. The `service_hours` column is retained in `members` as a placeholder for a future integration. Level 1 → Level 2 promotion remains a manual Administrator action (see ODQ #4) until a dedicated service-hours tracking feature is scoped.
 
 ### Accepted: Async background workflows are unplanned
 
@@ -911,6 +927,6 @@ The following are unresolved before implementation begins. Each requires a delib
 | 12 | **Lane configuration management** | ✅ Resolved — see Section 5.4 and Section 7.2. Initial counts seeded in bootstrap migration (Rifle-Pistol: 17 lanes); future changes via `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration. |
 | 13 | **Kiosk handoff model** | ✅ Resolved — **RSO-mediated**. Tablets are standard RSO range equipment carried by the RSO on duty. The RSO presents the tablet to arriving members, retains custody, and is physically present at every check-in. The RSO taps their own NFC badge to access the RSO Dashboard or resolve a violation alert — no secondary notification channel required. Fixed-mount self-serve was rejected: it would require a separate RSO notification mechanism for violation alerts and introduces custody ambiguity. |
 | 14 | **Observability strategy** | ✅ Resolved — see Section 10. Structured JSON logging to **Amazon CloudWatch Logs**; X-Ray deferred; three alarms to admin **Amazon SNS** topic; 7-year log retention. |
-| 15 | **Async background workflow scope** | ✅ Resolved — scope is narrowed to a single workflow: **daily audit log export**. Dues renewal reminders, waiver expiry warnings, and service-hours evaluation are all out of scope (see ODQ #3). Implementation: **Amazon EventBridge Scheduler** triggers a Lambda once per day; Lambda queries `activity_logs` for the prior day's records and writes a newline-delimited JSON file to **Amazon S3** (`audit-logs/{YYYY}/{MM}/{DD}.ndjson`). SQS + DLQ wraps the Lambda invocation per the Data durability policy. S3 object retention: **365 days** (S3 Lifecycle rule). Export is append-only and idempotent on date partition. |
+| 15 | **Async background workflow scope** | ✅ Resolved — scope is narrowed to a single workflow: **daily audit log export**. Dues renewal reminders, waiver expiry warnings, and service-hours evaluation are all out of scope (see ODQ #3). Implementation: **Amazon EventBridge Scheduler** triggers a Lambda once per day; Lambda queries `activity_logs` for the prior day's records and writes a newline-delimited JSON file to **Amazon S3** (`audit-logs/{YYYY}/{MM}/{DD}.ndjson`). SQS + DLQ wraps the Lambda invocation per the Data durability policy. S3 object retention: **365 days** (S3 Lifecycle rule — objects expire automatically after one year). Export is append-only and idempotent on date partition — re-running for the same date overwrites the same S3 key. |
 | 16 | **Guest lookup key** | ✅ Resolved — `guests` uses `(first_name, last_name, phone, email)` as the composite lookup key and unique constraint (Section 5.8). Email is collected alongside name and phone during the kiosk guest add-on step. |
-| 17 | **Acceptable RPO and restore path policy** | The club has not yet defined a formal Recovery Point Objective (RPO) — how much data loss is tolerable in the worst-case failure scenario. Candidate targets: (a) ~5 minutes — PITR sole restore path; (b) ~24 hours — daily snapshot acceptable; (c) Zero tolerance — requires active-active not currently provisioned. Decision needed before production launch. |
+| 17 | **Acceptable RPO and restore path policy** | The club has not yet defined a formal Recovery Point Objective (RPO) — how much data loss is tolerable in the worst-case failure scenario. The answer determines which restore path the Webmaster must use and whether the current backup strategy is sufficient. Candidate targets: (a) **~5 minutes** — Aurora PITR is the sole restore path; the daily AWS Backup snapshot is retained only for compliance/archival purposes and may never be used for a primary restore. (b) **~24 hours** — the daily snapshot is acceptable as the primary restore path; PITR is a nice-to-have. (c) **Zero tolerance** — requires Aurora Global Database active-active (multi-region writer) and synchronous replication, which is not currently provisioned. The RPO target also affects how the kiosk offline event queue is scoped: if RPO is ~5 minutes, queued offline events that cannot be flushed within that window may need to be escalated differently than events queued during a routine brief outage. Decision needed before production launch. |
