@@ -68,7 +68,8 @@ Use these tokens consistently across all surfaces:
 
 ## RBAC — Level-Gated UI
 
-* Derive the current user's `training_level` from the **AWS Cognito** session token on every protected render
+* Derive the current user's `training_level` from the **AWS Cognito** session token **for UI rendering only** — use it to show, hide, or redirect UI elements on the client side
+* The JWT claim is **not** authoritative for access decisions; every Lambda re-queries `training_level` from Aurora on every request. Do not invent a client-side enforcement path that bypasses the server.
 * Hide, disable, or redirect UI elements that exceed the user's level — do not just hide buttons while leaving routes accessible
 * Admin Portal section visibility by minimum level:
 
