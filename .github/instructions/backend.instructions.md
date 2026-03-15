@@ -88,8 +88,9 @@ Never log raw device token values, Stripe secret keys, or full JWT strings.
 ### Kiosk endpoints (Device Token)
 
 * Extract `x-device-token` from `event["headers"]`
-* Query the `devices` table via the **RDS Data API**: `SELECT status FROM devices WHERE device_token = :token`
-* Reject tokens where `status != 'Active'` with `403 Forbidden`
+* Compute the HMAC-SHA256 hash of the incoming token (same algorithm as generation: `hmac.new(salt.encode(), token.encode(), hashlib.sha256).hexdigest()`)
+* Query the `devices` table by the **hash**: `SELECT id, status FROM devices WHERE device_token = :hashed_token` — never query by the raw token value
+* Reject rows where `status != 'Active'` with `403 Forbidden`
 * Never log the raw device token value
 
 ## Database — RDS Data API

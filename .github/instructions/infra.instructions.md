@@ -150,7 +150,7 @@ Always use **A ALIAS** records (not CNAME) for API Gateway — ALIAS records are
 
 ### Health checks (multi-region only)
 
-* One health check per regional API Gateway endpoint, monitoring `GET /health` (a lightweight Lambda that returns `200 OK`)
+* One health check per regional API Gateway endpoint, monitoring `GET /v1/health` (a lightweight Lambda that returns `200 OK`)
 * Type: `HTTPS`; resource path: `/v1/health`; request interval: `30` seconds; failure threshold: `3`
 * Associate each latency/failover record with its regional health check
 * When `IsMultiRegion` is false, skip health check resources to avoid cost

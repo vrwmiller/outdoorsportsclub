@@ -45,7 +45,7 @@ Implement exactly the contracts specified in `docs/design.md` Section 7. Do not 
 | `POST` | `/v1/kiosk/consumable-purchase` | Cash / Stripe Terminal payment → write line items to `consumable_purchases` |
 | `POST` | `/v1/kiosk/dues` | Kiosk dues payment (Cash, NFC, or Card); Cash writes directly; NFC/Card confirmed by `payment_intent.succeeded` webhook |
 | `POST` | `/v1/kiosk/guest-payment` | Look up or create guest → check waiver and annual limit → Cash / Stripe Terminal payment → write `Guest-Payment` to `activity_logs` |
-| `POST` | `/v1/kiosk/waiver` | Receive signature PNG → embed in PDF → upload to `S3_WAIVER_BUCKET` → write `Waiver-Signed` to `activity_logs` with `waiver_s3_key`; update `members.waiver_signed_at` and `waiver_version` |
+| `POST` | `/v1/kiosk/waiver` | Receive base64-encoded PDF (assembled client-side by `signature_pad`) → upload to `S3_WAIVER_BUCKET` → write `Waiver-Signed` to `activity_logs` with `waiver_s3_key`; member path updates `members.waiver_signed_at`/`waiver_version`; guest path (`guest_id` present) updates `guests.waiver_signed_at`/`waiver_s3_key` instead |
 
 ### Administrative endpoints (Cognito JWT auth)
 

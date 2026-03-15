@@ -426,7 +426,7 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` and `Dues-Payment` events processed via NFC or Card. `NULL` for cash payments and for all non-payment activity types. Linked to the lane/visit via `lane_id` for guest payments; `lane_id` is `NULL` for dues payments. |
 | `payment_method` | TEXT (Nullable) | Payment method used: `NFC`, `Card`, or `Cash`. Populated for `Guest-Payment` and `Dues-Payment` events; `NULL` for all other activity types. |
 | `guest_id` | UUID (FK, Nullable) | FK to `guests.id`; populated for `Guest-Payment` and `Waiver-Signed` events involving a guest. Null for all other activity types. |
-| `waiver_s3_key` | TEXT (Nullable) | S3 object key for the signed waiver PDF (`waivers/<member_id>/<timestamp>.pdf`); populated for `Waiver-Signed` events only. Used to retrieve the document for on-demand viewing, printing, or email. `NULL` for all other activity types. |
+| `waiver_s3_key` | TEXT (Nullable) | S3 object key for the signed waiver PDF; populated for `Waiver-Signed` events only. Key pattern: `waivers/<member_id>/<timestamp>.pdf` for member waivers; `waivers/guests/<guest_id>/<timestamp>.pdf` for guest waivers. Used to retrieve the document for on-demand viewing, printing, or email. `NULL` for all other activity types. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
 
 ### **5.6 Table: `training_level_policies`**

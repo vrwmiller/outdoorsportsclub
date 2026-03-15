@@ -25,7 +25,7 @@ A new entry is warranted when **all three** of the following are true:
 
 1. **The decision is significant** — it affects the tech stack, a major integration, a security boundary, or the data model in a way that will be hard to reverse
 2. **Alternatives were meaningfully evaluated** — at least two options were considered; the reasoning for rejection is non-trivial and worth preserving
-3. **The rationale would otherwise be lost** — the context lives only in of Slack threads, meeting notes, or someone's memory; writing it down prevents future re-litigation
+3. **The rationale would otherwise be lost** — the context lives only in Slack threads, meeting notes, or someone's memory; writing it down prevents future re-litigation
 
 If only the decision outcome matters (no substantive tradeoff analysis), document it in `design.md` only — `design.md` ODQs are the right home for lightweight resolutions.
 
