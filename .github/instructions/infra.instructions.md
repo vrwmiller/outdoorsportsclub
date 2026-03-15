@@ -213,6 +213,48 @@ Resources:
 * Enable automatic rotation where supported (Aurora master credentials support native rotation via Secrets Manager)
 * Secret naming: `osc/<env>/<purpose>` (e.g., `osc/prod/aurora-master`, `osc/prod/stripe-key`, `osc/prod/device-token-salt`)
 
+### Secret inventory
+
+| Secret name | Used by | Lambda env var |
+| :--- | :--- | :--- |
+| `osc/<env>/aurora-master` | RDS Data API (cluster auth) | `DB_SECRET_ARN` |
+| `osc/<env>/stripe-key` | Stripe SDK in Lambda | `STRIPE_SECRET_ARN` |
+| `osc/<env>/device-token-salt` | Device token HMAC in Lambda | `DEVICE_TOKEN_SALT_ARN` |
+
+### Name → ARN wiring pattern
+
+Lambda env vars must reference the **ARN**, not the human-readable name. Use CloudFormation `Outputs` in `secrets.yaml` to export each secret's ARN, then import them into the Lambda stack via `Fn::ImportValue`:
+
+```yaml
+# secrets.yaml — export the ARN
+Outputs:
+  StripeSecretArn:
+    Value: !Ref StripeSecret
+    Export:
+      Name: !Sub "osc-stripe-secret-arn-${Environment}"
+
+  DeviceTokenSaltArn:
+    Value: !Ref DeviceTokenSaltSecret
+    Export:
+      Name: !Sub "osc-device-token-salt-arn-${Environment}"
+```
+
+```yaml
+# In the Lambda stack (e.g., api.yaml) — import the ARN into the function's environment
+KioskPairLambda:
+  Type: AWS::Lambda::Function
+  Properties:
+    Environment:
+      Variables:
+        DEVICE_TOKEN_SALT_ARN: !ImportValue
+          Fn::Sub: "osc-device-token-salt-arn-${Environment}"
+        STRIPE_SECRET_ARN: !ImportValue
+          Fn::Sub: "osc-stripe-secret-arn-${Environment}"
+```
+
+* Never pass the human-readable secret name as an env var — only ARNs
+* The same pattern applies to `DB_SECRET_ARN` (exported from `aurora.yaml`)
+
 ## AWS Backup
 
 * Backup plan targets the Aurora cluster and S3 waiver bucket
