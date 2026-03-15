@@ -56,6 +56,7 @@ Use these tokens consistently across all surfaces:
     * Success: green background, member name, training level confirmed
     * Denied: red background, reason code (e.g., "Level 3 Required", "Waiver Expired")
 * Consumable purchase flow: item selection → quantity → NFC payment prompt → confirmation; never skip a step
+* Waiver signing flow: display full waiver text (scrollable) → signature canvas (`signature_pad` — supports finger and S Pen input on the **Samsung Galaxy Tab Active5**) → confirmation screen → submit; the canvas PNG is included in the PDF payload sent to the backend; never allow the submit button to be active when the canvas is blank or contains fewer than 50 points (reject near-blank signatures)
 
 ## API Wiring
 

@@ -33,7 +33,7 @@ These have been decided. Do not introduce alternatives or ambiguity around them.
 | SMS notifications | **Amazon SNS** |
 | QR badge payload | Opaque token (value of `member_num`); generated client-side via `react-qr-code` |
 | QR scanning | `html5-qrcode` in the Next.js kiosk view; POSTs to `POST /v1/kiosk/check-in` |
-| Waiver capture | **Kiosk View only** — waiver signing is not available on the **Member Portal**. Payload stored in **Amazon S3** with **S3 Object Lock** (Compliance Mode, 7-year retention); PDFs generated on-demand. See `docs/design.md` Section 5.1 and Section 7.2. |
+| Waiver capture | **Kiosk View only** — waiver signing is not available on the **Member Portal**. Member signs on-screen via `signature_pad` (finger or S Pen on the **Samsung Galaxy Tab Active5**); PDF stored directly in **Amazon S3** with **S3 Object Lock** (Compliance Mode, 7-year retention). S3 object key written to `activity_logs.waiver_s3_key` for retrieval. See `docs/design.md` Section 5.5 and Section 7.2. |
 | Disaster recovery | **AWS Backup** cross-region replication; IaC via **AWS CloudFormation** or **Amplify Gen 2**. RPO target: **~5 minutes** — Aurora PITR primary, daily snapshot fallback. See `docs/design.md` Section 8. |
 
 ## Writing Conventions
