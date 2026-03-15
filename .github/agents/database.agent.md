@@ -23,9 +23,16 @@ All tables are defined in `docs/design.md` Section 5. Current tables:
 | Table | Purpose |
 | :--- | :--- |
 | `members` | Core member record; `training_level` drives all RBAC |
-| `devices` | Kiosk tablet registry; Device Token lives here |
-| `activity_logs` | Immutable event log — check-ins, check-outs, payments, waivers |
+| `ranges` | Physical ranges; authoritative source for `is_open` and `min_training_level` |
+| `devices` | Kiosk tablet registry; Device Token and pairing code live here; FK to `ranges` |
+| `lanes` | Per-range lane occupancy; `status` (`Available`, `Occupied`, `Closed`) and `current_member_id` |
+| `activity_logs` | Immutable event log — check-ins, check-outs, payments, waivers; `waiver_s3_key` on `Waiver-Signed` rows |
+| `training_level_policies` | Per-level `max_guests` scalar; enforced at check-in without a schema migration |
 | `consumable_purchases` | Line-item record of range consumable sales |
+| `guests` | Persistent guest identity; `waiver_signed_at` and `waiver_s3_key` for waiver-on-file checks |
+| `guest_visits` | One row per range visit per guest; enforces the annual-2-visit limit |
+| `wait_list` | Queue entries when all lanes are occupied; `position`, `status`, `expires_at` |
+| `club_settings` | Single-row config table; `annual_dues_cents` and audit metadata |
 
 ## Constraints
 
