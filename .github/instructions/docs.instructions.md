@@ -29,7 +29,7 @@ These have been decided. Do not introduce alternatives or ambiguity around them.
 | Frontend framework | **Next.js** hosted via **AWS Amplify Gen 2** |
 | Auth | **AWS Cognito** with Social Login (Google/Facebook) for members; Device Token for kiosks |
 | Database | **Amazon Aurora Serverless v2** (PostgreSQL) |
-| Payment processor | **Stripe Terminal SDK** — Tap to Pay via tablet NFC; no external card reader hardware |
+| Payment processor | **Stripe Terminal SDK** — Tap to Pay via tablet NFC (primary); optional Stripe Terminal hardware reader (e.g. Stripe Reader M2) for physical card as fallback. **Stripe.js** for online dues via **Member Portal** (card element, no NFC hardware required). |
 | SMS notifications | **Amazon SNS** |
 | QR badge payload | Opaque token (value of `member_num`); generated client-side via `react-qr-code` |
 | QR scanning | `html5-qrcode` in the Next.js kiosk view; POSTs to `POST /v1/kiosk/check-in` |
