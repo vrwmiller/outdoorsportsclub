@@ -73,14 +73,41 @@ def lambda_env(monkeypatch):
     monkeypatch.setenv("COGNITO_USER_POOL_ID", "us-east-1_TESTPOOL")
     monkeypatch.setenv("COGNITO_REGION", "us-east-1")
     monkeypatch.setenv("STRIPE_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:123456789012:secret:stripe")
+    monkeypatch.setenv("DEVICE_TOKEN_SALT_ARN", "arn:aws:secretsmanager:us-east-1:123456789012:secret:salt")
     monkeypatch.setenv("S3_WAIVER_BUCKET", "test-waivers")
     monkeypatch.setenv("SNS_ALERTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:test-alerts")
     monkeypatch.setenv("CORS_ALLOW_ORIGIN", "http://localhost:3000")
 ```
 
 - Scope `@mock_aws` to individual test functions or classes — never at module level
-- Mock the Cognito JWKS validation at the function level using `mocker.patch`
-- Never use `training_level` from a fake JWT claim — mock the RDS Data API response to return the authoritative value
+- Mock the Cognito JWKS validation at the function level using `mocker.patch`; patch the fully qualified name of the validation helper in the handler module, not the library itself:
+
+  ```python
+  # Assume your handler imports: from auth import validate_token
+  # validate_token returns the decoded claims dict on success, raises on failure
+  def test_happy_path(mocker, lambda_env):
+      mocker.patch(
+          "functions.check_in.validate_token",
+          return_value={"sub": "member-uuid-1234", "training_level": 2},
+      )
+      # NOTE: training_level in the mock return value is used only to satisfy type
+      # requirements in the JWT claims dict — the handler must re-query Aurora for
+      # the authoritative value and MUST NOT rely on the claim for access control.
+  ```
+
+- Never use `training_level` from a fake JWT claim for access-control assertions — mock the RDS Data API response to return the authoritative value:
+
+  ```python
+  def test_insufficient_level_returns_403(mocker, lambda_env):
+      mocker.patch("functions.check_in.validate_token", return_value={"sub": "member-uuid-1234"})
+      # Mock the RDS re-query to return training_level = 1 (below required threshold)
+      mocker.patch(
+          "functions.check_in.rds_client.execute_statement",
+          return_value={"records": [[{"longValue": 1}]]},  # training_level = 1
+      )
+      response = handler(event_with_auth, {})
+      assert response["statusCode"] == 403
+  ```
 
 ### Coverage requirement
 

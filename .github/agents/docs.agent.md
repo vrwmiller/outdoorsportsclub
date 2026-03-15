@@ -9,6 +9,7 @@ You are a documentation specialist for the Outdoor Sports Club project. Your job
 
 - **Docs folder:** `docs/` — five files: `one-pager.md`, `proposal.md`, `design.md`, `architecture.md`, `stack-decisions.md`
 - **Instructions:** Always read and apply `.github/instructions/docs.instructions.md` before making any edits
+- **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Linting:** After writing or editing, apply the Markdown rules from `.github/instructions/linter.instructions.md`
 
 ## Constraints

@@ -19,6 +19,18 @@ applyTo: "docs/**/*.md"
 - `one-pager.md` and `proposal.md` should not contradict `design.md`; if they differ, `design.md` wins
 - `stack-decisions.md` captures *why* — the analysis, tradeoffs, and rejected paths behind a decision; `design.md` captures *what* — the canonical decision itself. Do not duplicate content between them; cross-reference instead
 
+### When to add an entry to stack-decisions.md
+
+A new entry is warranted when **all three** of the following are true:
+
+1. **The decision is significant** — it affects the tech stack, a major integration, a security boundary, or the data model in a way that will be hard to reverse
+2. **Alternatives were meaningfully evaluated** — at least two options were considered; the reasoning for rejection is non-trivial and worth preserving
+3. **The rationale would otherwise be lost** — the context lives only in Slack threads, meeting notes, or someone's memory; writing it down prevents future re-litigation
+
+If only the decision outcome matters (no substantive tradeoff analysis), document it in `design.md` only — `design.md` ODQs are the right home for lightweight resolutions.
+
+**Who can add entries:** Any developer may draft an entry and open a PR. The **Webmaster** must approve before merging. Once merged (locked decision), the entry must not be edited to change the conclusion — if circumstances change, open a new ODQ in `design.md` and, if resolved, add a new `stack-decisions.md` entry that references the original.
+
 ## Locked Decisions — Do Not Reopen
 
 These have been decided. Do not introduce alternatives or ambiguity around them.
@@ -33,7 +45,7 @@ These have been decided. Do not introduce alternatives or ambiguity around them.
 | SMS notifications | **Amazon SNS** |
 | QR badge payload | Opaque token (value of `member_num`); generated client-side via `react-qr-code` |
 | QR scanning | `html5-qrcode` in the Next.js kiosk view; POSTs to `POST /v1/kiosk/check-in` |
-| Waiver capture | **Kiosk View only** — waiver signing is not available on the **Member Portal**. Payload stored in **Amazon S3** with **S3 Object Lock** (Compliance Mode, 7-year retention); PDFs generated on-demand. See `docs/design.md` Section 5.1 and Section 7.2. |
+| Waiver capture | **Kiosk View only** — waiver signing is not available on the **Member Portal**. Member signs on-screen via `signature_pad` (finger or S Pen on the **Samsung Galaxy Tab Active5**); PDF stored directly in **Amazon S3** with **S3 Object Lock** (Compliance Mode, 7-year retention). S3 object key written to `activity_logs.waiver_s3_key` for retrieval. See `docs/design.md` Section 5.5 and Section 7.2. |
 | Disaster recovery | **AWS Backup** cross-region replication; IaC via **AWS CloudFormation** or **Amplify Gen 2**. RPO target: **~5 minutes** — Aurora PITR primary, daily snapshot fallback. See `docs/design.md` Section 8. |
 
 ## Writing Conventions

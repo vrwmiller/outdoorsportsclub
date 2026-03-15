@@ -426,6 +426,7 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` and `Dues-Payment` events processed via NFC or Card. `NULL` for cash payments and for all non-payment activity types. Linked to the lane/visit via `lane_id` for guest payments; `lane_id` is `NULL` for dues payments. |
 | `payment_method` | TEXT (Nullable) | Payment method used: `NFC`, `Card`, or `Cash`. Populated for `Guest-Payment` and `Dues-Payment` events; `NULL` for all other activity types. |
 | `guest_id` | UUID (FK, Nullable) | FK to `guests.id`; populated for `Guest-Payment` and `Waiver-Signed` events involving a guest. Null for all other activity types. |
+| `waiver_s3_key` | TEXT (Nullable) | S3 object key for the signed waiver PDF; populated for `Waiver-Signed` events only. Key pattern: `waivers/<member_id>/<timestamp>.pdf` for member waivers; `waivers/guests/<guest_id>/<timestamp>.pdf` for guest waivers. Used to retrieve the document for on-demand viewing, printing, or email. `NULL` for all other activity types. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
 
 ### **5.6 Table: `training_level_policies`**
@@ -661,6 +662,7 @@ Personal-device path for annual dues payment via **Stripe.js** (card element —
 | `POST` | `/v1/kiosk/consumable-purchase` | **Device Token** |
 | `POST` | `/v1/kiosk/dues` | **Device Token** |
 | `POST` | `/v1/kiosk/guest-payment` | **Device Token** |
+| `POST` | `/v1/kiosk/waiver` | **Device Token** |
 
 ---
 
@@ -731,6 +733,21 @@ POST /v1/kiosk/guest-payment
 Handles the full guest add-on flow for a single guest: (1) look up guest by `first_name`, `last_name`, and `phone` in `guests` — create a new record if not found; (2) check `guests.waiver_signed_at` — prompt waiver capture at the kiosk if no record exists or the waiver has expired; (3) query `guest_visits` for this guest-member combination in the current calendar year — if count ≥ 2, return `403 Forbidden` (hard block; no RSO override applies); (4) present payment method choice (see *Payment methods* in Section 4); (5) insert a `guest_visits` row with `payment_method` populated; (6) create an `activity_logs` entry with `guest_id` and `payment_method` populated.
 
 **Returns:** `200 OK`, `403 Forbidden` (annual limit reached), or `402 Payment Required` (Stripe failure).
+
+---
+
+```http
+POST /v1/kiosk/waiver
+```
+
+Handles waiver signing for both **members** and **guests**. The request body must include the PDF bytes (base64-encoded), a `member_id`, and optionally a `guest_id`. The presence of `guest_id` determines which path is taken:
+
+* **Member waiver** (`guest_id` absent): PDF stored at `waivers/<member_id>/<timestamp>.pdf`. `members.waiver_signed_at` and `members.waiver_version` are updated in a single RDS transaction alongside a `Waiver-Signed` entry in `activity_logs` (with `guest_id = NULL`).
+* **Guest waiver** (`guest_id` present): PDF stored at `waivers/guests/<guest_id>/<timestamp>.pdf`. `guests.waiver_signed_at` and `guests.waiver_s3_key` are updated. A `Waiver-Signed` entry is written to `activity_logs` with `guest_id` populated. `members.waiver_signed_at` is **not** modified.
+
+Both paths use KMS server-side encryption (`aws:kms`). S3 Object Lock (Compliance Mode, 7-year retention) is enforced at the bucket level. The `activity_logs` row is never written before the S3 upload succeeds — on upload failure the transaction is rolled back and `500` is returned.
+
+**Returns:** `200 OK` (waiver stored) or `400 Bad Request` (missing required field) or `500 Internal Server Error` (S3 upload failure).
 
 ### 7.3 Administrative & Recovery
 
@@ -1118,7 +1135,7 @@ Each item requires a deliberate decision — do not implement with assumed behav
 | 13 | **Kiosk handoff model** | **RSO-mediated**: RSO carries the tablet, presents it to arriving members, scans own QR badge to open the RSO Dashboard (via the Level 4+ role prompt) and taps own NFC badge for violation resolution. Fixed-mount self-serve rejected — requires a separate RSO notification mechanism for alerts and introduces custody ambiguity. See Section 4. |
 | 14 | **Observability strategy** | Structured JSON logging to **Amazon CloudWatch Logs**; X-Ray deferred; three alarms to admin **Amazon SNS** topic; 7-year log retention. See Section 10. |
 | 15 | **Async background workflow scope** | Daily audit log export only. EventBridge Scheduler → SQS → Lambda → S3 (`audit-logs/{YYYY}/{MM}/{DD}.ndjson`); DLQ on the SQS queue. S3 retention 365 days (export files only; Aurora rows and CloudWatch Logs retained longer per observability policy). Idempotent on date partition. |
-| 1 | **Waiver signing** | **Kiosk View only** — waiver capture is not available on the Member Portal. Endpoint: `POST /v1/kiosk/waiver` (Device Token auth). Payload: structured JSON record (`member_id`, `waiver_version`, `timestamp`, HMAC signature string) stored in **Amazon S3** with **S3 Object Lock** (Compliance Mode, 7-year retention). PDFs generated on-demand for display, printing, or email — not stored at rest. `waiver_signed_at` and `waiver_version` updated in `members` on successful capture. See Section 5.1 and Section 7.2. |
+| 1 | **Waiver signing** | **Kiosk View only** — waiver capture is not available on the Member Portal. Endpoint: `POST /v1/kiosk/waiver` (Device Token auth). Member signs on-screen using `signature_pad` (finger or S Pen); the canvas exports as a PNG embedded in a PDF. The completed PDF is stored directly in **Amazon S3** with **S3 Object Lock** (Compliance Mode, 7-year retention) under the key `waivers/<member_id>/<timestamp>.pdf`. The S3 object key is written to `activity_logs.waiver_s3_key` for on-demand retrieval. `waiver_signed_at` and `waiver_version` updated in `members` on successful capture. See Section 5.5 and Section 7.2. |
 | 16 | **Guest lookup key** | `guests` uses `(first_name, last_name, phone, email)` as the composite lookup key and unique constraint (Section 5.8). Email is collected alongside name and phone during the kiosk guest add-on step. |
 | 17 | **RPO and restore path policy** | **~5 minutes RPO** — Aurora PITR is the primary restore path. The daily AWS Backup snapshot is retained as a fallback and for archival/compliance purposes. Aurora Global Database (zero RPO) is not provisioned and is out of scope. The kiosk offline event queue (ODQ #10) must be designed with this 5-minute window in mind. See Section 8. |
 | 23 | **Member-facing range occupancy view** | Retired — not implemented. Member-facing occupancy data would be unreliable due to known incomplete check-out behavior; removed from scope before implementation began. |

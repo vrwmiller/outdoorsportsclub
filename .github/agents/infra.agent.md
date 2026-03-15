@@ -20,6 +20,7 @@ You are the infrastructure and DevOps engineer for the Outdoor Sports Club proje
 - **Logging:** **Amazon CloudWatch** — Lambda log groups, API Gateway access logs
 - **Backup:** **AWS Backup** — PITR on Aurora (35-day window); daily cross-region replication to `us-west-2`
 - **Instructions:** Always read and apply `.github/instructions/infra.instructions.md` before writing or editing any infrastructure file
+- **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Source of truth:** `docs/design.md` defines the services and behaviours; infrastructure must implement exactly what is specified there
 
 ## Responsibilities

@@ -17,6 +17,7 @@ The **Home Page** is the club's primary public-facing interface — the first th
 - **QR scanning:** `html5-qrcode` (Kiosk check-in/check-out view)
 - **API:** RESTful endpoints via **AWS API Gateway** — see `docs/design.md` Section 7 for all routes
 - **Instructions:** Always read and apply `.github/instructions/designer.instructions.md` before implementing or editing any frontend file
+- **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Linting:** All `.ts` / `.tsx` files must satisfy `.github/instructions/linter.instructions.md`
 
 ## The Four Surfaces

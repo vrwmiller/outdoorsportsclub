@@ -88,8 +88,9 @@ Never log raw device token values, Stripe secret keys, or full JWT strings.
 ### Kiosk endpoints (Device Token)
 
 * Extract `x-device-token` from `event["headers"]`
-* Query the `devices` table via the **RDS Data API**: `SELECT status FROM devices WHERE device_token = :token`
-* Reject tokens where `status != 'Active'` with `403 Forbidden`
+* Compute the HMAC-SHA256 hash of the incoming token (same algorithm as generation: `hmac.new(salt.encode(), token.encode(), hashlib.sha256).hexdigest()`)
+* Query the `devices` table by the **hash**: `SELECT id, status FROM devices WHERE device_token = :hashed_token` — never query by the raw token value
+* Reject rows where `status != 'Active'` with `403 Forbidden`
 * Never log the raw device token value
 
 ## Database — RDS Data API
@@ -128,6 +129,31 @@ except Exception:
 | `STRIPE_SECRET_ARN` | Secrets Manager ARN for Stripe secret key |
 | `S3_WAIVER_BUCKET` | S3 bucket name for signed waivers |
 | `SNS_ALERTS_TOPIC_ARN` | SNS topic ARN for range alerts |
+| `CORS_ALLOW_ORIGIN` | Allowed origin for CORS headers — set to the application domain; never `*` in production |
+| `DEVICE_TOKEN_SALT_ARN` | Secrets Manager ARN for the device token salt (used to hash and verify device tokens) |
+
+## Device Token Generation
+
+Used only in `POST /v1/devices/pair`. The raw token is generated once, returned to the tablet, and never stored — only the HMAC hash is persisted.
+
+```python
+import hashlib
+import hmac
+import secrets
+
+# Fetch salt at cold-start from Secrets Manager via DEVICE_TOKEN_SALT_ARN
+# (same pattern as STRIPE_SECRET_ARN — cache in a module-level variable)
+
+def generate_device_token(salt: str) -> tuple[str, str]:
+    """Returns (raw_token, hashed_token). Store only the hash; return only the raw token."""
+    raw_token = secrets.token_urlsafe(32)  # 256 bits of entropy
+    hashed = hmac.new(salt.encode(), raw_token.encode(), hashlib.sha256).hexdigest()
+    return raw_token, hashed
+```
+
+* Store `hashed` in `devices.device_token`; return `raw_token` to the tablet in the response body
+* The raw token is transmitted exactly once — never log it, never store it
+* To validate an incoming `x-device-token`: compute `hmac.new(salt.encode(), token.encode(), hashlib.sha256).hexdigest()` and compare against the stored hash using `hmac.compare_digest()` (constant-time comparison prevents timing attacks)
 
 ## Stripe Integration
 
@@ -138,10 +164,28 @@ except Exception:
 
 ## S3 Waiver Storage
 
-* Upload signed waivers to `S3_WAIVER_BUCKET` with a key pattern of `waivers/<member_id>/<timestamp>.pdf`
+`POST /v1/kiosk/waiver` handles both **member** and **guest** waiver signing. Differentiate by the presence of `guest_id` in the request body.
+
+### Member waiver (no `guest_id` in request body)
+
+* S3 key pattern: `waivers/<member_id>/<timestamp>.pdf`
+* After successful upload, execute a single RDS transaction that:
+  * Updates `members.waiver_signed_at` and `members.waiver_version`
+  * Inserts a `Waiver-Signed` entry into `activity_logs` with `waiver_s3_key` set to the uploaded key; `guest_id` is `NULL`
+
+### Guest waiver (`guest_id` present in request body)
+
+* S3 key pattern: `waivers/guests/<guest_id>/<timestamp>.pdf`
+* After successful upload, execute a single RDS transaction that:
+  * Updates `guests.waiver_signed_at` and `guests.waiver_s3_key`
+  * Inserts a `Waiver-Signed` entry into `activity_logs` with `waiver_s3_key` set to the uploaded key and `guest_id` populated
+  * Does **not** touch `members.waiver_signed_at` or `members.waiver_version`
+
+### Common rules (both paths)
+
 * Use server-side encryption: `ServerSideEncryption='aws:kms'`
 * S3 Object Lock is configured at the bucket level (Compliance Mode, 7 years) — do not set object-level retention in code
-* After successful upload, update `members.waiver_signed_at` via the RDS Data API in the same transaction
+* Never write the `activity_logs` row before the S3 upload succeeds — rollback the transaction and return `500` if the upload fails
 
 ## API Gateway Integration
 

@@ -18,27 +18,51 @@ You are the backend engineer for the Outdoor Sports Club project. Your job is to
 - **Encryption:** **AWS KMS** — data at rest and in transit; no plaintext secrets in code
 - **IaC / deployment:** **AWS Amplify Gen 2** or **AWS CloudFormation**
 - **Instructions:** Always read and apply `.github/instructions/backend.instructions.md` before implementing or editing any Lambda function
+- **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Linting:** All `.py` files must satisfy `.github/instructions/linter.instructions.md`
 
 ## Endpoint Inventory
 
 Implement exactly the contracts specified in `docs/design.md` Section 7. Do not invent new routes without updating `docs/design.md` first.
 
+### Member Portal endpoints (Cognito JWT auth, Level 1–6)
+
+| Method | Path | Handler responsibility |
+| :--- | :--- | :--- |
+| `GET` | `/v1/members/me` | Return member profile queried from Aurora; include `annual_dues_cents` from `club_settings` |
+| `GET` | `/v1/members/me/badge` | Return `member_num` for QR code rendering in the Member Portal |
+| `PATCH` | `/v1/members/me` | Update `home_phone` and `mobile_phone` (E.164 normalisation); reject all other fields |
+| `POST` | `/v1/members/me/dues` | Create Stripe PaymentIntent (Stripe.js path); return `client_secret`; webhook sets `dues_paid_until` |
+
 ### Kiosk endpoints (Device Token auth)
 
 | Method | Path | Handler responsibility |
 | :--- | :--- | :--- |
-| `POST` | `/v1/kiosk/check-in` | Validate QR token → look up `member_num` → check `training_level` and `waiver_signed_at` → write `Range-Checkin` to `activity_logs` |
-| `POST` | `/v1/kiosk/check-out` | Validate open check-in exists → write `Range-Checkout` to `activity_logs` |
-| `POST` | `/v1/kiosk/guest-payment` | Stripe Terminal Tap to Pay → write `Guest-Payment` to `activity_logs` |
-| `POST` | `/v1/kiosk/consumable-purchase` | Stripe Terminal Tap to Pay → write line items to `consumable_purchases` |
+| `DELETE` | `/v1/kiosk/wait-list/{entry_id}` | Cancel member's active wait list entry; recalculate `position` for remaining entries in this range |
+| `GET` | `/v1/kiosk/range/lanes` | Return current lane occupancy for the device's own range (resolved from Device Token `range_id`) |
+| `POST` | `/v1/kiosk/check-in` | Validate QR token → check `training_level`, waiver, dues, guest count, lane availability → assign lane or insert wait list entry → write `Range-Checkin` to `activity_logs` |
+| `POST` | `/v1/kiosk/check-out` | Validate open check-in → clear lane → write `Range-Checkout` → advance wait list; publish SNS SMS if next member has `mobile_phone` |
+| `POST` | `/v1/kiosk/consumable-purchase` | Cash / Stripe Terminal payment → write line items to `consumable_purchases` |
+| `POST` | `/v1/kiosk/dues` | Kiosk dues payment (Cash, NFC, or Card); Cash writes directly; NFC/Card confirmed by `payment_intent.succeeded` webhook |
+| `POST` | `/v1/kiosk/guest-payment` | Look up or create guest → check waiver and annual limit → Cash / Stripe Terminal payment → write `Guest-Payment` to `activity_logs` |
+| `POST` | `/v1/kiosk/waiver` | Receive base64-encoded PDF (assembled client-side by `signature_pad`) → upload to `S3_WAIVER_BUCKET` → write `Waiver-Signed` to `activity_logs` with `waiver_s3_key`; member path updates `members.waiver_signed_at`/`waiver_version`; guest path (`guest_id` present) updates `guests.waiver_signed_at`/`waiver_s3_key` instead |
 
-### Administrative endpoints (Cognito JWT auth, Level 6 only)
+### Administrative endpoints (Cognito JWT auth)
 
 | Method | Path | Handler responsibility |
 | :--- | :--- | :--- |
+| `GET` | `/v1/admin/ranges/occupancy` | Level 4+ — return cross-range lane occupancy; used by Admin Portal supervisory view |
+| `GET` | `/v1/admin/settings` | Level 5+ — return `club_settings` values |
+| `PATCH` | `/v1/admin/lanes/{lane_id}` | Level 4+ — update lane metadata |
 | `PATCH` | `/v1/admin/members/reset-auth` | Level 6 only — clear `social_provider_id` in Cognito User Pool |
-| `POST` | `/v1/devices/pair` | Level 6 only — validate Pairing Code → set device `status = 'Active'` → return `device_token` |
+| `PATCH` | `/v1/admin/members/{member_id}/level` | Level 5+ — update `training_level`; write `Level-Change` to `activity_logs` with `actor_member_id` |
+| `PATCH` | `/v1/admin/members/{member_id}/service-hours` | Level 5+ — set `service_hours`; write `Service-Hours-Update` to `activity_logs` with `actor_member_id` |
+| `PATCH` | `/v1/admin/ranges/{range_id}/status` | Level 4+ — toggle `is_open`; closing a range blocks new check-ins |
+| `PATCH` | `/v1/admin/settings` | Level 5+ — update `club_settings` values (e.g., `annual_dues_cents`) |
+| `POST` | `/v1/admin/devices/pairing-code` | Level 6 only — insert `devices` record (Pending-Pairing status) → return `device_id` and `pairing_code` |
+| `POST` | `/v1/admin/lanes` | Level 4+ — add a new lane to a range |
+| `POST` | `/v1/admin/lanes/{lane_id}/checkout` | Level 4+ — RSO force-checkout: clear lane, write `Range-Checkout` with `actor_member_id`, advance wait list |
+| `POST` | `/v1/devices/pair` | Pairing Code (no Cognito auth) — validate code → generate device token → store salted hash → return raw token |
 
 ## Constraints
 
