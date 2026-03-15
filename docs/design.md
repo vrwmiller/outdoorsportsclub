@@ -202,7 +202,7 @@ Neither raw card data nor card numbers are ever stored on Club-managed systems.
 
 **Cash confirmation for dues and guest fees:** When Cash is selected for a dues payment or guest fee, the Lambda writes the confirmation record directly (sets `dues_paid_until` or inserts the `guest_visits` row) without waiting for a Stripe webhook — the RSO's action at the kiosk screen is the confirmation event. No Stripe reconciliation is possible for cash transactions; the club is responsible for its own cash-handling procedures.
 
-**Tablet hardware:** Kiosk tablets **must have an accessible NFC chip** to support Tap to Pay. The **Samsung Galaxy Tab Active5** is the recommended device — it is ruggedized (IP68/MIL-STD-810H), supports NFC, runs Android, and is designed for fixed-deployment environments. Verify Stripe Terminal SDK compatibility against the Android version shipped before purchasing. A **Stripe Terminal hardware reader** (e.g., Stripe Reader M2, paired via Bluetooth) is **optional equipment** — it covers chip and swipe fallback for members without a contactless card or mobile wallet. NFC is sufficiently ubiquitous that the M2 is not required at launch; it may be added later if chip-only members prove common in practice.
+**Tablet hardware:** Kiosk tablets **must have an accessible NFC chip** to support Tap to Pay. Most modern Android tablets and iPads qualify — verify hardware specs before purchasing. A **Stripe Terminal hardware reader** (e.g., Stripe Reader M2, paired via Bluetooth) is **standard equipment** at each kiosk station to support chip and swipe payments.
 
 ```mermaid
 flowchart TD
