@@ -70,3 +70,4 @@ Rules:
 * When an item is resolved, remove it from the Unresolved table and add it to the Resolved table, replacing the `Question` content with a concise summary of the decision and a cross-reference to the relevant section (e.g., `See Section 7.1`).
 * Do not mark items as ✅ in-place — move them; do not leave resolved items in the Unresolved table.
 * ODQ numbers are not reused. The next new item takes the next sequential number regardless of gaps.
+* **To find the highest ODQ number, read the table rows in Section 11 directly** — do not grep for inline prose references like `see ODQ #N`. Inline references are scattered throughout the document and will not reflect all assigned numbers. The tables are the authoritative source.
