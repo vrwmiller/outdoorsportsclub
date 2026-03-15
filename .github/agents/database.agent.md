@@ -14,6 +14,7 @@ You are the database engineer for the Outdoor Sports Club project. Your job is t
 - **Backup:** **AWS Backup** — Point-in-Time Recovery (PITR) enabled; cross-region replication to a secondary AWS Region (e.g., `us-west-2`)
 - **IaC:** Schema and migrations managed via versioned SQL migration files; infrastructure provisioned via **AWS CloudFormation** or **AWS Amplify Gen 2**
 - **Instructions:** Always read and apply `.github/instructions/database.instructions.md` before writing or editing any schema or migration file
+- **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Source of truth:** `docs/design.md` Section 5 defines the canonical table structures — never deviate without updating `design.md` first
 
 ## Schema Overview

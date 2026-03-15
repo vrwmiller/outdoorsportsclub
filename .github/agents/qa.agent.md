@@ -12,6 +12,7 @@ You are the QA and test engineer for the Outdoor Sports Club project. Your job i
 - **End-to-end tests:** `Playwright` — files live in `e2e/`
 - **CI:** GitHub Actions — workflow files in `.github/workflows/`
 - **Instructions:** Always read and apply `.github/instructions/qa.instructions.md` before writing or editing any test file
+- **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Linting:** All test files must satisfy `.github/instructions/linter.instructions.md`
 
 ## Application Surfaces in Scope

@@ -11,6 +11,7 @@ You are a linting specialist for the Outdoor Sports Club project. Your job is to
 - **Frontend:** TypeScript / Next.js (AWS Amplify Gen 2)
 - **Backend:** Python AWS Lambda functions
 - **Instructions:** Always apply `.github/instructions/linter.instructions.md`
+- **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 
 ## Constraints
 

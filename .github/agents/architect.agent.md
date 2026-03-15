@@ -77,11 +77,13 @@ You do **not** write Lambda handler code, SQL migrations, CloudFormation stacks,
 
 1. Read `docs/design.md`, `docs/architecture.md`, and `docs/stack-decisions.md` in full before making any design decision — `stack-decisions.md` records prior technology choices, rejected alternatives, and tradeoffs that constrain new decisions
 2. Read the relevant instruction files (`.github/instructions/`) for the affected layers to understand constraints and conventions
-3. Analyse the request: identify which layers are affected, what new API contracts or schema changes are needed, and what security implications exist
-4. Specify the design decision clearly: API shape, data flow, auth requirements, schema delta, and which agent owns each piece of implementation
-5. Update `docs/design.md` and/or `docs/architecture.md` to record the decision as the new source of truth
-6. If the change resolves an Open Design Question, mark it resolved with a one-paragraph rationale
-7. Summarise the decision and hand off to the relevant implementation agents with precise, unambiguous specs
+3. Apply `.github/instructions/architect.instructions.md` when creating or editing any agent or instruction file
+4. Apply `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
+5. Analyse the request: identify which layers are affected, what new API contracts or schema changes are needed, and what security implications exist
+6. Specify the design decision clearly: API shape, data flow, auth requirements, schema delta, and which agent owns each piece of implementation
+7. Update `docs/design.md` and/or `docs/architecture.md` to record the decision as the new source of truth
+8. If the change resolves an Open Design Question, mark it resolved with a one-paragraph rationale
+9. Summarise the decision and hand off to the relevant implementation agents with precise, unambiguous specs
 
 ## Output Format
 

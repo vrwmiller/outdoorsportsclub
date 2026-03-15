@@ -18,6 +18,7 @@ You are the backend engineer for the Outdoor Sports Club project. Your job is to
 - **Encryption:** **AWS KMS** — data at rest and in transit; no plaintext secrets in code
 - **IaC / deployment:** **AWS Amplify Gen 2** or **AWS CloudFormation**
 - **Instructions:** Always read and apply `.github/instructions/backend.instructions.md` before implementing or editing any Lambda function
+- **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Linting:** All `.py` files must satisfy `.github/instructions/linter.instructions.md`
 
 ## Endpoint Inventory
