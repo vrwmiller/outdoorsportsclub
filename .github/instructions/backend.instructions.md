@@ -128,6 +128,7 @@ except Exception:
 | `STRIPE_SECRET_ARN` | Secrets Manager ARN for Stripe secret key |
 | `S3_WAIVER_BUCKET` | S3 bucket name for signed waivers |
 | `SNS_ALERTS_TOPIC_ARN` | SNS topic ARN for range alerts |
+| `CORS_ALLOW_ORIGIN` | Allowed origin for CORS headers — set to the application domain; never `*` in production |
 
 ## Stripe Integration
 
