@@ -141,7 +141,8 @@ except Exception:
 * Upload signed waivers to `S3_WAIVER_BUCKET` with a key pattern of `waivers/<member_id>/<timestamp>.pdf`
 * Use server-side encryption: `ServerSideEncryption='aws:kms'`
 * S3 Object Lock is configured at the bucket level (Compliance Mode, 7 years) — do not set object-level retention in code
-* After successful upload, update `members.waiver_signed_at` via the RDS Data API in the same transaction
+* After a successful S3 upload, execute a single RDS Data API transaction that: updates `members.waiver_signed_at`, updates `members.waiver_version`, and inserts a `Waiver-Signed` entry into `activity_logs` with `waiver_s3_key` set to the uploaded S3 object key
+* Never write the `activity_logs` row before the S3 upload succeeds — rollback the transaction and return `500` if the upload fails
 
 ## API Gateway Integration
 
