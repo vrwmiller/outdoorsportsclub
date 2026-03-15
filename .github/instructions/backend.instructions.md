@@ -129,6 +129,30 @@ except Exception:
 | `S3_WAIVER_BUCKET` | S3 bucket name for signed waivers |
 | `SNS_ALERTS_TOPIC_ARN` | SNS topic ARN for range alerts |
 | `CORS_ALLOW_ORIGIN` | Allowed origin for CORS headers — set to the application domain; never `*` in production |
+| `DEVICE_TOKEN_SALT_ARN` | Secrets Manager ARN for the device token salt (used to hash and verify device tokens) |
+
+## Device Token Generation
+
+Used only in `POST /v1/devices/pair`. The raw token is generated once, returned to the tablet, and never stored — only the HMAC hash is persisted.
+
+```python
+import hashlib
+import hmac
+import secrets
+
+# Fetch salt at cold-start from Secrets Manager via DEVICE_TOKEN_SALT_ARN
+# (same pattern as STRIPE_SECRET_ARN — cache in a module-level variable)
+
+def generate_device_token(salt: str) -> tuple[str, str]:
+    """Returns (raw_token, hashed_token). Store only the hash; return only the raw token."""
+    raw_token = secrets.token_urlsafe(32)  # 256 bits of entropy
+    hashed = hmac.new(salt.encode(), raw_token.encode(), hashlib.sha256).hexdigest()
+    return raw_token, hashed
+```
+
+* Store `hashed` in `devices.device_token`; return `raw_token` to the tablet in the response body
+* The raw token is transmitted exactly once — never log it, never store it
+* To validate an incoming `x-device-token`: compute `hmac.new(salt.encode(), token.encode(), hashlib.sha256).hexdigest()` and compare against the stored hash using `hmac.compare_digest()` (constant-time comparison prevents timing attacks)
 
 ## Stripe Integration
 
