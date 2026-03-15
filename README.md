@@ -1,12 +1,13 @@
 # Outdoor Sports Club
 
-A cloud-native membership communication platform for a ~2,200-member outdoor sports club. It replaces paper forms and cash handling with digital waivers, cashless payments, and automated range access control.
+A web application for a ~2,200-member outdoor sporting club. It modernizes the club's web presence, facility, and range operations by digitizing member management, reducing cash handling, freeing RSOs from administrative tasks so they can focus on the range, and enforcing club rules through digital access controls.
 
 ## What it does
 
+- **Club Website** — Public home page: club, facility, and membership information
 - **Member Portal** — Social login (Google/Facebook), dues payment, QR badge, training-level-gated range access
 - **Admin Portal** — Finance, membership management, range operations (Level 4–6 staff)
-- **Range Kiosk** — Tablet check-in via QR badge scan, Tap to Pay guest fees (NFC), mandatory waiver re-signing
+- **Range Kiosk** — Tablet check-in via QR badge scan, guest fees (Cash, NFC, or card), mandatory waiver re-signing
 - **RBAC** — Seven training levels (Guest → Webmaster) control access to every surface
 
 ## Tech stack
@@ -17,13 +18,13 @@ A cloud-native membership communication platform for a ~2,200-member outdoor spo
 | Backend | Python AWS Lambda, API Gateway |
 | Database | Amazon Aurora Serverless v2 (PostgreSQL), RDS Data API |
 | Auth | AWS Cognito (Social Login + Device Token for kiosks) |
-| Payments | Stripe Terminal SDK (Tap to Pay) |
+| Payments | Stripe Terminal SDK (NFC + card reader), Stripe.js (online dues) |
 | Storage | Amazon S3 + Object Lock (waivers, KMS encrypted) |
 | Infra | CloudFormation, multi-region capable via `RegionList` parameter |
 
 ## Repository layout
 
-```
+```text
 .github/       Agents, instructions, and workflow config
 docs/          Design docs and architecture diagram
 
@@ -44,6 +45,7 @@ e2e/           Playwright end-to-end tests
 | [docs/proposal.md](docs/proposal.md) | Full project proposal |
 | [docs/design.md](docs/design.md) | Authoritative technical spec (RBAC, schema, HA/DR) |
 | [docs/architecture.md](docs/architecture.md) | System architecture diagram |
+| [docs/stack-decisions.md](docs/stack-decisions.md) | Technology selection rationale |
 
 ## Contributing
 

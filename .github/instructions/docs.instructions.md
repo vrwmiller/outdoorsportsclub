@@ -29,7 +29,7 @@ These have been decided. Do not introduce alternatives or ambiguity around them.
 | Frontend framework | **Next.js** hosted via **AWS Amplify Gen 2** |
 | Auth | **AWS Cognito** with Social Login (Google/Facebook) for members; Device Token for kiosks |
 | Database | **Amazon Aurora Serverless v2** (PostgreSQL) |
-| Payment processor | **Stripe Terminal SDK** — Tap to Pay via tablet NFC; no external card reader hardware |
+| Payment processor | **Stripe Terminal SDK** — Tap to Pay via tablet NFC (primary); optional Stripe Terminal hardware reader (e.g. Stripe Reader M2) for physical card as fallback. **Stripe.js** for online dues via **Member Portal** (card element, no NFC hardware required). |
 | SMS notifications | **Amazon SNS** |
 | QR badge payload | Opaque token (value of `member_num`); generated client-side via `react-qr-code` |
 | QR scanning | `html5-qrcode` in the Next.js kiosk view; POSTs to `POST /v1/kiosk/check-in` |
@@ -45,3 +45,16 @@ These have been decided. Do not introduce alternatives or ambiguity around them.
 - Bullet lists use `*` with four-space indent for nested items
 - All tables must have a header row and a separator row with `:---` alignment
 - One blank line between sections; no double blank lines
+
+## Open Design Questions (ODQ) — Section 11 of design.md
+
+Section 11 is split into two subsections:
+
+* **Unresolved** — items that require a decision before or after launch. Columns: `#`, `Area`, `Priority`, `Question`. Priority values: `Pre-launch` or `Post-launch`.
+* **Resolved** — items where a decision has been made and documented. Columns: `#`, `Area`, `Decision`.
+
+Rules:
+* New ODQ items must be added to the **Unresolved** table with an appropriate Priority.
+* When an item is resolved, remove it from the Unresolved table and add it to the Resolved table, replacing the `Question` content with a concise summary of the decision and a cross-reference to the relevant section (e.g., `See Section 7.1`).
+* Do not mark items as ✅ in-place — move them; do not leave resolved items in the Unresolved table.
+* ODQ numbers are not reused. The next new item takes the next sequential number regardless of gaps.
