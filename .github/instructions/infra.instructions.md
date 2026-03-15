@@ -36,6 +36,7 @@ infra/
     secrets.yaml         # Secrets Manager secret definitions
     sns.yaml             # SNS SMS topic
     backup.yaml          # AWS Backup plan and vault
+    route53.yaml         # Hosted zone, health checks, A/ALIAS records
     iam/
       lambda-checkin-role.yaml
       lambda-checkout-role.yaml
@@ -104,6 +105,83 @@ CheckInLambdaRole:
 * Enable **CORS** at the API Gateway level; configure `Access-Control-Allow-Origin` from a stage variable — never hardcode the domain or use `*` in production
 * Enable **API Gateway access logging** to a dedicated CloudWatch log group
 * Use API Gateway **stage variables** for environment-specific values (Lambda ARNs, allowed origins)
+
+## Route 53
+
+### API Gateway custom domain (prerequisite)
+
+Before Route 53 can route to an API Gateway endpoint, a custom domain name must be configured in API Gateway. This maps a domain like `api.outdoorsportsclub.example.com` to the regional API Gateway endpoint in each region.
+
+```yaml
+# In api.yaml — one ApiGatewayDomainName resource per region
+ApiDomainName:
+  Type: AWS::ApiGateway::DomainName
+  Properties:
+    DomainName: !Sub "api.outdoorsportsclub.${Environment}.example.com"
+    RegionalCertificateArn: !Ref AcmCertArn   # ACM cert in same region
+    EndpointConfiguration:
+      Types: [REGIONAL]
+
+ApiBasePathMapping:
+  Type: AWS::ApiGateway::BasePathMapping
+  Properties:
+    DomainName: !Ref ApiDomainName
+    RestApiId: !Ref RestApi
+    Stage: !Ref ApiStage
+```
+
+* ACM certificate must be in the **same region** as the API Gateway endpoint (regional endpoints do not accept `us-east-1` certs issued for CloudFront)
+* Use `prod` subdomain convention: `api.outdoorsportsclub.com` (prod), `api.staging.outdoorsportsclub.com` (staging)
+
+### Hosted zone
+
+* One Route 53 public hosted zone per domain: `outdoorsportsclub.com` (prod), `staging.outdoorsportsclub.com` (staging), `dev.outdoorsportsclub.com` (dev)
+* Hosted zones are **not managed in CloudFormation** — create them once manually and reference the Zone ID via a CloudFormation parameter `HostedZoneId`
+
+### Record types
+
+| Scenario | Record type |
+| :--- | :--- |
+| Single region (default `dev`) | A ALIAS → regional API Gateway domain name |
+| Multi-region active-active | A ALIAS + `RoutingPolicy: Latency` in each region |
+| Multi-region active-passive | A ALIAS + `RoutingPolicy: Failover` (PRIMARY / SECONDARY) |
+
+Always use **A ALIAS** records (not CNAME) for API Gateway — ALIAS records are free at the zone apex and have lower latency than CNAMEs.
+
+### Health checks (multi-region only)
+
+* One health check per regional API Gateway endpoint, monitoring `GET /health` (a lightweight Lambda that returns `200 OK`)
+* Type: `HTTPS`; resource path: `/v1/health`; request interval: `30` seconds; failure threshold: `3`
+* Associate each latency/failover record with its regional health check
+* When `IsMultiRegion` is false, skip health check resources to avoid cost
+
+### CloudFormation snippet (single-region)
+
+```yaml
+# In route53.yaml
+Parameters:
+  HostedZoneId:
+    Type: String
+    Description: Route 53 hosted zone ID for the environment domain
+  ApiGatewayRegionalDomainName:
+    Type: String
+    Description: Regional domain name output from api.yaml (Fn::ImportValue)
+  ApiGatewayRegionalHostedZoneId:
+    Type: String
+    Description: Hosted zone ID of the API Gateway regional endpoint (from API Gateway service)
+
+Resources:
+  ApiAliasRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "api.outdoorsportsclub.${Environment}.example.com"
+      Type: A
+      AliasTarget:
+        DNSName: !Ref ApiGatewayRegionalDomainName
+        HostedZoneId: !Ref ApiGatewayRegionalHostedZoneId
+        EvaluateTargetHealth: false
+```
 
 ## Aurora Serverless v2
 
