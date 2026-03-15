@@ -93,9 +93,10 @@ Tablets are standard RSO range equipment. The RSO carries the tablet, presents i
 | State | Description |
 | :--- | :--- |
 | **Idle** | Default view. Prompts the member to scan their QR badge. Displayed at startup and after every completed check-in, check-out, or cancelled workflow. |
-| **Check-in flow** | Initiated when a member scans their QR badge. System validates `training_level`, dues, and declared guest count. |
-| **RSO Dashboard** | Lane occupancy display for this kiosk's range: each lane shows `Available`, `Occupied` (with occupant name/member number and guest count), or `Closed`. Accessible from the idle screen via **RSO NFC badge scan**: the RSO taps their member badge; the kiosk reads `member_id`, queries `training_level` from Aurora, and admits access only if Level ≥ 4. The RSO's `member_id` is recorded as `actor_member_id` on any action taken within the dashboard. Lane state is re-fetched after every check-in and check-out transaction, and polled every 30 seconds. RSOs can close or re-open individual lanes directly from this view — for example, to take a lane out of service due to a physical hazard. Only `Available` lanes may be closed; an `Occupied` lane must be checked out before it can be closed. The RSO Dashboard also supports **administrative force-checkout**: the RSO can explicitly clear an occupied lane directly from the dashboard (e.g., after verifying the occupant has vacated during a weather closure or emergency). Force-checkout writes a `Range-Checkout` activity log entry with the RSO's `actor_member_id` for audit purposes, and advances the wait list if any entries are queued. |
-| **Guest add-on** | After a lane is assigned (either directly or after being called from the wait list), the kiosk runs the guest add-on flow for each declared guest: waiver check, annual-limit check, and payment via **Stripe Terminal**. No payment is taken before a lane is confirmed. |
+| **Check-in flow** | Initiated when a member scans their QR badge. System validates `training_level`, dues, and declared guest count. Level 4–6 members (RSOs and above) follow the same check-in path as any other member — they may occupy lanes on-shift or off-shift. |
+| **RSO role prompt** | When a Level 4+ badge is scanned from the idle screen, the kiosk presents a disambiguation screen before proceeding: **"Check In as Shooter"** or **"Open RSO Dashboard"**. Level 1–3 members see no prompt and proceed directly to check-in. This ensures RSOs who happen to be on duty are not forced into the dashboard when they want to shoot. |
+| **RSO Dashboard** | Lane occupancy display for this kiosk's range: each lane shows `Available`, `Occupied` (with occupant name/member number and guest count), or `Closed`. Accessible from the idle screen by a Level 4+ member selecting **"Open RSO Dashboard"** at the role prompt. The RSO's `member_id` is recorded as `actor_member_id` on any action taken within the dashboard. Lane state is re-fetched after every check-in and check-out transaction, and polled every 30 seconds. RSOs can close or re-open individual lanes directly from this view — for example, to take a lane out of service due to a physical hazard. Only `Available` lanes may be closed; an `Occupied` lane must be checked out before it can be closed. The RSO Dashboard also supports **administrative force-checkout**: the RSO can explicitly clear an occupied lane directly from the dashboard (e.g., after verifying the occupant has vacated during a weather closure or emergency). Force-checkout writes a `Range-Checkout` activity log entry with the RSO's `actor_member_id` for audit purposes, and advances the wait list if any entries are queued. |
+| **Guest add-on** | After a lane is assigned (either directly or after being called from the wait list), the kiosk runs the guest add-on flow for each declared guest: waiver check, annual-limit check, and payment method choice (see *Payment methods*). No payment is taken before a lane is confirmed. |
 | **Violation alert** | Displayed when check-in fails a rule (e.g., guest limit exceeded, waiver expired, insufficient level). The member cannot dismiss this screen. The RSO taps their own NFC badge to authenticate (Level ≥ 4 required); the kiosk then presents two choices: **(a) Approve override** — entry is allowed and the exception is recorded in `activity_logs` with the RSO's `member_id` as `actor_member_id`; **(b) Deny entry** — check-in is cancelled and the lane remains `Available`. |
 | **Lane assignment** | Once the member has declared their guest count and a lane is available, the system assigns the lane that maximises spacing from occupied groups based on the declared group size. The confirmed lane number is shown on screen. Guest waiver and payment are then processed per guest. |
 | **Wait list** | Displayed when all lanes are occupied. The kiosk shows the member's current position in the queue. The member may cancel and leave at any time. When a lane opens, the kiosk calls the next member in the queue and advances to lane assignment. |
@@ -106,6 +107,8 @@ Tablets are standard RSO range equipment. The RSO carries the tablet, presents i
 ```mermaid
 flowchart TD
     IDLE["Idle<br/>Scan QR badge to check in"]
+    RSO_PROMPT{"Level ≥ 4?"}
+    ROLE["Role prompt<br/>Check In as Shooter · Open RSO Dashboard"]
     RSO_DASH["RSO Dashboard<br/>Lane occupancy · range status"]
     SCAN["Member scans QR Badge"]
     T_LVL{"training_level ≥<br/>range minimum?"}
@@ -121,10 +124,13 @@ flowchart TD
     WL["Added to wait list<br/>guest count stored — no payment yet"]
     WL_CALLED["Lane opened —<br/>member called to kiosk"]
 
-    IDLE -->|RSO NFC badge scan| RSO_DASH
-    RSO_DASH -->|Exit| IDLE
     IDLE --> SCAN
-    SCAN --> T_LVL
+    SCAN --> RSO_PROMPT
+    RSO_PROMPT -->|Level 1–3| T_LVL
+    RSO_PROMPT -->|Level 4–6| ROLE
+    ROLE -->|Check In as Shooter| T_LVL
+    ROLE -->|Open RSO Dashboard| RSO_DASH
+    RSO_DASH -->|Exit| IDLE
     T_LVL -->|No| VIOL
     T_LVL -->|Yes| DUES
     DUES -->|Unpaid| VIOL
@@ -156,9 +162,7 @@ flowchart TD
     WAIVER_CAP["Capture waiver<br/>acknowledgement at kiosk"]
     LIMIT_CHK{"Visits this year<br/>with this member < 2?"}
     HARD_BLOCK["403 Forbidden<br/>Annual limit reached<br/>No RSO override applies"]
-    PAYMENT["Guest fee via<br/>Stripe Terminal — NFC or card"]
-    PAY_OK{"Payment confirmed?"}
-    PAY_FAIL["402 Payment Required"]
+    PAYMENT["Collect payment<br/>see Payment methods"]
     INSERT["Insert guest_visits row<br/>Log to activity_logs"]
     DONE["Guest shares member lane"]
 
@@ -170,9 +174,7 @@ flowchart TD
     WAIVER_CHK -->|Valid| LIMIT_CHK
     LIMIT_CHK -->|≥ 2 visits| HARD_BLOCK
     LIMIT_CHK -->|< 2| PAYMENT
-    PAYMENT --> PAY_OK
-    PAY_OK -->|No| PAY_FAIL
-    PAY_OK -->|Yes| INSERT --> DONE
+    PAYMENT -->|Confirmed| INSERT --> DONE
 ```
 
 ### Flow rules
@@ -182,11 +184,44 @@ flowchart TD
 * **Wait list:** When the range is full, the kiosk adds the member to the wait list for that range (`wait_list` table) and displays their queue position. When any lane is released via check-out, the system automatically advances the queue: the next `Waiting` entry is promoted to `Called`, the RSO Dashboard (if open) will surface the `Called` status on its next lane-occupancy poll, and (if the member has a `mobile_phone` on record) an **Amazon SNS** SMS is sent. The called entry expires after 5 minutes (`expires_at`); if not acted on it is marked `Expired` and the next entry is advanced. A member may cancel their wait list entry at any time from the kiosk screen.
 * **Guest accompaniment:** Guests must be physically present with and accompanied by their sponsoring member. A guest cannot arrive independently — there is no guest-only entry flow. The guest add-on step at the kiosk (after lane assignment) is the only entry point for guest registration and payment.
 * **Guest sponsorship:** A member may bring a maximum of **2 guests per range visit**. The limit is enforced per range — a member may not bring more than 2 guests on the same range at the same time. Guest count is stored in `lanes.guest_count` and checked at check-in.
-* **Guest check-in order:** The member declares guest count (0, 1, or 2) before the lane check. The declared count is used to score lane selection but no guest processing occurs at this stage. Once a lane is assigned — either immediately or after being called from the wait list — the kiosk runs the guest add-on flow for each guest: waiver acknowledgement, annual-limit check, and payment via **Stripe Terminal** (Tap to Pay). Either the guest or the sponsoring member may pay. If the member was on the wait list and declines or leaves before a lane opens, no payment has been taken.
-* **Cashless Kiosk Payments:** All kiosk payments (guest fees, annual dues, consumables) are processed via the **Stripe Terminal SDK**. NFC Tap to Pay — using the tablet's built-in NFC chip — is the primary method; no reader hardware is required for the NFC path. For members who cannot present a contactless payment, a **Stripe Terminal hardware reader** (e.g., Stripe Reader M2, connected via Bluetooth) paired to the kiosk tablet provides card insert and swipe as a fallback. Neither raw card data nor card numbers are ever stored on Club-managed systems.
-* **Consumable Sales:** Members and guests may purchase consumables (e.g., targets, canned soda, coffee) at the kiosk. Each transaction is recorded in the `consumable_purchases` table with full line-item detail. Payment is processed via **Stripe Terminal SDK** (Tap to Pay). **Known Limitation:** There is no reliable physical process to verify that recorded quantities match items actually dispensed; the system records what is entered at the kiosk but cannot enforce inventory accuracy.
+* **Guest check-in order:** The member declares guest count (0, 1, or 2) before the lane check. The declared count is used to score lane selection but no guest processing occurs at this stage. Once a lane is assigned — either immediately or after being called from the wait list — the kiosk runs the guest add-on flow for each guest: waiver acknowledgement, annual-limit check, and payment (see *Payment methods*). Either the guest or the sponsoring member may pay. If the member was on the wait list and declines or leaves before a lane opens, no payment has been taken.
+* **Consumable Sales:** Members and guests may purchase consumables (e.g., targets, canned soda, coffee) at the kiosk. Each transaction is recorded in the `consumable_purchases` table with full line-item detail. Payment supports Cash, NFC, and Card (see *Payment methods*). **Known Limitation:** There is no reliable physical process to verify that recorded quantities match items actually dispensed; the system records what is entered at the kiosk but cannot enforce inventory accuracy.
 * **Time-Bound Waivers:** Automated re-signing triggers for Safety Waivers based on 1-year expiration logic.
-* **Tablet Hardware Requirement:** Kiosk tablets **must have an accessible NFC chip** to support Tap to Pay as the primary payment method. Most modern Android tablets and iPads qualify. Budget or older Android tablets may omit NFC — verify hardware specs before purchasing. For card-insert/swipe fallback, a **Stripe Terminal hardware reader** (e.g., Stripe Reader M2) is paired to each kiosk tablet via Bluetooth. The fallback reader is optional but recommended for each kiosk station.
+
+### Payment methods
+
+All kiosk payments — guest fees, annual dues, and consumables — support the same three methods:
+
+| Method | How it works | Stripe involvement |
+| :--- | :--- | :--- |
+| **Cash** | RSO collects physical cash and selects **Cash** at the kiosk. System records the transaction with `payment_method = 'Cash'`; no Stripe Payment Intent is created. | None |
+| **NFC (Tap to Pay)** | Member or guest taps a contactless card or mobile wallet to the tablet's built-in NFC chip. Processed via **Stripe Terminal SDK**. | Stripe Payment Intent; confirmed via `payment_intent.succeeded` webhook |
+| **Card** | Member or guest inserts or swipes a physical card on a **Stripe Terminal hardware reader** (e.g., Stripe Reader M2, connected via Bluetooth). Processed via **Stripe Terminal SDK**. | Stripe Payment Intent; confirmed via `payment_intent.succeeded` webhook |
+
+Neither raw card data nor card numbers are ever stored on Club-managed systems.
+
+**Cash confirmation for dues and guest fees:** When Cash is selected for a dues payment or guest fee, the Lambda writes the confirmation record directly (sets `dues_paid_until` or inserts the `guest_visits` row) without waiting for a Stripe webhook — the RSO's action at the kiosk screen is the confirmation event. No Stripe reconciliation is possible for cash transactions; the club is responsible for its own cash-handling procedures.
+
+**Tablet hardware:** Kiosk tablets **must have an accessible NFC chip** to support Tap to Pay. Most modern Android tablets and iPads qualify — verify hardware specs before purchasing. A **Stripe Terminal hardware reader** (e.g., Stripe Reader M2, paired via Bluetooth) is **standard equipment** at each kiosk station to support chip and swipe payments.
+
+```mermaid
+flowchart TD
+    PAY_START["Payment required"]
+    PAY_METHOD{"Payment<br/>method?"}
+    CASH_REC["RSO collects cash<br/>payment_method = Cash"]
+    STRIPE["Process via<br/>Stripe Terminal SDK<br/>NFC or card reader"]
+    PAY_OK{"Payment confirmed?"}
+    PAY_FAIL["402 Payment Required"]
+    PAY_DONE["Payment recorded<br/>return to calling flow"]
+
+    PAY_START --> PAY_METHOD
+    PAY_METHOD -->|Cash| CASH_REC --> PAY_DONE
+    PAY_METHOD -->|NFC / Card| STRIPE --> PAY_OK
+    PAY_OK -->|No| PAY_FAIL
+    PAY_OK -->|Yes| PAY_DONE
+```
+
+**Online dues payment (Member Portal):** Members may also pay annual dues from their own device through the Member Portal. This path uses **Stripe.js** (card element) rather than Stripe Terminal — no kiosk hardware is involved and Cash is not available. The Lambda creates a Stripe Payment Intent and returns the `client_secret` to the browser; the card transaction completes client-side. The same `payment_intent.succeeded` webhook confirms the payment, sets `dues_paid_until`, and appends a `Dues-Payment` entry to `activity_logs` (`device_id = NULL`). See `POST /v1/members/me/dues` in Section 7.1.
 
 ### Offline operation
 
@@ -388,7 +423,8 @@ Each lane belongs to a range and tracks current occupancy. The `devices` table l
 | `device_id` | UUID (FK, Nullable) | Reference to the `devices` table. `NULL` for non-kiosk events (`Level-Change` and `Service-Hours-Update` performed from the Admin Portal; `Dues-Payment` completed via the Member Portal personal-device path). Populated for kiosk-originated events including `Dues-Payment` completed at the kiosk via Stripe Terminal. |
 | `activity_type` | TEXT | `Range-Checkin`, `Range-Checkout`, `Guest-Payment`, `Waiver-Signed`, `Level-Change`, `Dues-Payment`, `Service-Hours-Update` |
 | `lane_id` | UUID (FK, Nullable) | Lane associated with the activity. Populated for `Range-Checkin`, `Range-Checkout`, and `Guest-Payment` events so that payments can be tied to a specific range visit and lane for reconciliation and dispute resolution; `NULL` for `Waiver-Signed`, `Level-Change`, `Dues-Payment`, and `Service-Hours-Update` events which have no lane context. |
-| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` and `Dues-Payment` events. Linked to the lane/visit via `lane_id` for guest payments; `lane_id` is `NULL` for dues payments. |
+| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID; populated for `Guest-Payment` and `Dues-Payment` events processed via NFC or Card. `NULL` for cash payments and for all non-payment activity types. Linked to the lane/visit via `lane_id` for guest payments; `lane_id` is `NULL` for dues payments. |
+| `payment_method` | TEXT (Nullable) | Payment method used: `NFC`, `Card`, or `Cash`. Populated for `Guest-Payment` and `Dues-Payment` events; `NULL` for all other activity types. |
 | `guest_id` | UUID (FK, Nullable) | FK to `guests.id`; populated for `Guest-Payment` and `Waiver-Signed` events involving a guest. Null for all other activity types. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
 
@@ -428,7 +464,8 @@ Enforced at check-in by querying `training_level_policies.max_guests` for the me
 | `quantity` | INT | Number of units purchased. |
 | `unit_price` | DECIMAL(6,2) | Price per unit at time of sale. |
 | `total` | DECIMAL(8,2) | `quantity × unit_price`; computed at transaction time. |
-| `stripe_payment_intent_id` | TEXT | Stripe Payment Intent ID for reconciliation and dispute resolution. |
+| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID for reconciliation and dispute resolution. `NULL` for cash payments. |
+| `payment_method` | TEXT | Payment method: `NFC`, `Card`, or `Cash`. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
 
 ### **5.8 Table: `guests`**
@@ -462,7 +499,8 @@ One row per range visit per guest. Used to enforce the annual visit limit: a gue
 | `range_id` | UUID (FK) | FK to `ranges.id` — the range visited. |
 | `lane_id` | UUID (FK, Nullable) | FK to `lanes.id` — the lane assigned for this visit. |
 | `visited_at` | TIMESTAMP | Visit timestamp; used to scope the annual limit check to the current calendar year. |
-| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID for the guest fee charged on this visit. Duplicated here for direct reconciliation without joining to `activity_logs`. |
+| `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID for the guest fee charged on this visit. `NULL` for cash payments. Duplicated here for direct reconciliation without joining to `activity_logs`. |
+| `payment_method` | TEXT | Payment method used for the guest fee: `NFC`, `Card`, or `Cash`. |
 
 **Annual limit check:** Query `guest_visits` using a timestamp range rather than `EXTRACT(YEAR …)` so the `(guest_id, member_id, visited_at)` index is used:
 
@@ -648,7 +686,7 @@ Returns current lane occupancy for the kiosk's own range (resolved from the Devi
 POST /v1/kiosk/check-in
 ```
 
-Triggered by a QR scan. Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry transitions to `Checked-In` on successful lane assignment). If no `Available` lane exists, a `wait_list` row is inserted (storing `guest_count` for later scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If an `Available` lane exists, selects the one that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
+Triggered by a QR scan after a member selects **Check In as Shooter** at the role prompt (or immediately, for Level 1–3 members who see no prompt). Resolves the device's `range_id`, then validates: (1) `ranges.is_open = true`; (2) member `training_level ≥ ranges.min_training_level`; (3) dues current; (4) declared guest count ≤ `training_level_policies.max_guests` for this member's level; (5) no `wait_list` entry with `status = 'Waiting'` already exists for this member at this range (a `Called` entry is valid — the member is responding to the queue call and the entry transitions to `Checked-In` on successful lane assignment). Level 4–6 members (RSOs and above) are subject to the same validation rules and may occupy lanes on-shift or off-shift. If no `Available` lane exists, a `wait_list` row is inserted (storing `guest_count` for later scoring) and the response includes the queue position — no guest waiver or payment is taken at this point. If an `Available` lane exists, selects the one that maximises distance from all occupied lanes (greatest gap by `lane_number`) considering the declared group size, and assigns it. Guest waiver and payment are processed after lane assignment via `POST /v1/kiosk/guest-payment`. All values queried from Aurora via the **RDS Data API** — never from the JWT or device record directly.
 
 **Returns:** `200 OK` with `{ lane_number }` (lane assigned), `202 Accepted` with `{ wait_position }` (range full — added to wait list), or `403 Forbidden` (e.g., "Level 3 Required", "Guests not permitted at this level").
 
@@ -668,7 +706,7 @@ Triggered by a QR scan at range exit. Validates an active open `Range-Checkin` e
 POST /v1/kiosk/consumable-purchase
 ```
 
-Records one or more line items (item name, quantity, unit price) to `consumable_purchases` and processes payment via **Stripe Terminal SDK** — NFC Tap to Pay (primary) or paired card reader (fallback). `member_id` is optional — omit for anonymous guest purchases.
+Records one or more line items (item name, quantity, unit price) to `consumable_purchases`. The kiosk presents a payment method choice (see *Payment methods* in Section 4): **Cash**, **NFC** (Tap to Pay), or **Card** (paired Stripe Terminal hardware reader). For NFC and Card, payment is processed via **Stripe Terminal SDK** before the record is inserted. `member_id` is optional — omit for anonymous guest purchases.
 
 **Returns:** `200 OK` (Purchase Recorded) or `402 Payment Required` (Stripe payment failure).
 
@@ -678,9 +716,9 @@ Records one or more line items (item name, quantity, unit price) to `consumable_
 POST /v1/kiosk/dues
 ```
 
-Kiosk path for annual dues payment via **Stripe Terminal** — NFC Tap to Pay (primary) or paired card reader (fallback). The request body carries the `member_num` (resolved from the scanned QR badge). The Lambda resolves the member from `member_num`, reads `annual_dues_cents` from `club_settings`, and creates and processes a **Stripe Terminal** PaymentIntent through the Terminal SDK. Dues confirmation — setting `members.dues_paid_until = December 31 of the current calendar year` and appending a `Dues-Payment` entry to `activity_logs` with the kiosk's `device_id` — is handled exclusively by the `payment_intent.succeeded` webhook, identical to the personal-device path. The webhook is idempotent on Payment Intent ID.
+Kiosk path for annual dues payment. The request body carries the `member_num` (resolved from the scanned QR badge) and `payment_method` (`Cash`, `NFC`, or `Card`). The Lambda resolves the member from `member_num` and reads `annual_dues_cents` from `club_settings`. For **Cash**, the Lambda writes the confirmation directly (see *Payment methods* in Section 4). For **NFC** or **Card**, the Lambda creates and processes a **Stripe Terminal** PaymentIntent; dues confirmation is handled by the `payment_intent.succeeded` webhook, which is idempotent on Payment Intent ID.
 
-**Returns:** `200 OK` with `{ dues_paid_until }`, `402 Payment Required` (Stripe failure), or `404 Not Found` (unrecognised `member_num`).
+**Returns:** For **Cash**: `200 OK` with `{ dues_paid_until }`. For **NFC** or **Card**: `202 Accepted` with `{ payment_intent_id }` (dues are confirmed and `dues_paid_until` set by the `payment_intent.succeeded` webhook). All paths: `402 Payment Required` (Stripe failure) or `404 Not Found` (unrecognised `member_num`).
 
 ---
 
@@ -688,7 +726,7 @@ Kiosk path for annual dues payment via **Stripe Terminal** — NFC Tap to Pay (p
 POST /v1/kiosk/guest-payment
 ```
 
-Handles the full guest add-on flow for a single guest: (1) look up guest by `first_name`, `last_name`, and `phone` in `guests` — create a new record if not found; (2) check `guests.waiver_signed_at` — prompt waiver capture at the kiosk if no record exists or the waiver has expired; (3) query `guest_visits` for this guest-member combination in the current calendar year — if count ≥ 2, return `403 Forbidden` (hard block; no RSO override applies); (4) process the guest fee via **Stripe Terminal SDK** — NFC Tap to Pay (primary) or paired card reader (fallback); (5) insert a `guest_visits` row; (6) create an `activity_logs` entry with `guest_id` populated.
+Handles the full guest add-on flow for a single guest: (1) look up guest by `first_name`, `last_name`, and `phone` in `guests` — create a new record if not found; (2) check `guests.waiver_signed_at` — prompt waiver capture at the kiosk if no record exists or the waiver has expired; (3) query `guest_visits` for this guest-member combination in the current calendar year — if count ≥ 2, return `403 Forbidden` (hard block; no RSO override applies); (4) present payment method choice (see *Payment methods* in Section 4); (5) insert a `guest_visits` row with `payment_method` populated; (6) create an `activity_logs` entry with `guest_id` and `payment_method` populated.
 
 **Returns:** `200 OK`, `403 Forbidden` (annual limit reached), or `402 Payment Required` (Stripe failure).
 
@@ -1060,9 +1098,9 @@ The following are unresolved before implementation begins. Each requires a delib
 | 8 | **Guest Level 0 flow entry point** | ✅ Resolved — guests must be physically present with their sponsoring member; no independent guest entry path exists. The guest add-on step (after member lane assignment) is the exclusive entry point for first-visit waiver capture and payment. See Section 4 and Section 7.2. |
 | 9 | **Real-time RSO check-in view** | ✅ Resolved — kiosk shows local range occupancy (re-fetched after each transaction + 30s poll). Admin Portal / mobile web adds a cross-range supervisory view via `GET /v1/admin/ranges/occupancy` (Level 4+), polled at 30s. No push mechanism required. See Section 7.3. |
 | 10 | **Offline operation architecture** | Member check-in and check-out must continue without internet connectivity. Proposed approach: the kiosk caches an encrypted local snapshot of active member QR tokens, `training_level`, and waiver/dues status at regular intervals while online. On connectivity loss, check-in validation runs against the local cache; events are queued and synced when connectivity restores. Guest payment (Stripe Terminal) requires connectivity and cannot be processed offline — policy decision needed: (a) refuse guest entry during outage, or (b) allow RSO to grant provisional entry at their discretion (no payment record until online). The caching strategy, encryption key management, and conflict-resolution on sync must be defined before kiosk implementation begins. |
-| 11 | **Violation override flow** | ✅ Resolved — RSO taps own NFC badge (Level ≥ 4); logs `actor_member_id`. PIN rejected: observable, shareable, non-attributed. Same mechanism gates RSO Dashboard access. Approve: exception recorded in `activity_logs`; Deny: lane remains `Available`. See Section 4. |
+| 11 | **Violation override flow** | ✅ Resolved — RSO taps own NFC badge (Level ≥ 4); logs `actor_member_id`. PIN rejected: observable, shareable, non-attributed. Approve: exception recorded in `activity_logs`; Deny: lane remains `Available`. See Section 4. |
 | 12 | **Lane configuration management** | ✅ Resolved — see Section 5.4 and Section 7.2. Initial counts seeded in bootstrap migration (Rifle-Pistol: 17 lanes); future changes via `POST /v1/admin/lanes` and `PATCH /v1/admin/lanes/{lane_id}` without requiring a migration. |
-| 13 | **Kiosk handoff model** | ✅ Resolved — **RSO-mediated**: RSO carries the tablet, presents it to arriving members, taps own NFC badge for Dashboard access and violation resolution. Fixed-mount self-serve rejected — requires a separate RSO notification mechanism for alerts and introduces custody ambiguity. See Section 4. |
+| 13 | **Kiosk handoff model** | ✅ Resolved — **RSO-mediated**: RSO carries the tablet, presents it to arriving members, scans own QR badge to open the RSO Dashboard (via the Level 4+ role prompt) and taps own NFC badge for violation resolution. Fixed-mount self-serve rejected — requires a separate RSO notification mechanism for alerts and introduces custody ambiguity. See Section 4. |
 | 14 | **Observability strategy** | ✅ Resolved — see Section 10. Structured JSON logging to **Amazon CloudWatch Logs**; X-Ray deferred; three alarms to admin **Amazon SNS** topic; 7-year log retention. |
 | 15 | **Async background workflow scope** | ✅ Resolved — daily audit log export only. EventBridge Scheduler → SQS → Lambda → S3 (`audit-logs/{YYYY}/{MM}/{DD}.ndjson`); DLQ on the SQS queue. S3 retention 365 days (export files only; Aurora rows and CloudWatch Logs retained longer per observability policy). Idempotent on date partition. |
 | 16 | **Guest lookup key** | ✅ Resolved — `guests` uses `(first_name, last_name, phone, email)` as the composite lookup key and unique constraint (Section 5.8). Email is collected alongside name and phone during the kiosk guest add-on step. |
