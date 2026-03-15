@@ -662,6 +662,7 @@ Personal-device path for annual dues payment via **Stripe.js** (card element —
 | `POST` | `/v1/kiosk/consumable-purchase` | **Device Token** |
 | `POST` | `/v1/kiosk/dues` | **Device Token** |
 | `POST` | `/v1/kiosk/guest-payment` | **Device Token** |
+| `POST` | `/v1/kiosk/waiver` | **Device Token** |
 
 ---
 
