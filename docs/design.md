@@ -734,6 +734,21 @@ Handles the full guest add-on flow for a single guest: (1) look up guest by `fir
 
 **Returns:** `200 OK`, `403 Forbidden` (annual limit reached), or `402 Payment Required` (Stripe failure).
 
+---
+
+```http
+POST /v1/kiosk/waiver
+```
+
+Handles waiver signing for both **members** and **guests**. The request body must include the PDF bytes (base64-encoded), a `member_id`, and optionally a `guest_id`. The presence of `guest_id` determines which path is taken:
+
+* **Member waiver** (`guest_id` absent): PDF stored at `waivers/<member_id>/<timestamp>.pdf`. `members.waiver_signed_at` and `members.waiver_version` are updated in a single RDS transaction alongside a `Waiver-Signed` entry in `activity_logs` (with `guest_id = NULL`).
+* **Guest waiver** (`guest_id` present): PDF stored at `waivers/guests/<guest_id>/<timestamp>.pdf`. `guests.waiver_signed_at` and `guests.waiver_s3_key` are updated. A `Waiver-Signed` entry is written to `activity_logs` with `guest_id` populated. `members.waiver_signed_at` is **not** modified.
+
+Both paths use KMS server-side encryption (`aws:kms`). S3 Object Lock (Compliance Mode, 7-year retention) is enforced at the bucket level. The `activity_logs` row is never written before the S3 upload succeeds — on upload failure the transaction is rolled back and `500` is returned.
+
+**Returns:** `200 OK` (waiver stored) or `400 Bad Request` (missing required field) or `500 Internal Server Error` (S3 upload failure).
+
 ### 7.3 Administrative & Recovery
 
 | Method | Path | Auth |

@@ -163,10 +163,27 @@ def generate_device_token(salt: str) -> tuple[str, str]:
 
 ## S3 Waiver Storage
 
-* Upload signed waivers to `S3_WAIVER_BUCKET` with a key pattern of `waivers/<member_id>/<timestamp>.pdf`
+`POST /v1/kiosk/waiver` handles both **member** and **guest** waiver signing. Differentiate by the presence of `guest_id` in the request body.
+
+### Member waiver (no `guest_id` in request body)
+
+* S3 key pattern: `waivers/<member_id>/<timestamp>.pdf`
+* After successful upload, execute a single RDS transaction that:
+  * Updates `members.waiver_signed_at` and `members.waiver_version`
+  * Inserts a `Waiver-Signed` entry into `activity_logs` with `waiver_s3_key` set to the uploaded key; `guest_id` is `NULL`
+
+### Guest waiver (`guest_id` present in request body)
+
+* S3 key pattern: `waivers/guests/<guest_id>/<timestamp>.pdf`
+* After successful upload, execute a single RDS transaction that:
+  * Updates `guests.waiver_signed_at` and `guests.waiver_s3_key`
+  * Inserts a `Waiver-Signed` entry into `activity_logs` with `waiver_s3_key` set to the uploaded key and `guest_id` populated
+  * Does **not** touch `members.waiver_signed_at` or `members.waiver_version`
+
+### Common rules (both paths)
+
 * Use server-side encryption: `ServerSideEncryption='aws:kms'`
 * S3 Object Lock is configured at the bucket level (Compliance Mode, 7 years) — do not set object-level retention in code
-* After a successful S3 upload, execute a single RDS Data API transaction that: updates `members.waiver_signed_at`, updates `members.waiver_version`, and inserts a `Waiver-Signed` entry into `activity_logs` with `waiver_s3_key` set to the uploaded S3 object key
 * Never write the `activity_logs` row before the S3 upload succeeds — rollback the transaction and return `500` if the upload fails
 
 ## API Gateway Integration
