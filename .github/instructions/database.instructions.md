@@ -68,6 +68,18 @@ RLS must be enabled on every table that contains member data:
 ```sql
 ALTER TABLE members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE members FORCE ROW LEVEL SECURITY;
+
+-- consumable_purchases links purchases to a specific member — treat as member PII
+ALTER TABLE consumable_purchases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE consumable_purchases FORCE ROW LEVEL SECURITY;
+
+-- activity_logs links check-in/out events to a specific member
+ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_logs FORCE ROW LEVEL SECURITY;
+
+-- guest_visits links guests to the sponsoring member
+ALTER TABLE guest_visits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE guest_visits FORCE ROW LEVEL SECURITY;
 ```
 
 ### Standard policy pattern
@@ -80,6 +92,25 @@ CREATE POLICY policy_members_self ON members
 
 -- Level 4+ can SELECT all rows (set via RDS Data API session variable)
 CREATE POLICY policy_members_admin ON members
+    FOR ALL
+    USING (current_setting('app.current_training_level')::int >= 4);
+```
+
+`consumable_purchases`, `activity_logs`, and `guest_visits` follow the same pattern using the `member_id` column:
+
+```sql
+-- Members can only SELECT their own purchases
+CREATE POLICY policy_consumable_purchases_self ON consumable_purchases
+    FOR SELECT
+    USING (member_id = current_setting('app.current_member_id')::uuid);
+
+-- Kiosk INSERT is permitted for the current member only
+CREATE POLICY policy_consumable_purchases_kiosk_insert ON consumable_purchases
+    FOR INSERT
+    WITH CHECK (member_id = current_setting('app.current_member_id')::uuid);
+
+-- Level 4+ admin can SELECT and manage all rows
+CREATE POLICY policy_consumable_purchases_admin ON consumable_purchases
     FOR ALL
     USING (current_setting('app.current_training_level')::int >= 4);
 ```
