@@ -45,3 +45,16 @@ These have been decided. Do not introduce alternatives or ambiguity around them.
 - Bullet lists use `*` with four-space indent for nested items
 - All tables must have a header row and a separator row with `:---` alignment
 - One blank line between sections; no double blank lines
+
+## Open Design Questions (ODQ) — Section 11 of design.md
+
+Section 11 is split into two subsections:
+
+* **Unresolved** — items that require a decision before or after launch. Columns: `#`, `Area`, `Priority`, `Question`. Priority values: `Pre-launch` or `Post-launch`.
+* **Resolved** — items where a decision has been made and documented. Columns: `#`, `Area`, `Decision`.
+
+Rules:
+* New ODQ items must be added to the **Unresolved** table with an appropriate Priority.
+* When an item is resolved, remove it from the Unresolved table and add it to the Resolved table, replacing the `Question` content with a concise summary of the decision and a cross-reference to the relevant section (e.g., `See Section 7.1`).
+* Do not mark items as ✅ in-place — move them; do not leave resolved items in the Unresolved table.
+* ODQ numbers are not reused. The next new item takes the next sequential number regardless of gaps.

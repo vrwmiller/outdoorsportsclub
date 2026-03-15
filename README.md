@@ -4,9 +4,10 @@ A web application for a ~2,200-member outdoor sporting club. It modernizes the c
 
 ## What it does
 
+- **Club Website** — Public home page: club, facility, and membership information
 - **Member Portal** — Social login (Google/Facebook), dues payment, QR badge, training-level-gated range access
 - **Admin Portal** — Finance, membership management, range operations (Level 4–6 staff)
-- **Range Kiosk** — Tablet check-in via QR badge scan, guest fees (Cash, NFC, or card), mandatory waiver capture
+- **Range Kiosk** — Tablet check-in via QR badge scan, guest fees (Cash, NFC, or card), mandatory waiver re-signing
 - **RBAC** — Seven training levels (Guest → Webmaster) control access to every surface
 
 ## Tech stack
@@ -23,7 +24,7 @@ A web application for a ~2,200-member outdoor sporting club. It modernizes the c
 
 ## Repository layout
 
-```
+```text
 .github/       Agents, instructions, and workflow config
 docs/          Design docs and architecture diagram
 
