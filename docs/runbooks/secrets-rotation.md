@@ -26,8 +26,8 @@ See `docs/design.md` Section 8 (multi-region replication) for the replication or
 ### 1. Generate a new key in Stripe
 
 1. Sign in to the [Stripe Dashboard](https://dashboard.stripe.com)
-   * For **prod**: use the **Live mode** toggle (top-left)
-   * For **dev**: use **Test mode**
+    * For **prod**: use the **Live mode** toggle (top-left)
+    * For **dev**: use **Test mode**
 2. Navigate to **Developers → API keys**
 3. Click **Create secret key** (or **Roll key** on the existing restricted key)
 4. Copy the new secret key — it is shown only once
@@ -37,11 +37,11 @@ See `docs/design.md` Section 8 (multi-region replication) for the replication or
 ```bash
 aws secretsmanager put-secret-value \
   --secret-id osc/prod/stripe-key \
-  --secret-string '{"secret_key":"sk_live_XXXXXXXXXXXX"}' \
+  --secret-string 'sk_live_XXXXXXXXXXXX' \
   --profile outdoorsportsclub
 ```
 
-Replace `osc/prod/stripe-key` with `osc/dev/stripe-key` for dev. Replace the key value with the one copied from Stripe.
+Replace `osc/prod/stripe-key` with `osc/dev/stripe-key` for dev. Replace `sk_live_XXXXXXXXXXXX` with the key value copied from Stripe.
 
 ### 3. Wait for multi-region replication (prod only)
 
@@ -117,6 +117,6 @@ Check **Amazon CloudWatch Logs** for Lambda function logs immediately after rota
 
 ## Notes
 
-* Lambda functions read secrets from **AWS Secrets Manager** at runtime — there are no cached copies in environment variables. A rotated secret takes effect on the next Lambda cold start or the next request after the internal SDK cache expires (typically under 5 minutes).
+* Lambda functions read secrets from **AWS Secrets Manager** at cold start — there are no cached copies in environment variables. A rotated secret takes effect on the next Lambda cold start. For urgent rotations, force new containers by redeploying each affected Lambda function (e.g., update the function configuration to publish a new version and force a fresh deployment).
 * **AWS Secrets Manager** does not send a notification when a manual `put-secret-value` is called. Monitor Lambda error rates in **Amazon CloudWatch** for the 10 minutes following any rotation.
 * **Rotation must be applied to the primary region first**, then confirmed in replica regions before the old credential is revoked or the old secret is deleted. Reverting the order can leave replica regions with invalid secrets.

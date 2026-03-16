@@ -21,8 +21,8 @@ See `docs/design.md` Section 2 for the full pairing sequence and `devices` table
 1. Sign in to the **Admin Portal** with a Level 6 account
 2. Navigate to **Devices → Provision new kiosk**
 3. Enter:
-   * **Location tag** — human-readable name for this tablet (e.g., `Skeet-Trap-1`)
-   * **Range** — select the range this kiosk serves from the dropdown
+    * **Location tag** — human-readable name for this tablet (e.g., `Skeet-Trap-1`)
+    * **Range** — select the range this kiosk serves from the dropdown
 4. Click **Generate pairing code**
 5. The portal calls `POST /v1/admin/devices/pairing-code` and displays a short alphanumeric code with a **15-minute expiry**
 
@@ -72,7 +72,7 @@ If a tablet is lost, stolen, or taken out of service, revoke it immediately so a
 3. Click **Revoke**
 4. Confirm the revocation
 
-The portal sets `devices.status = Revoked`. The next API call from that tablet returns `401 Unauthorized` — the token is invalid and the kiosk cannot be used for check-ins until a new device is provisioned.
+The portal sets `devices.status = Revoked`. The next API call from that tablet returns `403 Forbidden` — the token is invalid and the kiosk cannot be used for check-ins until a new device is provisioned.
 
 > Revoking a device does **not** affect any open lane assignments at that range. Existing check-ins remain in `activity_logs`; RSOs may still force-checkout occupied lanes from another kiosk on the same range or from the Admin Portal. See the [RSO force-checkout runbook](rso-force-checkout.md).
 

@@ -93,11 +93,11 @@ After confirming the restored cluster is healthy and all Lambda functions are po
 ```bash
 aws rds delete-db-cluster \
   --db-cluster-identifier <original-cluster-id> \
-  --skip-final-snapshot \
+  --final-db-snapshot-identifier <original-cluster-id>-final-snapshot \
   --profile outdoorsportsclub
 ```
 
-> Only skip the final snapshot if the original cluster's storage is corrupt or inaccessible. If the original cluster is healthy (e.g., data corruption at the application level), take a final snapshot first by omitting `--skip-final-snapshot`.
+> If the original cluster's storage is corrupt or inaccessible and the final snapshot cannot be taken, add `--skip-final-snapshot` in place of `--final-db-snapshot-identifier`. Only omit the final snapshot as a last resort — it is your last-chance recovery artifact.
 
 ---
 

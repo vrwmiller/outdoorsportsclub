@@ -2,7 +2,7 @@
 
 **Audience:** Administrator (Level 5) or Webmaster (Level 6).
 
-This runbook covers retrieving a signed waiver PDF from **Amazon S3** for a specific member or guest. Waivers are stored with **S3 Object Lock** (Compliance Mode, 7-year retention) and encrypted with **AWS KMS**. They cannot be deleted, but they can be viewed and downloaded by authorised personnel.
+This runbook covers retrieving a signed waiver PDF from **Amazon S3** for a specific member or guest. Waivers are stored with **S3 Object Lock** (Compliance Mode, 7-year retention) and encrypted with **AWS KMS**. They cannot be deleted, but they can be viewed and downloaded by authorized personnel.
 
 See `docs/design.md` Sections 5.5 and 7.2 for the `activity_logs.waiver_s3_key` field and the waiver storage path convention.
 
@@ -78,6 +78,6 @@ Replace `<waiver-bucket-name>` with the correct S3 bucket for the environment (`
 
 ## Notes
 
-* **S3 Object Lock (Compliance Mode)** prevents deletion or overwrite of any waiver object for 7 years from the date of upload. Objects that appear to be missing have not been deleted — they were either never uploaded (check `activity_logs` for a failed `Waiver-Signed` event) or are under a different key than expected.
+* **S3 Object Lock (Compliance Mode)** prevents deletion or overwrite of any waiver object for 7 years from the date of upload. Objects that appear to be missing have not been deleted — they were either never uploaded (check **Amazon CloudWatch Logs** for the Lambda function that handles waiver submission, or list the bucket prefix with `aws s3 ls s3://<waiver-bucket>/<expected-prefix>/` to confirm object presence) or are under a different key than expected.
 * **Expired waivers** are not deleted from S3. The 1-year expiration tracked by `waiver_signed_at` only determines whether the kiosk prompts re-signing at the member's next visit — the original signed document remains available in S3 for the full 7-year retention period.
 * **`dev` environment waivers** are synthetic test data and must not contain real member information. Do not copy waiver files from `prod` into `dev`.

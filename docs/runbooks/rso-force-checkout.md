@@ -33,9 +33,9 @@ Force-checkout is the only supported mechanism for clearing an occupied lane wit
 1. At the kiosk, scan your Level 4+ QR badge from the **Idle** screen
 2. At the **role prompt**, select **Open RSO Dashboard**
 3. The RSO Dashboard shows all lanes for this range with their current `status`:
-   * `Available` — unoccupied
-   * `Occupied` — shows member name and guest count
-   * `Closed` — taken out of service
+    * `Available` — unoccupied
+    * `Occupied` — shows member name and guest count
+    * `Closed` — taken out of service
 4. Locate the lane to clear — confirm the occupant has vacated the physical lane
 5. Tap the occupied lane → select **Force checkout**
 6. Confirm the action
