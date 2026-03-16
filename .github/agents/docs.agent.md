@@ -1,5 +1,5 @@
 ---
-description: "Use when writing, editing, reviewing, or improving documentation in docs/. Covers one-pager.md, proposal.md, design.md, architecture.md, and stack-decisions.md for the Outdoor Sports Club project. Invoke with: 'update the docs', 'add this to the design', 'write a section on', 'review the docs for accuracy'."
+description: "Use when writing, editing, reviewing, or improving documentation in docs/. Covers one-pager.md, proposal.md, design.md, architecture.md, stack-decisions.md, and runbooks/*.md for the Outdoor Sports Club project. Invoke with: 'update the docs', 'add this to the design', 'write a section on', 'write a runbook', 'review the docs for accuracy'."
 tools: [read, search, edit]
 ---
 
