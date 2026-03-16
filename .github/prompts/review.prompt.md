@@ -24,11 +24,20 @@ Follow these steps exactly. Do not skip any step.
    * If a comment is a question rather than a change request, note the answer but do not change code.
    * If a comment was flagged as incorrect or contradictory in step 3, skip the change and record the reason.
 
-5. **Commit the fixes** — stage only the files you changed. Do not stage `.env*`, secrets, or credentials. Then commit:
+5. **Reply to each comment** — after completing step 4, reply to every inline comment using:
+   ```
+   gh api repos/<nameWithOwner>/pulls/<number>/comments/<comment_id>/replies -X POST -f body="<reply>"
+   ```
+   * For comments that were acted on: confirm what was changed and why.
+   * For comments that were skipped (incorrect or contradicted by the codebase): explain the discrepancy clearly — cite the relevant file, section, or established pattern that contradicts the reviewer's claim.
+   * For questions: answer the question directly without making code changes.
+   * Keep replies concise and factual. Do not be defensive — just state what happened and why.
+
+6. **Commit the fixes** — stage only the files you changed. Do not stage `.env*`, secrets, or credentials. Then commit:
    ```
    git add <changed files>
    git commit -m "fix: address PR review comments"
    ```
    Use a more descriptive message if the changes cover a single clear topic (e.g., `fix: correct RLS policy for activity_logs`).
 
-6. **Push** — run `git push`.
+7. **Push** — run `git push`.
