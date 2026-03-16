@@ -9,6 +9,8 @@ applyTo: "**/*.md, **/*.ts, **/*.tsx, **/*.js, **/*.jsx, **/*.py"
 
 Always use the `get_errors` tool on the file after editing to catch lint violations — do not rely solely on manual file inspection. Manual scanning misses violations. `get_errors` is the authoritative check.
 
+> **Note for contributors:** `get_errors` is a built-in Copilot agent tool, not a shell command. It is not available from the terminal. Human developers running lint manually should use `markdownlint` for Markdown files, `eslint` for TypeScript/JavaScript, and `ruff` for Python.
+
 ## Markdown (`docs/**`)
 
 - Headings must follow hierarchy — no skipping levels (e.g., h1 → h3)
