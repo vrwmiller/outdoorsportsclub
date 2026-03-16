@@ -5,6 +5,10 @@ applyTo: "**/*.md, **/*.ts, **/*.tsx, **/*.js, **/*.jsx, **/*.py"
 
 # Linting & Style Standards
 
+## Linting workflow
+
+Always use the `get_errors` tool on the file after editing to catch lint violations — do not rely solely on manual file inspection. Manual scanning misses violations. `get_errors` is the authoritative check.
+
 ## Markdown (`docs/**`)
 
 - Headings must follow hierarchy — no skipping levels (e.g., h1 → h3)

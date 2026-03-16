@@ -14,6 +14,7 @@ applyTo: "docs/**/*.md"
 | `docs/design.md` | Developers and Webmaster | Authoritative technical spec; source of truth for all build decisions |
 | `docs/architecture.md` | Developers and Webmaster | System architecture diagram and flow notes; must stay in sync with `design.md` |
 | `docs/stack-decisions.md` | Developers and Webmaster | In-depth analysis of significant technology choices, rejected alternatives, and architectural tradeoffs; records the reasoning behind decisions that are too detailed for `design.md` |
+| `docs/runbooks/*.md` | Developers and Webmaster | Operational step-by-step guides for setup, deployment, and maintenance tasks; not design documentation — procedural instructions only |
 
 - Canonical implementation detail (schemas, API endpoints, code libraries, locked decisions) belongs in `design.md` only; technical context needed to explain a tradeoff (e.g., cost tables, rejected alternatives) belongs in `stack-decisions.md` — do not duplicate, cross-reference instead
 - `one-pager.md` and `proposal.md` should not contradict `design.md`; if they differ, `design.md` wins
