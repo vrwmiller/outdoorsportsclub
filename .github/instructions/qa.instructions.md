@@ -229,11 +229,15 @@ The CI pipeline runs on every push to any branch and on every PR targeting `main
 
 ### Jobs and ordering
 
-Jobs are chained with `needs:` so any failure stops all downstream jobs immediately. Do not use `continue-on-error: true` on any job.
+Jobs are chained with `needs:` so any failure prevents all downstream jobs from running. Do not use `continue-on-error: true` on any job.
 
 ```
-lint → test-python → test-frontend → e2e
+           ┌─ test-python ─┐
+lint ──────┤               ├── e2e
+           └─ test-frontend ┘
 ```
+
+`test-python` and `test-frontend` run in parallel (both `needs: lint`); `e2e` runs only after both pass.
 
 | Job | `needs` | Trigger | Command |
 | :--- | :--- | :--- | :--- |
@@ -265,7 +269,8 @@ Each deployment workflow runs these steps in order. Each step uses the default `
 2. **Run all migrations** — execute every file in `db/migrations/*.sql` in filename (sort) order via the RDS Data API:
 
    ```bash
-   for f in $(ls db/migrations/*.sql | sort); do
+   shopt -s nullglob
+   for f in db/migrations/*.sql; do
      aws rds-data execute-statement \
        --resource-arn "$AURORA_CLUSTER_ARN" \
        --secret-arn "$DB_SECRET_ARN" \
@@ -273,6 +278,8 @@ Each deployment workflow runs these steps in order. Each step uses the default `
        --sql "$(cat "$f")"
    done
    ```
+
+   `shopt -s nullglob` makes the loop a no-op when no migration files exist (e.g., on first deploy). File names must be zero-padded (`001_…`) so lexicographic order matches migration order.
 
 3. `lambda update-function-code` — deploy new Lambda packages
 
