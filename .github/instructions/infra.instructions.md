@@ -50,7 +50,7 @@ amplify/
 All resource logical IDs and physical names use the pattern `osc-<resource>-<env>`:
 
 * e.g., `osc-aurora-prod`, `osc-waivers-bucket-prod`, `osc-kms-aurora-prod`
-* Environments: `prod`, `staging`, `dev`
+* Environments: `prod`, `dev`
 * CloudFormation stack names: `osc-<domain>-<env>` (e.g., `osc-aurora-prod`)
 
 ## IAM — Least Privilege
@@ -131,11 +131,11 @@ ApiBasePathMapping:
 ```
 
 * ACM certificate must be in the **same region** as the API Gateway endpoint (regional endpoints do not accept `us-east-1` certs issued for CloudFront)
-* Use `prod` subdomain convention: `api.outdoorsportsclub.com` (prod), `api.staging.outdoorsportsclub.com` (staging)
+* Use `prod` subdomain convention: `api.outdoorsportsclub.com` (prod), `api.dev.outdoorsportsclub.com` (dev)
 
 ### Hosted zone
 
-* One Route 53 public hosted zone per domain: `outdoorsportsclub.com` (prod), `staging.outdoorsportsclub.com` (staging), `dev.outdoorsportsclub.com` (dev)
+* One Route 53 public hosted zone per domain: `outdoorsportsclub.com` (prod), `dev.outdoorsportsclub.com` (dev)
 * Hosted zones are **not managed in CloudFormation** — create them once manually and reference the Zone ID via a CloudFormation parameter `HostedZoneId`
 
 ### Record types
@@ -187,7 +187,7 @@ Resources:
 
 * Aurora must be deployed in a **VPC** with private subnets and a security group that allows no inbound internet traffic
 * Lambda does **not** need to be in the VPC — **RDS Data API** is a public AWS service endpoint that accepts requests from any Lambda with the correct IAM permissions and Secret ARN
-* Set `MinCapacity: 0.5` and `MaxCapacity: 4` ACUs for dev/staging; `MinCapacity: 1` and `MaxCapacity: 16` for production
+* Set `MinCapacity: 0.5` and `MaxCapacity: 4` ACUs for `dev`; `MinCapacity: 1` and `MaxCapacity: 16` for `prod`
 * Enable `EnableHttpEndpoint: true` on the cluster to activate the RDS Data API
 * Reference the Secrets Manager secret ARN in the cluster definition for RDS Data API authentication
 
@@ -340,7 +340,7 @@ With `RegionList: "us-east-1"`:
 * Secrets Manager replication: **not provisioned**
 * Route 53 failover records: **not provisioned** (single A/ALIAS record only)
 
-This keeps dev and staging costs minimal while preserving the ability to go multi-region with a single parameter change.
+This keeps dev costs minimal while preserving the ability to go multi-region with a single parameter change.
 
 ## CloudFormation Conventions
 
