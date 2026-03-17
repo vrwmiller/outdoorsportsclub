@@ -218,29 +218,80 @@ describe('auth-gated component', () => {
 
 - Use `page.getByRole()` and `page.getByText()` over CSS selectors
 - Store shared test user credentials and device tokens in `e2e/.env.test` (gitignored)
-- Never run E2E tests against production — use a dedicated staging environment or `localhost`
+- Never run E2E tests against production — use the `dev` environment or `localhost`
 - Tag smoke tests with `@smoke` so CI can run a fast subset on every PR
 
 ---
 
 ## CI Pipeline (`.github/workflows/ci.yml`)
 
-The CI pipeline must run on every push to any branch and on every PR targeting `main`.
+The CI pipeline runs on every push to any branch and on every PR targeting `main`. It must complete before any deployment workflow runs.
 
-### Jobs
+### Jobs and ordering
 
-| Job | Trigger | Steps |
-| :--- | :--- | :--- |
-| `lint` | Every push | Run linter checks for Python (`flake8`/`ruff`) and TypeScript (`eslint`) |
-| `test-python` | Every push | `pytest tests/ --cov=functions --cov-fail-under=80` |
-| `test-frontend` | Every push | `npx jest --coverage --coverageThreshold='{"global":{"lines":70}}'` |
-| `e2e` | PRs to `main` only | Start dev server → run Playwright `@smoke` suite |
+Jobs are chained with `needs:` so any failure prevents all downstream jobs from running. Do not use `continue-on-error: true` on any job.
+
+```
+           ┌─ test-python ─┐
+lint ──────┤               ├── e2e
+           └─ test-frontend ┘
+```
+
+`test-python` and `test-frontend` run in parallel (both `needs: lint`); `e2e` runs only after both pass.
+
+| Job | `needs` | Trigger | Command |
+| :--- | :--- | :--- | :--- |
+| `lint` | — | Every push | `ruff check functions/` + `eslint src/` |
+| `test-python` | `lint` | Every push | `pytest tests/ --cov=functions --cov-report=term-missing --cov-fail-under=80` |
+| `test-frontend` | `lint` | Every push | `npx jest --coverage --coverageThreshold='{"global":{"lines":70}}'` |
+| `e2e` | `test-python`, `test-frontend` | PRs to `main` only | Start dev server → `npx playwright test --grep @smoke` |
+
+All four jobs must pass for a PR to be mergeable. Do not add bypass rules.
 
 ### Environment variables in CI
 
 - Store all secrets in **GitHub Actions Secrets** — never hardcode in workflow YAML
 - Use dummy values for `moto`-mocked AWS credentials (see `conftest.py` pattern above)
 - The `CORS_ALLOW_ORIGIN` for CI should be `http://localhost:3000`
+
+### Deployment workflows (`.github/workflows/deploy-dev.yml`, `deploy-prod.yml`)
+
+Deployment workflows are separate from `ci.yml` and triggered only after CI passes on `main` (for `dev`) or on a version tag (for `prod`).
+
+| Workflow | Trigger | Environment |
+| :--- | :--- | :--- |
+| `deploy-dev.yml` | Push to `main` (CI passed) | `dev` |
+| `deploy-prod.yml` | Tag push matching `v*.*.*` | `prod` |
+
+Each deployment workflow runs these steps in order. Each step uses the default `if: success()` condition — a failed step halts the workflow immediately and the remaining steps do not run:
+
+1. `cloudformation deploy` — apply infrastructure changes
+2. **Run all migrations** — execute every file in `db/migrations/*.sql` in filename (sort) order via the RDS Data API:
+
+   ```bash
+   shopt -s nullglob
+   for f in db/migrations/*.sql; do
+     aws rds-data execute-statement \
+       --resource-arn "$AURORA_CLUSTER_ARN" \
+       --secret-arn "$DB_SECRET_ARN" \
+       --database osc \
+       --sql "$(cat "$f")"
+   done
+   ```
+
+   `shopt -s nullglob` makes the loop a no-op when no migration files exist (e.g., on first deploy). File names must be zero-padded (`001_…`) so lexicographic order matches migration order.
+
+3. `lambda update-function-code` — deploy new Lambda packages
+
+If step 2 fails, step 3 does not run. The existing Lambda code remains live. A human must investigate before the workflow is re-triggered.
+
+### Pipeline failure policy
+
+- No job or step uses `continue-on-error: true`
+- No deployment step uses `if: always()` — only the default `if: success()`
+- Failed runs are never auto-retried
+- Repository notification settings must route workflow failures to the Webmaster
+- The resolution procedure is in `docs/runbooks/ci-deployment-failure.md` — this is a **blocked runbook** pending workflow authoring; the Webmaster is the escalation point until it exists
 
 ---
 

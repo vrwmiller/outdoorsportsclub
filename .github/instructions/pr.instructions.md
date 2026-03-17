@@ -78,6 +78,7 @@ Why this change is needed — reference the open issue if one exists (`Closes #N
 
 - Always link related issues: `Closes #N` (auto-closes on merge) or `Related to #N`
 - If the PR partially addresses an issue, say so explicitly
+- When referencing Open Design Questions, write **ODQ N** (no `#`) — bare `#N` is auto-linked by GitHub to the issue or PR with that number, which is never the intent
 
 ## Checklist before opening
 
