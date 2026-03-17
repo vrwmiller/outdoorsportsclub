@@ -114,10 +114,19 @@ Before Route 53 can route to an API Gateway endpoint, a custom domain name must 
 
 ```yaml
 # In api.yaml — one ApiGatewayDomainName resource per region
+
+# prod → api.outdoorsportsclub.com; dev → api.dev.outdoorsportsclub.com
+Mappings:
+  EnvDomain:
+    prod:
+      ApiDomain: api.outdoorsportsclub.com
+    dev:
+      ApiDomain: api.dev.outdoorsportsclub.com
+
 ApiDomainName:
   Type: AWS::ApiGateway::DomainName
   Properties:
-    DomainName: !Sub "api.outdoorsportsclub.${Environment}.example.com"
+    DomainName: !FindInMap [EnvDomain, !Ref Environment, ApiDomain]
     RegionalCertificateArn: !Ref AcmCertArn   # ACM cert in same region
     EndpointConfiguration:
       Types: [REGIONAL]
@@ -159,6 +168,13 @@ Always use **A ALIAS** records (not CNAME) for API Gateway — ALIAS records are
 
 ```yaml
 # In route53.yaml
+Mappings:
+  EnvDomain:
+    prod:
+      ApiDomain: api.outdoorsportsclub.com
+    dev:
+      ApiDomain: api.dev.outdoorsportsclub.com
+
 Parameters:
   HostedZoneId:
     Type: String
@@ -175,7 +191,7 @@ Resources:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId: !Ref HostedZoneId
-      Name: !Sub "api.outdoorsportsclub.${Environment}.example.com"
+      Name: !FindInMap [EnvDomain, !Ref Environment, ApiDomain]
       Type: A
       AliasTarget:
         DNSName: !Ref ApiGatewayRegionalDomainName
