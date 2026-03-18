@@ -52,6 +52,7 @@ All tables are defined in `docs/design.md` Section 5. Current tables:
 - **backend** — backend Lambda handlers are the primary consumers of the schema via the RDS Data API; after any migration, notify the backend agent if column names, types, or table names changed so RDS Data API call sites can be updated
 - **infra** — the Aurora cluster ARN, subnet group, and Secrets Manager secret ARN are provisioned by infra in `infra/stacks/aurora.yaml`; new database resources may require updated IAM permissions — coordinate with infra
 - **qa** — schema changes should be reflected in mock fixtures in `tests/conftest.py`; after a migration, notify the qa agent to update or add DB mock setup
+- **docs** — the database agent owns direct updates to `docs/design.md` Section 5 (table definitions, column types, RLS policies) as part of every migration workflow; follow `.github/instructions/docs.instructions.md` when editing that section; for changes that affect areas outside Section 5 (e.g., a new table that introduces a new data-retention constraint documented elsewhere, or removal of a table that affects the architecture diagram), flag those additional documentation updates to the docs agent
 
 ## Approach
 
