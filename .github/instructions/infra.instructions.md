@@ -206,7 +206,7 @@ Resources:
 * Set `MinCapacity: 0.5` and `MaxCapacity: 4` ACUs for `dev`; `MinCapacity: 1` and `MaxCapacity: 16` for `prod`
 * Enable `EnableHttpEndpoint: true` on the cluster to activate the RDS Data API
 * Reference the Secrets Manager secret ARN in the cluster definition for RDS Data API authentication
-* **Aurora security group egress:** A `0.0.0.0/0` HTTPS egress rule does not by itself restrict traffic to AWS endpoints — it is the absence of a NAT gateway or internet gateway on the private subnets that prevents actual egress. The hardened alternative is to provision **VPC interface endpoints** for `kms` and `secretsmanager` (no egress rule needed at all) — prefer this for production deployments.
+* **Aurora security group egress:** A `0.0.0.0/0` HTTPS egress rule does not by itself restrict traffic to AWS endpoints — it is the absence of a NAT gateway or internet gateway on the private subnets that prevents actual egress. The hardened alternative is to provision **VPC interface endpoints** for `kms` and `secretsmanager` (no `0.0.0.0/0` egress rule needed — replace it with egress scoped to the endpoint's security group, and configure the endpoint SG to allow inbound from the Aurora SG) — prefer this for production deployments.
 * **`aurora.yaml` must only be deployed in the primary region.** Secondary-region Aurora Global Database secondary clusters are provisioned separately. Deploying `aurora.yaml` in a secondary region with `IsMultiRegion: true` would attempt to create a duplicate `GlobalClusterIdentifier` and fail.
 
 ## S3 — Waiver Bucket
