@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  KMS customer-managed multi-region keys for Outdoor Sports Club.
+  Provisions one key for Aurora storage encryption and one key for S3
+  waiver-bucket server-side encryption. Both keys are multi-region
+  capable so that replica keys can be added in secondary regions without
+  re-keying existing ciphertexts.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # Aurora CMK
+  # ---------------------------------------------------------------------------
+  AuroraKmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub "Aurora storage encryption — osc-aurora-${Environment}"
+      EnableKeyRotation: true
+      MultiRegion: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          # Full access via IAM — lets IAM policies grant fine-grained access to
+          # specific Lambda roles without modifying this key policy.
+          - Sid: EnableIAMUserPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+
+          # RDS needs GenerateDataKey* + CreateGrant to encrypt cluster storage
+          # and to allow Aurora to re-grant key access to cluster replicas.
+          - Sid: AllowRDSService
+            Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:CreateGrant
+              - kms:ListGrants
+              - kms:DescribeKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+          # Secrets Manager needs Decrypt + GenerateDataKey to encrypt the
+          # Aurora master-password secret that is managed in secrets.yaml.
+          - Sid: AllowSecretsManager
+            Effect: Allow
+            Principal:
+              Service: secretsmanager.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+              - kms:CreateGrant
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  AuroraKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/osc-aurora-${Environment}"
+      TargetKeyId: !Ref AuroraKmsKey
+
+  # ---------------------------------------------------------------------------
+  # S3 Waivers CMK
+  # ---------------------------------------------------------------------------
+  S3KmsKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub "S3 waiver-bucket server-side encryption — osc-s3-waivers-${Environment}"
+      EnableKeyRotation: true
+      MultiRegion: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          # Full access via IAM — Lambda execution roles receive kms:Decrypt and
+          # kms:GenerateDataKey through their IAM policies (provisioned in iam/).
+          - Sid: EnableIAMUserPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+
+          # S3 needs GenerateDataKey + Decrypt for SSE-KMS object encryption and
+          # for presigned-URL downloads when the caller presents valid credentials.
+          - Sid: AllowS3Service
+            Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey
+              - kms:DescribeKey
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  S3KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/osc-s3-waivers-${Environment}"
+      TargetKeyId: !Ref S3KmsKey
+
+Outputs:
+  AuroraKmsKeyArn:
+    Description: ARN of the multi-region Aurora CMK (primary).
+    Value: !GetAtt AuroraKmsKey.Arn
+    Export:
+      Name: !Sub "osc-kms-aurora-arn-${Environment}"
+
+  AuroraKmsKeyId:
+    Description: Key ID of the Aurora CMK (used to reference replicas via alias).
+    Value: !Ref AuroraKmsKey
+    Export:
+      Name: !Sub "osc-kms-aurora-id-${Environment}"
+
+  S3KmsKeyArn:
+    Description: ARN of the multi-region S3 waivers CMK (primary).
+    Value: !GetAtt S3KmsKey.Arn
+    Export:
+      Name: !Sub "osc-kms-s3-arn-${Environment}"
+
+  S3KmsKeyId:
+    Description: Key ID of the S3 waivers CMK (used to reference replicas via alias).
+    Value: !Ref S3KmsKey
+    Export:
+      Name: !Sub "osc-kms-s3-id-${Environment}"

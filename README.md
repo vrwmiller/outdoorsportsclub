@@ -47,6 +47,115 @@ e2e/           Playwright end-to-end tests
 | [docs/architecture.md](docs/architecture.md) | System architecture diagram |
 | [docs/stack-decisions.md](docs/stack-decisions.md) | Technology selection rationale |
 
+## Developer setup
+
+Install these tools once on your machine before working with this repository.
+
+### Required
+
+| Tool | Install | Purpose |
+| :--- | :--- | :--- |
+| [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-mac.html) | `brew install awscli` | Deploy CloudFormation stacks, invoke Lambda |
+| [gh CLI](https://cli.github.com/) | `brew install gh` | Open PRs, manage issues, check CI status |
+| [cfn-lint](https://github.com/aws-cloudformation/cfn-lint) | `brew install cfn-lint` | Lint CloudFormation templates in `infra/stacks/` |
+
+Configure the AWS CLI with the project profile:
+
+```bash
+aws configure --profile outdoorsportsclub
+# Default region: us-east-1
+# Default output: json
+```
+
+### No project venv needed
+
+This project has no local Python source. Lambda functions run in the AWS runtime. `cfn-lint` is a system-level dev tool installed via Homebrew — it does not belong in a project virtualenv.
+
+## Repeatable workflows
+
+### Lint CloudFormation templates
+
+Run before committing any change to `infra/`:
+
+```bash
+cfn-lint infra/stacks/*.yaml
+```
+
+Exit 0 = clean. Warnings (W-prefix) are advisory; errors (E-prefix) must be fixed before committing.
+
+### Deploy a CloudFormation stack
+
+```bash
+aws cloudformation deploy \
+  --stack-name osc-<domain>-<env> \
+  --template-file infra/stacks/<template>.yaml \
+  --parameter-overrides Environment=<env> [Key=Value ...] \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1 \
+  --profile outdoorsportsclub
+```
+
+Examples:
+
+```bash
+# Deploy KMS keys to dev
+aws cloudformation deploy \
+  --stack-name osc-kms-dev \
+  --template-file infra/stacks/kms.yaml \
+  --parameter-overrides Environment=dev \
+  --region us-east-1 \
+  --profile outdoorsportsclub
+
+# Deploy Cognito User Pool to prod (social provider secrets are passed as parameters)
+aws cloudformation deploy \
+  --stack-name osc-cognito-prod \
+  --template-file infra/stacks/cognito.yaml \
+  --parameter-overrides \
+      Environment=prod \
+      GoogleClientId=<id> \
+      GoogleClientSecret=<secret> \
+      FacebookAppId=<id> \
+      FacebookAppSecret=<secret> \
+      CallbackUrl=https://outdoorsportsclub.com/auth/callback \
+      LogoutUrl=https://outdoorsportsclub.com \
+      UserPoolDomainPrefix=osc-members-prod-<suffix> \
+  --region us-east-1 \
+  --profile outdoorsportsclub
+```
+
+Stacks depend on each other — deploy in this order per environment:
+
+```
+kms → sns → cognito → secrets → s3 → aurora → backup → iam/ → api → route53
+```
+
+### Run a DB migration
+
+Migrations use the RDS Data API — no VPN or bastion host required. Aurora must be running and the `osc-dev/aurora-master` secret must exist in Secrets Manager.
+
+```bash
+aws rds-data execute-statement \
+  --resource-arn <cluster-arn> \
+  --secret-arn <aurora-master-secret-arn> \
+  --database osc \
+  --sql "$(cat db/migrations/<file>.sql)" \
+  --region us-east-1 \
+  --profile outdoorsportsclub
+```
+
+Migrations are numbered and idempotent (`IF NOT EXISTS` guards). Run them in sequence — never skip. See `db/migrations/` for the full list.
+
+### Open a PR
+
+```bash
+git checkout -b feat/<topic>
+# ... make changes, commit ...
+git push -u origin feat/<topic>
+gh pr create --title "feat: description" --body-file /tmp/pr-body.txt --base main
+```
+
+See [.github/instructions/pr.instructions.md](.github/instructions/pr.instructions.md) for branch naming rules, PR title format, and the pre-merge checklist.
+
 ## Contributing
 
 All changes go on a feature branch and merge via pull request — see [.github/instructions/pr.instructions.md](.github/instructions/pr.instructions.md) for branch naming, PR format, and the pre-merge checklist.

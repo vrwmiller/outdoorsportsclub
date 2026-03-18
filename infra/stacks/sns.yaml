@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  SNS admin-alerts topic for Outdoor Sports Club.
+  CloudWatch Alarms and Lambda functions that need to notify the Webmaster
+  (e.g. concurrency errors, wait-list overflows, forced checkouts) publish
+  to this topic. Phone-number subscriptions are managed at runtime — no
+  subscriber data is committed to this template.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+Resources:
+
+  AdminAlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "osc-admin-alerts-${Environment}"
+      # Use the AWS-managed SNS key for at-rest encryption of queued messages.
+      # A customer-managed key is not required here because the sole sensitive
+      # content is the alert text, not member PII or payment data.
+      KmsMasterKeyId: "alias/aws/sns"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  AdminAlertsTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref AdminAlertsTopic
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          # Allow IAM principals in this account to publish (Lambda functions
+          # are granted sns:Publish through their execution roles in iam/).
+          - Sid: AllowAccountPublish
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: sns:Publish
+            Resource: !Ref AdminAlertsTopic
+
+          # Allow CloudWatch Alarms to publish alarm-state change notifications.
+          # The SourceAccount condition prevents confused-deputy escalation.
+          - Sid: AllowCloudWatchAlarms
+            Effect: Allow
+            Principal:
+              Service: cloudwatch.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref AdminAlertsTopic
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+Outputs:
+  AdminAlertsTopicArn:
+    Description: ARN of the admin-alerts SNS topic.
+    Value: !Ref AdminAlertsTopic
+    Export:
+      Name: !Sub "osc-sns-admin-alerts-arn-${Environment}"

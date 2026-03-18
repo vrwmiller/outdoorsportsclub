@@ -1,0 +1,249 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Cognito User Pool for Outdoor Sports Club member authentication.
+  Supports email/password (COGNITO) and social login via Google and Facebook.
+  One User Pool per environment — the dev pool never contains real member data.
+  No kiosk app client is provisioned here; kiosk authentication is handled
+  exclusively through the Device Token mechanism in the Lambda layer.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+  GoogleClientId:
+    Type: String
+    Description: >-
+      Google OAuth 2.0 client ID from the Google Cloud Console.
+      This value appears in browser URLs and is not secret, but it must
+      match the client ID registered for this environment's callback URL.
+
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Description: >-
+      Google OAuth 2.0 client secret from the Google Cloud Console.
+      Treat as a secret — do not log or commit this value.
+
+  FacebookAppId:
+    Type: String
+    Description: >-
+      Facebook app ID from Meta for Developers.
+      This value is not secret, but it must match the app configured
+      for this environment's OAuth redirect URI.
+
+  FacebookAppSecret:
+    Type: String
+    NoEcho: true
+    Description: >-
+      Facebook app secret from Meta for Developers.
+      Treat as a secret — do not log or commit this value.
+
+  CallbackUrl:
+    Type: String
+    Description: >-
+      OAuth callback URL registered with Google and Facebook.
+      prod:  https://outdoorsportsclub.com/auth/callback
+      dev:   https://dev.outdoorsportsclub.com/auth/callback
+             (or http://localhost:3000/auth/callback for local dev)
+
+  LogoutUrl:
+    Type: String
+    Description: >-
+      Post-logout redirect URL.
+      prod:  https://outdoorsportsclub.com
+      dev:   https://dev.outdoorsportsclub.com
+             (or http://localhost:3000 for local dev)
+
+  UserPoolDomainPrefix:
+    Type: String
+    Description: >-
+      Globally unique prefix for the Cognito hosted UI domain.
+      Must be unique across all AWS accounts worldwide.
+      Convention: osc-members-<env>-<short-account-suffix>
+      Example:    osc-members-prod-a1b2c3
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # User Pool
+  # ---------------------------------------------------------------------------
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      UserPoolName: !Sub "osc-users-${Environment}"
+
+      # Members log in with their email address.
+      UsernameAttributes:
+        - email
+
+      # Email is auto-verified via the Cognito confirmation code flow.
+      AutoVerifiedAttributes:
+        - email
+
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+        - Name: name
+          Required: false
+          Mutable: true
+
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          TemporaryPasswordValidityDays: 7
+
+      # Email is the sole recovery channel — no SMS-based account recovery
+      # so that member phone numbers are not required for password reset.
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+      AdminCreateUserConfig:
+        # Allow self-registration through the Member Portal.
+        AllowAdminCreateUserOnly: false
+
+      # Hides whether an account exists on sign-in failure, reducing enumeration
+      # risk against the member roster.
+      UserPoolAddOns:
+        AdvancedSecurityMode: AUDIT
+
+      UserPoolTags:
+        Project: outdoor-sports-club
+        Environment: !Ref Environment
+        ManagedBy: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Social Identity Providers
+  # ---------------------------------------------------------------------------
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: "profile email openid"
+      AttributeMapping:
+        # Map the Google email claim to the Cognito email attribute so that
+        # social-login members share the same identity key as password-login
+        # members. The sub claim from Cognito (not from Google) is the
+        # durable identity key stored as members.cognito_sub in Aurora.
+        email: email
+        name: name
+
+  FacebookIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Facebook
+      ProviderType: Facebook
+      ProviderDetails:
+        client_id: !Ref FacebookAppId
+        client_secret: !Ref FacebookAppSecret
+        authorize_scopes: "email public_profile"
+        api_version: "v18.0"
+      AttributeMapping:
+        email: email
+        name: name
+
+  # ---------------------------------------------------------------------------
+  # App Client — Member Portal + Admin Portal
+  # ---------------------------------------------------------------------------
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    # Identity providers must exist before the client can reference them.
+    DependsOn:
+      - GoogleIdentityProvider
+      - FacebookIdentityProvider
+    Properties:
+      ClientName: !Sub "osc-portal-client-${Environment}"
+      UserPoolId: !Ref UserPool
+
+      # Public client — no client secret. The Next.js frontend (Amplify Auth)
+      # uses PKCE with the authorization code flow; no secret is needed.
+      GenerateSecret: false
+
+      SupportedIdentityProviders:
+        - COGNITO   # email/password for test accounts and initial Webmaster setup
+        - Google
+        - Facebook
+
+      AllowedOAuthFlows:
+        - code  # authorization code + PKCE only; implicit flow is not enabled
+
+      AllowedOAuthFlowsUserPoolClient: true
+
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+
+      CallbackURLs:
+        - !Ref CallbackUrl
+
+      LogoutURLs:
+        - !Ref LogoutUrl
+
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+      # Prevents sign-in error messages from revealing whether an email is
+      # registered, consistent with the UserPool advanced security setting.
+      PreventUserExistenceErrors: ENABLED
+
+      # Short-lived access and ID tokens reduce the blast radius of a leaked
+      # token. Refresh tokens are valid for 30 days to match typical web-app UX.
+      AccessTokenValidity: 60
+      IdTokenValidity: 60
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: days
+
+  # ---------------------------------------------------------------------------
+  # Hosted UI Domain
+  # ---------------------------------------------------------------------------
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      # The operator must supply a globally unique prefix. See parameter docs.
+      Domain: !Ref UserPoolDomainPrefix
+      UserPoolId: !Ref UserPool
+
+Outputs:
+  UserPoolId:
+    Description: Cognito User Pool ID.
+    Value: !Ref UserPool
+    Export:
+      Name: !Sub "osc-cognito-user-pool-id-${Environment}"
+
+  UserPoolArn:
+    Description: Cognito User Pool ARN (used by API Gateway Cognito Authorizer).
+    Value: !GetAtt UserPool.Arn
+    Export:
+      Name: !Sub "osc-cognito-user-pool-arn-${Environment}"
+
+  UserPoolClientId:
+    Description: App client ID for the Member Portal and Admin Portal.
+    Value: !Ref UserPoolClient
+    Export:
+      Name: !Sub "osc-cognito-user-pool-client-id-${Environment}"
+
+  UserPoolDomainUrl:
+    Description: Base URL of the Cognito hosted UI (used for OAuth redirects).
+    Value: !Sub "https://${UserPoolDomainPrefix}.auth.${AWS::Region}.amazoncognito.com"
+    Export:
+      Name: !Sub "osc-cognito-domain-url-${Environment}"
