@@ -163,6 +163,8 @@ Resources:
   # ---------------------------------------------------------------------------
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     # Identity providers must exist before the client can reference them.
     DependsOn:
       - GoogleIdentityProvider
@@ -218,6 +220,8 @@ Resources:
   # ---------------------------------------------------------------------------
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       # The operator must supply a globally unique prefix. See parameter docs.
       Domain: !Ref UserPoolDomainPrefix

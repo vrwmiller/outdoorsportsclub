@@ -131,7 +131,9 @@ kms → sns → cognito → secrets → s3 → aurora → backup → iam/ → ap
 
 ### Run a DB migration
 
-Migrations use the RDS Data API — no VPN or bastion host required. Aurora must be running and the `osc-dev/aurora-master` secret must exist in Secrets Manager.
+> **Note:** `db/migrations/` does not exist yet — it will be added in Phase 4. This workflow applies once that directory is introduced.
+
+Migrations use the RDS Data API — no VPN or bastion host required. Aurora must be running and the `osc/dev/aurora-master` secret must exist in Secrets Manager.
 
 ```bash
 aws rds-data execute-statement \
@@ -143,7 +145,7 @@ aws rds-data execute-statement \
   --profile outdoorsportsclub
 ```
 
-Migrations are numbered and idempotent (`IF NOT EXISTS` guards). Run them in sequence — never skip. See `db/migrations/` for the full list.
+Migrations are numbered and idempotent (`IF NOT EXISTS` guards). Run them in sequence — never skip.
 
 ### Open a PR
 

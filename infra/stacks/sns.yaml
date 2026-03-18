@@ -38,14 +38,10 @@ Resources:
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
-          # Allow IAM principals in this account to publish (Lambda functions
-          # are granted sns:Publish through their execution roles in iam/).
-          - Sid: AllowAccountPublish
-            Effect: Allow
-            Principal:
-              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
-            Action: sns:Publish
-            Resource: !Ref AdminAlertsTopic
+          # Same-account Lambda publishing is controlled by IAM identity policies
+          # on each execution role (provisioned in iam/). No resource-policy
+          # statement is needed — SNS evaluates identity policies for same-account
+          # principals even when a topic policy exists.
 
           # Allow CloudWatch Alarms to publish alarm-state change notifications.
           # The SourceAccount condition prevents confused-deputy escalation.

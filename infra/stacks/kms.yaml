@@ -39,6 +39,8 @@ Resources:
 
           # RDS needs GenerateDataKey* + CreateGrant to encrypt cluster storage
           # and to allow Aurora to re-grant key access to cluster replicas.
+          # kms:GrantIsForAWSResource ensures CreateGrant can only create grants
+          # for AWS service integrations, preventing unrestricted grant creation.
           - Sid: AllowRDSService
             Effect: Allow
             Principal:
@@ -55,9 +57,13 @@ Resources:
             Condition:
               StringEquals:
                 aws:SourceAccount: !Ref AWS::AccountId
+              BoolIfExists:
+                kms:GrantIsForAWSResource: "true"
 
           # Secrets Manager needs Decrypt + GenerateDataKey to encrypt the
           # Aurora master-password secret that is managed in secrets.yaml.
+          # kms:GrantIsForAWSResource ensures CreateGrant can only create grants
+          # for AWS service integrations, preventing unrestricted grant creation.
           - Sid: AllowSecretsManager
             Effect: Allow
             Principal:
@@ -70,6 +76,8 @@ Resources:
             Condition:
               StringEquals:
                 aws:SourceAccount: !Ref AWS::AccountId
+              BoolIfExists:
+                kms:GrantIsForAWSResource: "true"
       Tags:
         - Key: Project
           Value: outdoor-sports-club
@@ -80,6 +88,8 @@ Resources:
 
   AuroraKmsKeyAlias:
     Type: AWS::KMS::Alias
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       AliasName: !Sub "alias/osc-aurora-${Environment}"
       TargetKeyId: !Ref AuroraKmsKey
@@ -109,6 +119,8 @@ Resources:
 
           # S3 needs GenerateDataKey + Decrypt for SSE-KMS object encryption and
           # for presigned-URL downloads when the caller presents valid credentials.
+          # kms:ViaService scopes access to S3 in this region only, preventing
+          # the S3 service principal from using this key via any other service.
           - Sid: AllowS3Service
             Effect: Allow
             Principal:
@@ -121,6 +133,7 @@ Resources:
             Condition:
               StringEquals:
                 aws:SourceAccount: !Ref AWS::AccountId
+                kms:ViaService: !Sub "s3.${AWS::Region}.amazonaws.com"
       Tags:
         - Key: Project
           Value: outdoor-sports-club
@@ -131,6 +144,8 @@ Resources:
 
   S3KmsKeyAlias:
     Type: AWS::KMS::Alias
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       AliasName: !Sub "alias/osc-s3-waivers-${Environment}"
       TargetKeyId: !Ref S3KmsKey
