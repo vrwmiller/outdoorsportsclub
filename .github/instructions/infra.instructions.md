@@ -218,7 +218,7 @@ Resources:
 
 ## VS Code YAML tag registration
 
-`.vscode/settings.json` suppresses false-positive "Unresolved tag" errors from the VS Code YAML extension for CloudFormation intrinsic functions. The file registers every intrinsic in all forms it can appear in (`scalar`, `sequence`, `mapping`). If you add a CloudFormation template that uses an intrinsic in a new form and VS Code shows "Unresolved tag", add the missing `!Tag form` entry to `yaml.customTags` in `.vscode/settings.json` and include that change in the same commit. `cfn-lint` is the authoritative validator — VS Code errors for CF intrinsics are always false positives.
+`.vscode/settings.json` suppresses false-positive "Unresolved tag" errors from the VS Code YAML extension for CloudFormation intrinsic functions. The file registers every intrinsic in all forms it can appear in (`scalar`, `sequence`, `mapping`). If you add a CloudFormation template that uses an intrinsic in a new form and VS Code shows "Unresolved tag", add the missing `!Tag form` entry to `yaml.customTags` in `.vscode/settings.json` and include that change in the same commit. `cfn-lint` is the authoritative validator — "Unresolved tag" warnings for known CF intrinsics are VS Code false positives, but a genuinely misspelled or unsupported intrinsic will produce a real error in both tools.
 
 ## KMS
 

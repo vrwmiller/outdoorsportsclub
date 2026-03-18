@@ -86,7 +86,7 @@ Resources:
         Version: "2012-10-17"
         Statement:
           # Deny all requests not using TLS — prevents accidental cleartext
-          # transmission irrelevant of caller identity.
+          # transmission regardless of caller identity.
           - Sid: DenyNonTLS
             Effect: Deny
             Principal: "*"
