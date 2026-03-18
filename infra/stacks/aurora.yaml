@@ -1,0 +1,310 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Aurora Serverless v2 (PostgreSQL) cluster for Outdoor Sports Club.
+  Provisions a VPC with two private subnets (one per AZ), a DB subnet
+  group, a security group that denies all inbound internet traffic, and
+  the Aurora cluster + writer instance. The RDS Data API is enabled so
+  Lambda functions access the DB without a VPC attachment. The cluster
+  is encrypted with the Aurora KMS CMK from kms.yaml and authenticates
+  via the master-credential secret from secrets.yaml.
+  Multi-region (Aurora Global Database) is gated on IsMultiRegion, which
+  is true when RegionList contains more than one entry.
+
+Parameters:
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+  RegionList:
+    Type: CommaDelimitedList
+    Default: "us-east-1"
+    Description: >-
+      Ordered list of active regions. First entry is the primary (writer)
+      region. Add regions here to enable Aurora Global Database.
+      Example: "us-east-1,us-west-2"
+
+  VpcCidr:
+    Type: String
+    Default: "10.0.0.0/16"
+    Description: CIDR block for the Aurora VPC.
+
+  PrivateSubnetACidr:
+    Type: String
+    Default: "10.0.1.0/24"
+    Description: CIDR for private subnet A (first AZ).
+
+  PrivateSubnetBCidr:
+    Type: String
+    Default: "10.0.2.0/24"
+    Description: CIDR for private subnet B (second AZ).
+
+Mappings:
+
+  AuroraCapacity:
+    dev:
+      MinACU: 0.5
+      MaxACU: 4
+    prod:
+      MinACU: 1
+      MaxACU: 16
+
+Conditions:
+
+  IsProd: !Equals [!Ref Environment, prod]
+
+  # True when RegionList has more than one entry. Uses a sentinel trick:
+  # join the list into a comma-delimited string, append a sentinel value,
+  # then split on comma and check that index 1 is not the sentinel — this
+  # means there was at least one comma in the original list, i.e. ≥2 regions.
+  IsMultiRegion: !Not
+    - !Equals
+      - !Select
+        - 1
+        - !Split
+          - ","
+          - !Join
+            - ","
+            - - !Join [",", !Ref RegionList]
+              - "SENTINEL"
+      - "SENTINEL"
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # VPC
+  # ---------------------------------------------------------------------------
+  AuroraVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "osc-aurora-vpc-${Environment}"
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # Two private subnets — one per AZ — required for a DB subnet group.
+  # Aurora Serverless v2 places a writer instance in one AZ; a second
+  # subnet is required so Aurora can provision read replicas or failover
+  # nodes in a different AZ without a schema change.
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AuroraVpc
+      CidrBlock: !Ref PrivateSubnetACidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "osc-aurora-subnet-a-${Environment}"
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AuroraVpc
+      CidrBlock: !Ref PrivateSubnetBCidr
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "osc-aurora-subnet-b-${Environment}"
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Security group — no inbound, stateful outbound only
+  # ---------------------------------------------------------------------------
+  # Aurora doesn't need inbound rules: Lambda accesses it via the RDS Data
+  # API service endpoint (a managed AWS endpoint outside the VPC). There is
+  # no bastion host — all DB access is through the Data API.
+  AuroraSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "Aurora Serverless v2 cluster - osc-aurora-${Environment}"
+      VpcId: !Ref AuroraVpc
+      # No ingress rules — the RDS Data API does not require inbound VPC rules.
+      SecurityGroupEgress:
+        # Restrict egress too: Aurora only needs to reach AWS service endpoints
+        # (KMS, Secrets Manager) within the region. Using a prefix-list or
+        # VPC endpoints is the hardened approach; this default egress rule is
+        # locked down to HTTPS only to prevent arbitrary outbound traffic.
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
+          Description: "HTTPS to AWS service endpoints (KMS, Secrets Manager)"
+      Tags:
+        - Key: Name
+          Value: !Sub "osc-aurora-sg-${Environment}"
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # DB subnet group
+  # ---------------------------------------------------------------------------
+  AuroraSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: !Sub "osc-aurora-subnet-group-${Environment}"
+      DBSubnetGroupDescription: !Sub "Private subnets for osc-aurora-${Environment}"
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Aurora cluster parameter group
+  # ---------------------------------------------------------------------------
+  AuroraClusterParameterGroup:
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      Description: !Sub "Aurora PostgreSQL cluster parameters — osc-aurora-${Environment}"
+      Family: aurora-postgresql16
+      Parameters:
+        # Log all connections and disconnections for audit purposes.
+        log_connections: "1"
+        log_disconnections: "1"
+        # Log queries slower than 1 second for performance monitoring.
+        log_min_duration_statement: "1000"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Aurora Global Database (multi-region only)
+  # ---------------------------------------------------------------------------
+  AuroraGlobalCluster:
+    Type: AWS::RDS::GlobalCluster
+    Condition: IsMultiRegion
+    Properties:
+      GlobalClusterIdentifier: !Sub "osc-aurora-global-${Environment}"
+      Engine: aurora-postgresql
+      EngineVersion: "16.6"
+      StorageEncrypted: true
+      DeletionProtection: true
+
+  # ---------------------------------------------------------------------------
+  # Aurora cluster
+  # ---------------------------------------------------------------------------
+  AuroraCluster:
+    Type: AWS::RDS::DBCluster
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DBClusterIdentifier: !Sub "osc-aurora-${Environment}"
+      Engine: aurora-postgresql
+      EngineVersion: "16.6"
+      DatabaseName: osc
+      MasterUsername: oscadmin
+      # Aurora reads the master password from the secret created in secrets.yaml.
+      # Automatic Secrets Manager rotation is handled natively by Aurora — no
+      # separate rotation Lambda is required.
+      MasterUserSecret:
+        SecretArn: !ImportValue
+          Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+        KmsKeyId: !ImportValue
+          Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+      StorageEncrypted: true
+      KmsKeyId: !ImportValue
+        Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+      # RDS Data API — required for Lambda access without VPC attachment.
+      EnableHttpEndpoint: true
+      DBSubnetGroupName: !Ref AuroraSubnetGroup
+      DBClusterParameterGroupName: !Ref AuroraClusterParameterGroup
+      VpcSecurityGroupIds:
+        - !Ref AuroraSecurityGroup
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: !FindInMap [AuroraCapacity, !Ref Environment, MinACU]
+        MaxCapacity: !FindInMap [AuroraCapacity, !Ref Environment, MaxACU]
+      BackupRetentionPeriod: !If [IsMultiRegion, 35, !If [IsProd, 35, 7]]
+      DeletionProtection: true
+      GlobalClusterIdentifier: !If
+        - IsMultiRegion
+        - !Ref AuroraGlobalCluster
+        - !Ref AWS::NoValue
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # Writer instance — Aurora Serverless v2 requires at least one DB instance
+  # to define the writer. The instance class db.serverless delegates actual
+  # compute to the serverless scaling configuration on the cluster.
+  AuroraWriterInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      DBInstanceIdentifier: !Sub "osc-aurora-writer-${Environment}"
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceClass: db.serverless
+      Engine: aurora-postgresql
+      PubliclyAccessible: false
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+Outputs:
+
+  AuroraClusterArn:
+    Description: ARN of the Aurora cluster.
+    Value: !Sub "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+    Export:
+      Name: !Sub "osc-aurora-cluster-arn-${Environment}"
+
+  AuroraClusterEndpoint:
+    Description: Writer endpoint of the Aurora cluster.
+    Value: !GetAtt AuroraCluster.Endpoint.Address
+    Export:
+      Name: !Sub "osc-aurora-endpoint-${Environment}"
+
+  AuroraVpcId:
+    Description: VPC ID containing the Aurora cluster.
+    Value: !Ref AuroraVpc
+    Export:
+      Name: !Sub "osc-aurora-vpc-id-${Environment}"
+
+  AuroraSecurityGroupId:
+    Description: Security group ID of the Aurora cluster.
+    Value: !Ref AuroraSecurityGroup
+    Export:
+      Name: !Sub "osc-aurora-sg-id-${Environment}"
