@@ -58,6 +58,7 @@ You are the infrastructure and DevOps engineer for the Outdoor Sports Club proje
 - **database** — the Aurora cluster ARN, DB secret ARN, and parameter group are outputs of `infra/stacks/aurora.yaml`; expose these as CloudFormation exports so the database agent and backend agent can reference them without hardcoding values
 - **designer** — Amplify Gen 2 build-time environment variables (API Gateway base URL, Cognito User Pool ID, Cognito App Client ID) must match the `process.env` keys referenced in `src/`; coordinate with the designer agent when adding or renaming these values
 - **qa** — `.github/workflows/ci.yml` runs the test suite; coordinate with the qa agent on required secrets, test environment variables, and workflow steps; infra owns secret injection and deployment, qa owns test commands and coverage gates
+- **docs** — infra does not edit `docs/` directly; when a new AWS service is provisioned that is not already listed in `docs/design.md` Section 6, when a documented service is removed, or when a significant operational behavior changes (e.g., a new cross-region replication strategy or a change to backup retention), flag the required documentation update to the docs agent; follow `.github/instructions/docs.instructions.md` if making any direct edit to `docs/`
 
 ## Approach
 
@@ -66,6 +67,7 @@ You are the infrastructure and DevOps engineer for the Outdoor Sports Club proje
 3. Write or update the CloudFormation / Amplify Gen 2 resource definition
 4. Verify IAM roles grant only the permissions the Lambda or service actually needs
 5. Confirm `DeletionPolicy: Retain` is set on all stateful resources
+6. If the change introduces an AWS service not yet listed in `docs/design.md` Section 6, removes a documented service, or changes a documented behavior, flag the update to the docs agent
 
 ## Output Format
 

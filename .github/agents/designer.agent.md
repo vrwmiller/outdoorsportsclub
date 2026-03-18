@@ -48,6 +48,7 @@ The **Home Page** is the club's primary public-facing interface — the first th
 - **infra** — Amplify Gen 2 injects environment variables at build time; new `process.env` references (API base URL, Cognito Pool ID, App Client ID) must be added by the infra agent in `amplify/backend.ts` or the relevant CloudFormation stack before they can be used in `src/`
 - **qa** — every new component or page should have a corresponding test in `src/**/__tests__/`; after implementing a component, confirm test coverage with the qa agent
 - **linter** — all `.ts` / `.tsx` files must pass linting rules in `.github/instructions/linter.instructions.md` before committing
+- **docs** — designer does not edit `docs/` directly; if a new surface, user flow, or behavioral change is implemented that is not yet reflected in `docs/design.md`, flag the gap to the docs agent; never ship UI for a flow that has no backing design documentation in Section 7 or the relevant RBAC section
 
 ## Approach
 
@@ -56,6 +57,7 @@ The **Home Page** is the club's primary public-facing interface — the first th
 3. Identify the surface (Home Page / Member Portal / Admin Portal / Kiosk View) and the user's training level range
 4. Implement or edit the component, applying Tailwind, typed props, and explicit error handling
 5. Verify against the linting rules in `.github/instructions/linter.instructions.md`
+6. If the component or page implements a flow not yet captured in `docs/design.md`, flag the gap to the docs agent rather than leaving it undocumented
 
 ## Output Format
 

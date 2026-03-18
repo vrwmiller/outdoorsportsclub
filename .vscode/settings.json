@@ -4,5 +4,26 @@
   ],
   "files.associations": {
     "LICENSE": "plaintext"
-  }
+  },
+  "yaml.customTags": [
+    "!And sequence",
+    "!Base64 scalar",
+    "!Cidr sequence",
+    "!Equals sequence",
+    "!FindInMap sequence",
+    "!GetAtt scalar",
+    "!GetAZs scalar",
+    "!If sequence",
+    "!ImportValue scalar",
+    "!Join sequence",
+    "!Not sequence",
+    "!Or sequence",
+    "!Ref scalar",
+    "!Select sequence",
+    "!Split sequence",
+    "!Sub scalar",
+    "!Sub sequence",
+    "!Transform mapping",
+    "!Condition scalar"
+  ]
 }
