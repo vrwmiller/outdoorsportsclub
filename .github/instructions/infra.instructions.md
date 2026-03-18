@@ -206,6 +206,8 @@ Resources:
 * Set `MinCapacity: 0.5` and `MaxCapacity: 4` ACUs for `dev`; `MinCapacity: 1` and `MaxCapacity: 16` for `prod`
 * Enable `EnableHttpEndpoint: true` on the cluster to activate the RDS Data API
 * Reference the Secrets Manager secret ARN in the cluster definition for RDS Data API authentication
+* **Aurora security group egress:** A `0.0.0.0/0` HTTPS egress rule does not by itself restrict traffic to AWS endpoints — it is the absence of a NAT gateway or internet gateway on the private subnets that prevents actual egress. The hardened alternative is to provision **VPC interface endpoints** for `kms` and `secretsmanager` (no `0.0.0.0/0` egress rule needed — replace it with egress scoped to the endpoint's security group, and configure the endpoint SG to allow inbound from the Aurora SG) — prefer this for production deployments.
+* **`aurora.yaml` must only be deployed in the primary region.** Secondary-region Aurora Global Database secondary clusters are provisioned separately. Deploying `aurora.yaml` in a secondary region with `IsMultiRegion: true` would attempt to create a duplicate `GlobalClusterIdentifier` and fail.
 
 ## S3 — Waiver Bucket
 
@@ -232,6 +234,17 @@ Resources:
 * One secret per sensitive value — do not bundle multiple secrets into one JSON blob
 * Enable automatic rotation where supported (Aurora master credentials support native rotation via Secrets Manager)
 * Secret naming: `osc/<env>/<purpose>` (e.g., `osc/prod/aurora-master`, `osc/prod/stripe-key`, `osc/prod/device-token-salt`)
+* **Secrets that cannot be auto-generated must use a `NoEcho` parameter with `AllowedPattern` validation** — never use a placeholder value (e.g., `REPLACE_ME`) in `SecretString`. A `NoEcho` parameter with `MinLength` and `AllowedPattern` constraints causes CloudFormation to reject the deployment if a real value is not supplied, preventing a placeholder from silently reaching Secrets Manager. Example for a 256-bit hex salt:
+
+```yaml
+Parameters:
+  DeviceTokenSalt:
+    Type: String
+    NoEcho: true
+    MinLength: 64
+    AllowedPattern: "[0-9a-fA-F]+"
+    ConstraintDescription: Must be a hexadecimal string of at least 64 characters.
+```
 
 ### Secret inventory
 
