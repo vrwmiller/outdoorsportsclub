@@ -142,15 +142,18 @@ Resources:
       VpcId: !Ref AuroraVpc
       # No ingress rules — the RDS Data API does not require inbound VPC rules.
       SecurityGroupEgress:
-        # Restrict egress too: Aurora only needs to reach AWS service endpoints
-        # (KMS, Secrets Manager) within the region. Using a prefix-list or
-        # VPC endpoints is the hardened approach; this default egress rule is
-        # locked down to HTTPS only to prevent arbitrary outbound traffic.
+        # Outbound HTTPS (TCP 443) to 0.0.0.0/0. As long as no NAT gateway or
+        # internet gateway is attached to the VPC, no traffic can actually leave
+        # the VPC boundary — the subnets are fully private. The rule is scoped
+        # to HTTPS because Aurora only contacts AWS service endpoints (KMS,
+        # Secrets Manager) over TLS. For a hardened deployment, replace this
+        # with VPC interface endpoints for kms and secretsmanager and remove
+        # this egress rule entirely.
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
           CidrIp: "0.0.0.0/0"
-          Description: "HTTPS to AWS service endpoints (KMS, Secrets Manager)"
+          Description: "HTTPS outbound — restricted to VPC-private subnets (no IGW/NAT); replace with VPC endpoints to harden"
       Tags:
         - Key: Name
           Value: !Sub "osc-aurora-sg-${Environment}"
@@ -205,9 +208,17 @@ Resources:
   # ---------------------------------------------------------------------------
   # Aurora Global Database (multi-region only)
   # ---------------------------------------------------------------------------
+  # IMPORTANT: This stack must only be deployed in the PRIMARY region
+  # (the first entry in RegionList). Secondary-region cluster provisioning
+  # (Global Database secondaries) is out of scope for this PR and will be
+  # added when multi-region deployment is activated. Deploying this stack
+  # in a secondary region with IsMultiRegion=true would attempt to create
+  # a duplicate GlobalCluster identifier and fail.
   AuroraGlobalCluster:
     Type: AWS::RDS::GlobalCluster
     Condition: IsMultiRegion
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       GlobalClusterIdentifier: !Sub "osc-aurora-global-${Environment}"
       Engine: aurora-postgresql
