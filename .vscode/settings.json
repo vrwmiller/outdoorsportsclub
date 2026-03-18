@@ -8,13 +8,17 @@
   "yaml.customTags": [
     "!And sequence",
     "!Base64 scalar",
+    "!Base64 mapping",
     "!Cidr sequence",
     "!Equals sequence",
     "!FindInMap sequence",
     "!GetAtt scalar",
+    "!GetAtt sequence",
     "!GetAZs scalar",
+    "!GetAZs mapping",
     "!If sequence",
     "!ImportValue scalar",
+    "!ImportValue mapping",
     "!Join sequence",
     "!Not sequence",
     "!Or sequence",
@@ -23,6 +27,7 @@
     "!Split sequence",
     "!Sub scalar",
     "!Sub sequence",
+    "!Sub mapping",
     "!Transform mapping",
     "!Condition scalar"
   ]
