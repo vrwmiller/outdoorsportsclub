@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  S3 waiver-storage bucket for Outdoor Sports Club.
+  Provisions one bucket per environment with S3 Object Lock, KMS SSE,
+  versioning, and full public-access blocking. The prod bucket uses
+  Compliance Mode with a 7-year retention period; dev uses Governance Mode
+  with a 7-day retention period to allow test-data cleanup.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+Mappings:
+  ObjectLock:
+    prod:
+      Mode: COMPLIANCE
+      # 7 years = 2557 days
+      Days: 2557
+    dev:
+      Mode: GOVERNANCE
+      Days: 7
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # Waiver bucket
+  # ---------------------------------------------------------------------------
+  WaiverBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "osc-waivers-${Environment}-${AWS::AccountId}"
+      # Object Lock must be enabled at bucket creation — it cannot be enabled
+      # after the fact. Enabling Object Lock also implicitly enables versioning.
+      ObjectLockEnabled: true
+      ObjectLockConfiguration:
+        ObjectLockEnabled: Enabled
+        Rule:
+          DefaultRetention:
+            Mode: !FindInMap [ObjectLock, !Ref Environment, Mode]
+            Days: !FindInMap [ObjectLock, !Ref Environment, Days]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !ImportValue
+                Fn::Sub: "osc-kms-s3-arn-${Environment}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      # Versioning is implicitly enabled by Object Lock, but declared
+      # explicitly here for clarity.
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          # Move non-current versions to S3 Glacier Instant Retrieval after
+          # 90 days to reduce storage cost while keeping versions accessible.
+          - Id: ArchiveNonCurrentVersions
+            Status: Enabled
+            NoncurrentVersionTransitions:
+              - StorageClass: GLACIER_IR
+                TransitionInDays: 90
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Bucket policy — enforce TLS-only access
+  # ---------------------------------------------------------------------------
+  WaiverBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WaiverBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          # Deny all requests not using TLS — prevents accidental cleartext
+          # transmission irrelevant of caller identity.
+          - Sid: DenyNonTLS
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "arn:aws:s3:::${WaiverBucket}"
+              - !Sub "arn:aws:s3:::${WaiverBucket}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+Outputs:
+
+  WaiverBucketName:
+    Description: Name of the S3 waiver-storage bucket.
+    Value: !Ref WaiverBucket
+    Export:
+      Name: !Sub "osc-s3-waivers-name-${Environment}"
+
+  WaiverBucketArn:
+    Description: ARN of the S3 waiver-storage bucket.
+    Value: !GetAtt WaiverBucket.Arn
+    Export:
+      Name: !Sub "osc-s3-waivers-arn-${Environment}"
