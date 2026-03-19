@@ -90,6 +90,7 @@ Why this change is needed — reference the open issue if one exists (`Closes #N
 - [ ] New CloudFormation resources have `DeletionPolicy: Retain` if stateful
 - [ ] CORS headers are returned on all Lambda responses (including errors)
 - [ ] `training_level` is re-queried from Aurora — not read from the JWT claim
+- [ ] If a new file type or directory was introduced: verify `.gitignore` does not block it (`grep -r '<extension>' .gitignore`) before committing — this project has aggressive catch-all rules (`*.sql`, `*.csv`, `*.dump`) that silently swallow new file types
 
 ## GitHub tooling
 
@@ -103,13 +104,15 @@ Why this change is needed — reference the open issue if one exists (`Closes #N
 Always use `--body-file` when creating or editing PRs and issues with multi-line descriptions.
 This applies to `gh pr create`, `gh pr edit`, and `gh issue create`.
 
+For `gh api` calls that post a body (PR review replies, issue comments, etc.), always use `--input` with a JSON file. Never use `-f body="..."` for content that contains em dashes, backticks, Unicode, or multiple lines — the terminal intercept corrupts it.
+
 ### Writing the body file
 
 **Always** write the body using the file-creation tool (not the shell). Never use shell heredocs,
 `echo`, `printf`, or any other shell redirection to create the file. The terminal intercept used
 in this environment corrupts content written through the shell.
 
-Correct approach:
+Correct approach for PR/issue bodies:
 
 1. Use the file-creation tool to write the body to `/tmp/pr-body.txt`
 2. Pass that file to the gh CLI
@@ -119,6 +122,18 @@ gh pr create --title "feat: description" --body-file /tmp/pr-body.txt --base mai
 gh pr edit 42 --body-file /tmp/pr-body.txt
 gh issue create --title "Bug: description" --body-file /tmp/issue-body.txt
 ```
+
+Correct approach for `gh api` POST calls (review replies, comments, etc.):
+
+1. Use the file-creation tool to write JSON to `/tmp/reply.json`:
+   ```json
+   {"body": "Your reply text here."}
+   ```
+2. Pass it with `--input`:
+   ```bash
+   gh api repos/{owner}/{repo}/pulls/{number}/comments/{id}/replies --input /tmp/reply.json
+   gh api repos/{owner}/{repo}/issues/{number}/comments --input /tmp/comment.json
+   ```
 
 3. Delete the temp file after the gh command succeeds
 
@@ -136,4 +151,7 @@ gh pr create --body "## Summary
 
 # WRONG: echo/printf redirection
 echo "## Summary" > pr-body.txt
+
+# WRONG: -f body= with special characters
+gh api .../replies -f body="Fixed — see commit abc123"
 ```
