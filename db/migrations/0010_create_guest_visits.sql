@@ -17,3 +17,5 @@ CREATE TABLE IF NOT EXISTS guest_visits (
 CREATE INDEX IF NOT EXISTS idx_guest_visits_guest_member_visited ON guest_visits (guest_id, member_id, visited_at);
 -- Sponsor history lookup.
 CREATE INDEX IF NOT EXISTS idx_guest_visits_member_id            ON guest_visits (member_id);
+CREATE INDEX IF NOT EXISTS idx_guest_visits_range_id             ON guest_visits (range_id);
+CREATE INDEX IF NOT EXISTS idx_guest_visits_lane_id              ON guest_visits (lane_id);

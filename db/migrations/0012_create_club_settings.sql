@@ -9,3 +9,5 @@ CREATE TABLE IF NOT EXISTS club_settings (
     updated_by_member_id UUID        REFERENCES members (id) ON DELETE SET NULL,
     CONSTRAINT chk_club_settings_singleton CHECK (singleton = TRUE)
 );
+
+CREATE INDEX IF NOT EXISTS idx_club_settings_updated_by ON club_settings (updated_by_member_id);

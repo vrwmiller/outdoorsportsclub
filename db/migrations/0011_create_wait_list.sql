@@ -25,3 +25,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_wait_list_active_member_range
 CREATE INDEX IF NOT EXISTS idx_wait_list_range_status_position ON wait_list (range_id, status, position);
 -- Member cancellation and status lookup.
 CREATE INDEX IF NOT EXISTS idx_wait_list_member_status         ON wait_list (member_id, status);
+CREATE INDEX IF NOT EXISTS idx_wait_list_device_id             ON wait_list (device_id);

@@ -5,7 +5,7 @@
 INSERT INTO training_level_policies (training_level, max_guests) VALUES
     (0, 0),  -- Guest: cannot sponsor guests
     (1, 0),  -- Probationary: guests not permitted
-    (2, 2),  -- Basic Member: provisional — TODO: confirm max_guests with club leadership
+    (2, 0),  -- Basic Member: fail-closed default — TODO: update to confirmed value via admin portal or follow-up migration
     (3, 2),  -- Qualified
     (4, 2),  -- RSO / Instructor
     (5, 2),  -- Administrator

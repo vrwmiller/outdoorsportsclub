@@ -25,7 +25,10 @@ CREATE TABLE IF NOT EXISTS activity_logs (
     timestamp                TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_activity_logs_member_id     ON activity_logs (member_id);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_timestamp     ON activity_logs (timestamp);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_activity_type ON activity_logs (activity_type);
-CREATE INDEX IF NOT EXISTS idx_activity_logs_device_id     ON activity_logs (device_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_member_id       ON activity_logs (member_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_timestamp       ON activity_logs (timestamp);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_activity_type   ON activity_logs (activity_type);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_device_id       ON activity_logs (device_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_actor_member_id ON activity_logs (actor_member_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_lane_id         ON activity_logs (lane_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_guest_id        ON activity_logs (guest_id);
