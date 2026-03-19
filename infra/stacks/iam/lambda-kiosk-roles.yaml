@@ -1,0 +1,626 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  IAM execution roles for the nine Outdoor Sports Club kiosk Lambda functions.
+  Each role is least-privilege: only the data-plane actions that function
+  actually invokes are granted. Stripe-dependent roles (kiosk-dues,
+  kiosk-guest-payment, kiosk-consumable-purchase) accept a StripeSecretArn
+  parameter; the Stripe permission is omitted when the parameter is empty
+  (ODQ #29 — deferred until Webmaster lifts the hold).
+
+Parameters:
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+  # StripeSecretArn is intentionally left empty until ODQ #29 is resolved.
+  # When the Webmaster lifts the hold, pass the ARN exported from secrets.yaml.
+  StripeSecretArn:
+    Type: String
+    Default: ""
+    Description: >-
+      ARN of the Stripe API key secret (osc/<env>/stripe-key). Leave empty
+      until ODQ #29 (Stripe integration readiness) is resolved. Stripe-
+      dependent Lambda roles will omit the secretsmanager permission when
+      this is empty.
+
+Conditions:
+
+  StripeEnabled: !Not [!Equals [!Ref StripeSecretArn, ""]]
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # osc-kiosk-checkin — POST /v1/kiosk/check-in
+  # ---------------------------------------------------------------------------
+  KioskCheckInRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-kiosk-checkin-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: KioskCheckInPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-kiosk-checkin-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-kiosk-checkout — POST /v1/kiosk/check-out
+  # Publishes an SNS SMS notification when a wait-list member is called.
+  # ---------------------------------------------------------------------------
+  KioskCheckOutRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-kiosk-checkout-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: KioskCheckOutPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !ImportValue
+                  Fn::Sub: "osc-sns-admin-alerts-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-kiosk-checkout-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-kiosk-waiver — POST /v1/kiosk/waiver
+  # Stores signed waiver PDFs in S3 with KMS-SSE.
+  # ---------------------------------------------------------------------------
+  KioskWaiverRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-kiosk-waiver-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: KioskWaiverPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub
+                  - "${BucketArn}/waivers/*"
+                  - BucketArn: !ImportValue
+                      Fn::Sub: "osc-s3-waivers-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-s3-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-kiosk-waiver-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-kiosk-guest-payment — POST /v1/kiosk/guest-payment
+  # Stripe Terminal branch deferred (ODQ #29); Cash path has no extra perms.
+  # ---------------------------------------------------------------------------
+  KioskGuestPaymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-kiosk-guest-payment-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: KioskGuestPaymentPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              # ODQ #29: Stripe secret permission added when StripeEnabled.
+              - !If
+                - StripeEnabled
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref StripeSecretArn
+                - !Ref AWS::NoValue
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-kiosk-guest-payment-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-kiosk-consumable-purchase — POST /v1/kiosk/consumable-purchase
+  # Stripe Terminal branch deferred (ODQ #29); Cash path has no extra perms.
+  # ---------------------------------------------------------------------------
+  KioskConsumablePurchaseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-kiosk-consumable-purchase-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: KioskConsumablePurchasePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              # ODQ #29: Stripe secret permission added when StripeEnabled.
+              - !If
+                - StripeEnabled
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref StripeSecretArn
+                - !Ref AWS::NoValue
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-kiosk-consumable-purchase-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-kiosk-dues — POST /v1/kiosk/dues
+  # Stripe Terminal branch deferred (ODQ #29); Cash path has no extra perms.
+  # ---------------------------------------------------------------------------
+  KioskDuesRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-kiosk-dues-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: KioskDuesPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              # ODQ #29: Stripe secret permission added when StripeEnabled.
+              - !If
+                - StripeEnabled
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref StripeSecretArn
+                - !Ref AWS::NoValue
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-kiosk-dues-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-kiosk-range-lanes — GET /v1/kiosk/range/lanes
+  # Read-only endpoint; no SNS, S3, or Stripe required.
+  # ---------------------------------------------------------------------------
+  KioskRangeLanesRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-kiosk-range-lanes-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: KioskRangeLanesPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-kiosk-range-lanes-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-kiosk-waitlist-cancel — DELETE /v1/kiosk/wait-list/{entry_id}
+  # ---------------------------------------------------------------------------
+  KioskWaitlistCancelRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-kiosk-waitlist-cancel-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: KioskWaitlistCancelPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-kiosk-waitlist-cancel-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-devices-pair — POST /v1/devices/pair
+  # Needs the device-token-salt secret to validate/generate HMAC tokens.
+  # ---------------------------------------------------------------------------
+  DevicesPairRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-devices-pair-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DevicesPairPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !ImportValue
+                    Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+                  - !ImportValue
+                    Fn::Sub: "osc-device-token-salt-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-devices-pair-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+Outputs:
+
+  KioskCheckInRoleArn:
+    Value: !GetAtt KioskCheckInRole.Arn
+    Export:
+      Name: !Sub "osc-role-kiosk-checkin-arn-${Environment}"
+
+  KioskCheckOutRoleArn:
+    Value: !GetAtt KioskCheckOutRole.Arn
+    Export:
+      Name: !Sub "osc-role-kiosk-checkout-arn-${Environment}"
+
+  KioskWaiverRoleArn:
+    Value: !GetAtt KioskWaiverRole.Arn
+    Export:
+      Name: !Sub "osc-role-kiosk-waiver-arn-${Environment}"
+
+  KioskGuestPaymentRoleArn:
+    Value: !GetAtt KioskGuestPaymentRole.Arn
+    Export:
+      Name: !Sub "osc-role-kiosk-guest-payment-arn-${Environment}"
+
+  KioskConsumablePurchaseRoleArn:
+    Value: !GetAtt KioskConsumablePurchaseRole.Arn
+    Export:
+      Name: !Sub "osc-role-kiosk-consumable-purchase-arn-${Environment}"
+
+  KioskDuesRoleArn:
+    Value: !GetAtt KioskDuesRole.Arn
+    Export:
+      Name: !Sub "osc-role-kiosk-dues-arn-${Environment}"
+
+  KioskRangeLanesRoleArn:
+    Value: !GetAtt KioskRangeLanesRole.Arn
+    Export:
+      Name: !Sub "osc-role-kiosk-range-lanes-arn-${Environment}"
+
+  KioskWaitlistCancelRoleArn:
+    Value: !GetAtt KioskWaitlistCancelRole.Arn
+    Export:
+      Name: !Sub "osc-role-kiosk-waitlist-cancel-arn-${Environment}"
+
+  DevicesPairRoleArn:
+    Value: !GetAtt DevicesPairRole.Arn
+    Export:
+      Name: !Sub "osc-role-devices-pair-arn-${Environment}"

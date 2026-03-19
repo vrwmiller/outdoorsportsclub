@@ -1,0 +1,702 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  IAM execution roles for the eleven Outdoor Sports Club admin Lambda
+  functions. Each role is least-privilege: only the data-plane actions
+  that function actually invokes are granted. Roles that manage RSO
+  overrides or range closures also receive sns:Publish on the admin alerts
+  topic. The reset-auth role receives the minimum Cognito IdP actions
+  required to clear a member's social provider link.
+
+Parameters:
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # osc-admin-ranges-occupancy — GET /v1/admin/ranges/occupancy  (Level 4+)
+  # ---------------------------------------------------------------------------
+  AdminRangesOccupancyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-admin-ranges-occupancy-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AdminRangesOccupancyPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-admin-ranges-occupancy-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-admin-settings-get — GET /v1/admin/settings  (Level 5+)
+  # ---------------------------------------------------------------------------
+  AdminSettingsGetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-admin-settings-get-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AdminSettingsGetPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-admin-settings-get-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-admin-settings-patch — PATCH /v1/admin/settings  (Level 5+)
+  # ---------------------------------------------------------------------------
+  AdminSettingsPatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-admin-settings-patch-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AdminSettingsPatchPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-admin-settings-patch-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-admin-lanes-patch — PATCH /v1/admin/lanes/{lane_id}  (Level 4+)
+  # ---------------------------------------------------------------------------
+  AdminLanesPatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-admin-lanes-patch-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AdminLanesPatchPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-admin-lanes-patch-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-admin-lanes-create — POST /v1/admin/lanes  (Level 4+)
+  # ---------------------------------------------------------------------------
+  AdminLanesCreateRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-admin-lanes-create-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AdminLanesCreatePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-admin-lanes-create-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-admin-lanes-checkout — POST /v1/admin/lanes/{lane_id}/checkout  (Level 4+)
+  # RSO forced-checkout publishes an SNS alert.
+  # ---------------------------------------------------------------------------
+  AdminLanesCheckoutRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-admin-lanes-checkout-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AdminLanesCheckoutPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !ImportValue
+                  Fn::Sub: "osc-sns-admin-alerts-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-admin-lanes-checkout-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-admin-members-reset-auth — PATCH /v1/admin/members/reset-auth  (Level 6)
+  # Clears social_provider_id in Cognito for the specified member.
+  # ---------------------------------------------------------------------------
+  AdminMembersResetAuthRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-admin-members-reset-auth-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AdminMembersResetAuthPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              # Minimum Cognito IdP actions to clear a member's social link.
+              # AdminUpdateUserAttributes sets or clears custom attributes;
+              # AdminDeleteUserAttributes removes them entirely.
+              - Effect: Allow
+                Action:
+                  - cognito-idp:AdminUpdateUserAttributes
+                  - cognito-idp:AdminDeleteUserAttributes
+                Resource: !ImportValue
+                  Fn::Sub: "osc-cognito-user-pool-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-admin-members-reset-auth-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-admin-members-level — PATCH /v1/admin/members/{member_id}/level  (Level 5+)
+  # ---------------------------------------------------------------------------
+  AdminMembersLevelRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-admin-members-level-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AdminMembersLevelPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-admin-members-level-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-admin-members-service-hours — PATCH /v1/admin/members/{member_id}/service-hours  (Level 5+)
+  # ---------------------------------------------------------------------------
+  AdminMembersServiceHoursRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-admin-members-service-hours-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AdminMembersServiceHoursPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-admin-members-service-hours-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-admin-ranges-status — PATCH /v1/admin/ranges/{range_id}/status  (Level 4+)
+  # Publishes an SNS alert on range closure.
+  # ---------------------------------------------------------------------------
+  AdminRangesStatusRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-admin-ranges-status-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AdminRangesStatusPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !ImportValue
+                  Fn::Sub: "osc-sns-admin-alerts-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-admin-ranges-status-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-admin-pairing-code — POST /v1/admin/devices/pairing-code  (Level 6)
+  # Generates a new device pairing code; no SNS or S3 required.
+  # ---------------------------------------------------------------------------
+  AdminPairingCodeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-admin-pairing-code-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AdminPairingCodePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-admin-pairing-code-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+Outputs:
+
+  AdminRangesOccupancyRoleArn:
+    Value: !GetAtt AdminRangesOccupancyRole.Arn
+    Export:
+      Name: !Sub "osc-role-admin-ranges-occupancy-arn-${Environment}"
+
+  AdminSettingsGetRoleArn:
+    Value: !GetAtt AdminSettingsGetRole.Arn
+    Export:
+      Name: !Sub "osc-role-admin-settings-get-arn-${Environment}"
+
+  AdminSettingsPatchRoleArn:
+    Value: !GetAtt AdminSettingsPatchRole.Arn
+    Export:
+      Name: !Sub "osc-role-admin-settings-patch-arn-${Environment}"
+
+  AdminLanesPatchRoleArn:
+    Value: !GetAtt AdminLanesPatchRole.Arn
+    Export:
+      Name: !Sub "osc-role-admin-lanes-patch-arn-${Environment}"
+
+  AdminLanesCreateRoleArn:
+    Value: !GetAtt AdminLanesCreateRole.Arn
+    Export:
+      Name: !Sub "osc-role-admin-lanes-create-arn-${Environment}"
+
+  AdminLanesCheckoutRoleArn:
+    Value: !GetAtt AdminLanesCheckoutRole.Arn
+    Export:
+      Name: !Sub "osc-role-admin-lanes-checkout-arn-${Environment}"
+
+  AdminMembersResetAuthRoleArn:
+    Value: !GetAtt AdminMembersResetAuthRole.Arn
+    Export:
+      Name: !Sub "osc-role-admin-members-reset-auth-arn-${Environment}"
+
+  AdminMembersLevelRoleArn:
+    Value: !GetAtt AdminMembersLevelRole.Arn
+    Export:
+      Name: !Sub "osc-role-admin-members-level-arn-${Environment}"
+
+  AdminMembersServiceHoursRoleArn:
+    Value: !GetAtt AdminMembersServiceHoursRole.Arn
+    Export:
+      Name: !Sub "osc-role-admin-members-service-hours-arn-${Environment}"
+
+  AdminRangesStatusRoleArn:
+    Value: !GetAtt AdminRangesStatusRole.Arn
+    Export:
+      Name: !Sub "osc-role-admin-ranges-status-arn-${Environment}"
+
+  AdminPairingCodeRoleArn:
+    Value: !GetAtt AdminPairingCodeRole.Arn
+    Export:
+      Name: !Sub "osc-role-admin-pairing-code-arn-${Environment}"

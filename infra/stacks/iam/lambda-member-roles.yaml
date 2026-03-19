@@ -1,0 +1,358 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  IAM execution roles for the five Outdoor Sports Club member portal Lambda
+  functions. Each role is least-privilege. The member-dues role accepts a
+  StripeSecretArn parameter; the Stripe permission is omitted when the
+  parameter is empty (ODQ #29 — deferred until Webmaster lifts the hold).
+  The stripe-webhook role is fully deferred under ODQ #29 and should not
+  be deployed until that hold is lifted.
+
+Parameters:
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+  # StripeSecretArn is intentionally left empty until ODQ #29 is resolved.
+  StripeSecretArn:
+    Type: String
+    Default: ""
+    Description: >-
+      ARN of the Stripe API key secret (osc/<env>/stripe-key). Leave empty
+      until ODQ #29 (Stripe integration readiness) is resolved.
+
+Conditions:
+
+  StripeEnabled: !Not [!Equals [!Ref StripeSecretArn, ""]]
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # osc-member-me-get — GET /v1/members/me
+  # ---------------------------------------------------------------------------
+  MemberMeGetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-member-me-get-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: MemberMeGetPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-member-me-get-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-member-badge — GET /v1/members/me/badge
+  # ---------------------------------------------------------------------------
+  MemberBadgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-member-badge-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: MemberBadgePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-member-badge-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-member-me-patch — PATCH /v1/members/me
+  # ---------------------------------------------------------------------------
+  MemberMePatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-member-me-patch-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: MemberMePatchPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-member-me-patch-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-member-dues — POST /v1/members/me/dues
+  # Stripe.js path deferred (ODQ #29); role is provisioned now so api.yaml
+  # can reference the ARN export — Stripe permission added when StripeEnabled.
+  # ---------------------------------------------------------------------------
+  MemberDuesRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-member-dues-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: MemberDuesPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: !Sub
+                  - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                  - {}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !ImportValue
+                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !ImportValue
+                  Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+              # ODQ #29: Stripe secret permission added when StripeEnabled.
+              - !If
+                - StripeEnabled
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref StripeSecretArn
+                - !Ref AWS::NoValue
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-member-dues-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # osc-stripe-webhook — POST /v1/webhooks/stripe
+  # FULLY DEFERRED under ODQ #29. Role is a placeholder with no permissions
+  # beyond logging. Do not wire this Lambda in api.yaml until ODQ #29 is
+  # resolved and the Stripe secret is provisioned.
+  # ---------------------------------------------------------------------------
+  StripeWebhookRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-lambda-stripe-webhook-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StripeWebhookPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # ODQ #29: RDS, secret, and Stripe permissions added when
+              # StripeEnabled. Until then, only CloudWatch Logs is granted
+              # so the placeholder Lambda can be deployed without error.
+              - !If
+                - StripeEnabled
+                - Effect: Allow
+                  Action:
+                    - rds-data:ExecuteStatement
+                    - rds-data:BeginTransaction
+                    - rds-data:CommitTransaction
+                    - rds-data:RollbackTransaction
+                  Resource: !Sub
+                    - "arn:aws:rds:${AWS::Region}:${AWS::AccountId}:cluster:osc-aurora-${Environment}"
+                    - {}
+                - !Ref AWS::NoValue
+              - !If
+                - StripeEnabled
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource:
+                    - !ImportValue
+                      Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+                    - !Ref StripeSecretArn
+                - !Ref AWS::NoValue
+              - !If
+                - StripeEnabled
+                - Effect: Allow
+                  Action:
+                    - kms:Decrypt
+                  Resource: !ImportValue
+                    Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+                - !Ref AWS::NoValue
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-stripe-webhook-${Environment}:*"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+Outputs:
+
+  MemberMeGetRoleArn:
+    Value: !GetAtt MemberMeGetRole.Arn
+    Export:
+      Name: !Sub "osc-role-member-me-get-arn-${Environment}"
+
+  MemberBadgeRoleArn:
+    Value: !GetAtt MemberBadgeRole.Arn
+    Export:
+      Name: !Sub "osc-role-member-badge-arn-${Environment}"
+
+  MemberMePatchRoleArn:
+    Value: !GetAtt MemberMePatchRole.Arn
+    Export:
+      Name: !Sub "osc-role-member-me-patch-arn-${Environment}"
+
+  MemberDuesRoleArn:
+    Value: !GetAtt MemberDuesRole.Arn
+    Export:
+      Name: !Sub "osc-role-member-dues-arn-${Environment}"
+
+  StripeWebhookRoleArn:
+    Value: !GetAtt StripeWebhookRole.Arn
+    Export:
+      Name: !Sub "osc-role-stripe-webhook-arn-${Environment}"

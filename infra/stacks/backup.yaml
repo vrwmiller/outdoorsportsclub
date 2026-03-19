@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  AWS Backup plan for Outdoor Sports Club.
+  Provisions a backup vault and plan that targets the Aurora cluster and
+  the S3 waivers bucket. Rules: continuous PITR on Aurora (35-day window),
+  daily snapshot at 02:00 UTC, and a cross-region copy rule when deployed
+  in a multi-region configuration. Vault Lock is enabled in Compliance mode
+  on prod only — dev uses Governance mode so test data can be cleaned up.
+
+Parameters:
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+  RegionList:
+    Type: CommaDelimitedList
+    Default: "us-east-1"
+    Description: >-
+      Ordered list of active regions. First entry is the primary (writer)
+      region. Used to determine whether cross-region copy rules are needed.
+      Maximum two entries are supported by this stack — the S3 cross-region
+      copy action targets index 1 only. For three or more active regions,
+      add additional CopyActions entries to S3BackupPlan manually.
+      Example: "us-east-1,us-east-2"
+
+Conditions:
+
+  IsProd: !Equals [!Ref Environment, prod]
+
+  # True when RegionList has more than one entry (sentinel trick — same pattern
+  # used in aurora.yaml and other multi-region stacks).
+  IsMultiRegion: !Not
+    - !Equals
+      - !Select
+        - 1
+        - !Split
+          - ","
+          - !Join
+            - ","
+            - - !Join [",", !Ref RegionList]
+              - "SENTINEL"
+      - "SENTINEL"
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # Backup Vault
+  # ---------------------------------------------------------------------------
+  BackupVault:
+    Type: AWS::Backup::BackupVault
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BackupVaultName: !Sub "osc-backup-vault-${Environment}"
+      # Vault Lock: Compliance mode prevents any deletion for prod;
+      # Governance mode is omitted on dev so test snapshots can be purged.
+      LockConfiguration: !If
+        - IsProd
+        - ChangeableForDays: 3   # transition from Governance to Compliance grace period
+          MinRetentionDays: 1
+          MaxRetentionDays: 36   # 35-day retention + 1 day buffer
+        - !Ref AWS::NoValue
+      BackupVaultTags:
+        Project: outdoor-sports-club
+        Environment: !Ref Environment
+        ManagedBy: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # IAM role that allows AWS Backup to take snapshots and copy them
+  # ---------------------------------------------------------------------------
+  BackupServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-backup-service-role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: backup.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        # AWS-managed policies that grant Backup the correct read/write
+        # access to Aurora, S3, and cross-account/cross-region copy.
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForRestores
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Aurora Backup Plan — PITR only.
+  # Aurora Global Database handles cross-region replication natively; a
+  # cross-region Backup copy of Aurora is not needed here.
+  # ---------------------------------------------------------------------------
+  AuroraBackupPlan:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan:
+        BackupPlanName: !Sub "osc-aurora-backup-plan-${Environment}"
+        BackupPlanRule:
+          # Continuous PITR — any second within the retention window can be
+          # targeted. ScheduleExpression is required by CloudFormation even
+          # when continuous backup is enabled.
+          - RuleName: AuroraPITR
+            TargetBackupVault: !Ref BackupVault
+            EnableContinuousBackup: true
+            ScheduleExpression: "cron(0 2 * * ? *)"
+            StartWindowMinutes: 60
+            CompletionWindowMinutes: 180
+            Lifecycle:
+              DeleteAfterDays: !If [IsProd, 35, 7]
+      BackupPlanTags:
+        Project: outdoor-sports-club
+        Environment: !Ref Environment
+        ManagedBy: cloudformation
+
+  AuroraBackupSelection:
+    Type: AWS::Backup::BackupSelection
+    Properties:
+      BackupPlanId: !Ref AuroraBackupPlan
+      BackupSelection:
+        SelectionName: !Sub "osc-aurora-backup-selection-${Environment}"
+        IamRoleArn: !GetAtt BackupServiceRole.Arn
+        Resources:
+          - !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+
+  # ---------------------------------------------------------------------------
+  # S3 Backup Plan — daily snapshot + cross-region copy for the waivers bucket.
+  # S3 CRR (in s3.yaml) handles object-level replication; this plan provides
+  # a separate recovery point in the AWS Backup vault.
+  # ---------------------------------------------------------------------------
+  S3BackupPlan:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan:
+        BackupPlanName: !Sub "osc-s3-backup-plan-${Environment}"
+        BackupPlanRule:
+          # Daily snapshot at 02:00 UTC. Cross-region copy fires when
+          # IsMultiRegion is true and targets RegionList index 1 only
+          # (see RegionList parameter description for the 2-region limit).
+          - RuleName: DailySnapshot
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: "cron(0 2 * * ? *)"
+            StartWindowMinutes: 60
+            CompletionWindowMinutes: 480
+            Lifecycle:
+              DeleteAfterDays: !If [IsProd, 35, 7]
+            CopyActions: !If
+              - IsMultiRegion
+              - - DestinationBackupVaultArn: !Sub
+                    - "arn:aws:backup:${SecondaryRegion}:${AWS::AccountId}:backup-vault:osc-backup-vault-${Environment}"
+                    - SecondaryRegion: !Select [1, !Ref RegionList]
+                  Lifecycle:
+                    DeleteAfterDays: !If [IsProd, 35, 7]
+              - !Ref AWS::NoValue
+      BackupPlanTags:
+        Project: outdoor-sports-club
+        Environment: !Ref Environment
+        ManagedBy: cloudformation
+
+  S3BackupSelection:
+    Type: AWS::Backup::BackupSelection
+    Properties:
+      BackupPlanId: !Ref S3BackupPlan
+      BackupSelection:
+        SelectionName: !Sub "osc-s3-backup-selection-${Environment}"
+        IamRoleArn: !GetAtt BackupServiceRole.Arn
+        Resources:
+          - !ImportValue
+            Fn::Sub: "osc-s3-waivers-arn-${Environment}"
+
+Outputs:
+
+  BackupVaultName:
+    Description: Name of the AWS Backup vault.
+    Value: !Ref BackupVault
+    Export:
+      Name: !Sub "osc-backup-vault-name-${Environment}"
+
+  BackupVaultArn:
+    Description: ARN of the AWS Backup vault.
+    Value: !GetAtt BackupVault.BackupVaultArn
+    Export:
+      Name: !Sub "osc-backup-vault-arn-${Environment}"
