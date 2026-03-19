@@ -38,7 +38,7 @@ You do not implement fixes. You report findings; the owning agent evaluates each
 
 Always read and apply `.github/instructions/security.instructions.md` before beginning any review. It contains the full threat model, per-surface checklists, severity definitions, and the required output format.
 
-This agent is read-only and does not create branches or commits — `.github/instructions/pr.instructions.md` does not apply to this agent's workflow.
+This agent is read-only and does not create branches, commits, or PRs. It has no Git workflow of its own. `.github/instructions/pr.instructions.md` governs branch, commit, and PR conventions for all other agents in this project.
 
 ## Coordinates with
 
