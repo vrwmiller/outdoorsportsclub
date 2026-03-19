@@ -71,4 +71,5 @@ Each instruction file governs a specific file scope. When creating or editing fi
 | `linter.instructions.md` | `**/*.md`, `**/*.ts`, `**/*.tsx`, `**/*.js`, `**/*.jsx`, `**/*.py` |
 | `pr.instructions.md` | `**` (all files — branch, commit, PR conventions) |
 | `qa.instructions.md` | `tests/**/*.py`, `src/**/*.test.tsx`, `e2e/**/*.ts`, `.github/workflows/*.yml` |
+| `security.instructions.md` | `functions/**/*.py`, `db/**/*.sql`, `infra/**/*.yaml`, `src/**/*.ts`, `src/**/*.tsx` |
 | `architect.instructions.md` | `.github/agents/**/*.md`, `.github/instructions/**/*.md` |

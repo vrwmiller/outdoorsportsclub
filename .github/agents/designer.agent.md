@@ -47,6 +47,7 @@ The **Home Page** is the club's primary public-facing interface — the first th
 - **backend** — frontend API calls must exactly match the Lambda handler contracts defined in `docs/design.md` Section 7; when a backend endpoint changes shape, update the frontend client code to match
 - **infra** — Amplify Gen 2 injects environment variables at build time; new `process.env` references (API base URL, Cognito Pool ID, App Client ID) must be added by the infra agent in `amplify/backend.ts` or the relevant CloudFormation stack before they can be used in `src/`
 - **qa** — every new component or page should have a corresponding test in `src/**/__tests__/`; after implementing a component, confirm test coverage with the qa agent
+- **security** — after implementing auth-related flows (sign-in redirect, RBAC gating, token storage) or any page that renders API-supplied data, request a security review from the security agent; evaluate each finding and incorporate those that address genuine vulnerabilities before merging; the security agent does not implement fixes
 - **linter** — all `.ts` / `.tsx` files must pass linting rules in `.github/instructions/linter.instructions.md` before committing
 - **docs** — designer does not edit `docs/` directly; if a new surface, user flow, or behavioral change is implemented that is not yet reflected in `docs/design.md`, flag the gap to the docs agent; never ship UI for a flow that has no backing design documentation in Section 7 or the relevant RBAC section
 
