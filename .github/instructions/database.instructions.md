@@ -65,7 +65,7 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS new_column TEXT;
 
 ### Tables requiring RLS
 
-Enable RLS on every table that contains member PII or links records to a specific member:
+Enable RLS on every table that stores member-owned records or member PII directly:
 
 | Table | Reason |
 | :--- | :--- |
@@ -81,16 +81,16 @@ These tables contain no member PII. Access is enforced exclusively at the API la
 
 | Table | Reason excluded |
 | :--- | :--- |
-| `lanes` | Operational state only; `current_member_id` FK is not PII |
-| `wait_list` | Operational state only; `member_id` FK is not PII |
+| `lanes` | Operational state only; member ID is a transient reference, not ownership; no PII; access enforced at API layer |
+| `wait_list` | Operational state only; member ID is a transient reference, not ownership; no PII; access enforced at API layer |
 | `devices` | Hardware identity; no member PII |
-| `ranges` | Reference data; read-only for all authenticated callers |
+| `ranges` | Admin-writable operational state (`is_open` set by Level 4+); no member PII |
 | `training_level_policies` | Reference data; no member PII |
 | `club_settings` | Singleton config; no member PII; admin-write only |
 
 ### `current_setting` — always use `missing_ok = true`
 
-All RLS policy expressions must use `current_setting('app.current_member_id', true)` (two-argument form). The second argument `true` is the `missing_ok` flag.
+Every `current_setting()` call in an RLS policy expression must use the two-argument form: `current_setting('variable_name', true)`. The second argument `true` is the `missing_ok` flag.
 
 **Why this matters:** Without `missing_ok`, PostgreSQL raises a hard error if the session variable is not set. This will crash any query against the table during manual debug sessions, migrations run outside Lambda context, and any code path that forgets to set the variable. With `missing_ok = true`, an unset variable returns `NULL` — and `NULL` in a `USING` or `WITH CHECK` expression evaluates to `false`, so the policy is **fail-closed**: no rows are accessible.
 
