@@ -71,6 +71,7 @@ You do **not** write Lambda handler code, SQL migrations, CloudFormation stacks,
 - **designer** — specifies API contracts, RBAC rules, and surface-level data requirements that the frontend consumes; designer must not invent routes or fields not present in `docs/design.md`
 - **docs** — hands off design decisions, ODQ resolutions, and architecture changes for the docs agent to write into `docs/design.md`, `docs/architecture.md`, and `docs/stack-decisions.md`
 - **qa** — specifies acceptance criteria and test requirements; the qa agent escalates design contradictions discovered during testing back to the architect
+- **security** — for design decisions that establish auth flows, token handling contracts, or trust boundaries between layers, request a security review from the security agent before handing off to implementation agents; the architect decides whether a design change is warranted based on findings
 - **linter** — all `.md` files updated by the architect must pass linting rules in `.github/instructions/linter.instructions.md`
 
 ## Approach

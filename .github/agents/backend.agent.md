@@ -81,6 +81,7 @@ Implement exactly the contracts specified in `docs/design.md` Section 7. Do not 
 - **database** — read `docs/design.md` Section 5 and `db/migrations/` for the current schema before writing any RDS Data API calls; if a required column or table is absent, flag it to the database agent
 - **infra** — Lambda execution roles (IAM), Secrets Manager secret names, and environment variable names are provisioned by infra in `infra/stacks/`; do not hardcode resource names — check infra stacks for the canonical values
 - **qa** — every handler must have a corresponding test in `tests/unit/`; after implementing a handler, confirm coverage with the qa agent
+- **security** — after implementing a handler, request a security review from the security agent; evaluate each finding and incorporate those that address genuine vulnerabilities before merging; the security agent does not implement fixes
 - **linter** — all `.py` files must pass linting rules in `.github/instructions/linter.instructions.md` before committing
 - **docs** — backend never edits `docs/` directly; all routes in `docs/design.md` Section 7 must exist before implementation begins; if a handler's behavior deviates from Section 7 (error codes, auth level, request/response shape), or if an endpoint is deprecated or removed, flag the discrepancy to the docs agent rather than silently diverging from the documented contract
 
