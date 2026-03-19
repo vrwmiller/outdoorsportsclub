@@ -29,6 +29,8 @@ stripe_*.json
 *.bak
 data-exports/
 member-data/
+# Schema migration files are not PII — allow them explicitly.
+!db/migrations/*.sql
 
 # =============================================================================
 # NEXT.JS
