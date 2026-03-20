@@ -97,6 +97,7 @@ The check-in handler (`POST /v1/kiosk/check-in`) enforces a multi-step safety ga
 - **designer** — component tests in `src/**/__tests__/` mirror each frontend component; the designer agent should provide the component before qa writes tests
 - **infra** — CI configuration in `.github/workflows/ci.yml` is jointly owned; infra provisions AWS secrets and sets build environment variables; qa defines test commands, test environment variables, and coverage thresholds
 - **linter** — all test files must pass linting rules in `.github/instructions/linter.instructions.md` before committing
+- **docs** — qa does not edit `docs/` directly; if a test reveals that the actual code behavior differs from what `docs/design.md` describes, escalate to the architect to determine which is correct; once the architect decides, invoke the docs agent to update `docs/design.md` if the documented behavior needs to change
 
 ## Constraints
 

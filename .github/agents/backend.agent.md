@@ -83,7 +83,7 @@ Implement exactly the contracts specified in `docs/design.md` Section 7. Do not 
 - **qa** — every handler must have a corresponding test in `tests/unit/`; after implementing a handler, confirm coverage with the qa agent
 - **security** — after implementing a handler, request a security review from the security agent; evaluate each finding and incorporate those that address genuine vulnerabilities before merging; the security agent does not implement fixes
 - **linter** — all `.py` files must pass linting rules in `.github/instructions/linter.instructions.md` before committing
-- **docs** — backend never edits `docs/` directly; all routes in `docs/design.md` Section 7 must exist before implementation begins; if a handler's behavior deviates from Section 7 (error codes, auth level, request/response shape), or if an endpoint is deprecated or removed, flag the discrepancy to the docs agent rather than silently diverging from the documented contract
+- **docs** — backend never edits `docs/` directly; all routes in `docs/design.md` Section 7 must exist before implementation begins; if a handler's behavior deviates from Section 7 (error codes, auth level, request/response shape), or if an endpoint is deprecated or removed, invoke the docs agent: *"Update docs/design.md Section 7 to reflect [specific change]"* — do not merge until the docs agent confirms the update is complete
 
 ## Approach
 
@@ -92,7 +92,7 @@ Implement exactly the contracts specified in `docs/design.md` Section 7. Do not 
 3. Implement the Lambda handler: validate auth → validate input → execute business logic → write to DB/S3/SNS → return response
 4. Apply PEP 8 and the Python rules from `.github/instructions/linter.instructions.md`
 5. Re-read the handler to confirm no secrets are hardcoded and all exception paths return a valid `statusCode`+`body` dict
-6. Confirm the implementation exactly matches `docs/design.md` Section 7; if any aspect of the behavior is undocumented or has drifted, flag the discrepancy to the docs agent before merging
+6. Confirm the implementation exactly matches `docs/design.md` Section 7; if any aspect of the behavior is undocumented or has drifted, invoke the docs agent — specify exactly which route, shape, error code, or auth level differs — and do not merge until the update is confirmed
 
 ## Output Format
 
