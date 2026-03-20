@@ -56,7 +56,8 @@ STACK_LAMBDA    = osc-lambda-$(ENV)
 .PHONY: help gen-salt package upload \
         deploy-kms deploy-secrets deploy-sns deploy-s3 deploy-aurora \
         deploy-backup deploy-iam-kiosk deploy-artifacts deploy-lambda \
-        deploy-base deploy-all update-code migrate invoke
+        deploy-base deploy-all update-code migrate invoke \
+        destroy-lambda destroy-sns destroy-iam
 
 # =============================================================================
 help:
@@ -73,6 +74,11 @@ help:
 	@echo "  update-code       Push newly uploaded ZIPs to Lambda (use after 'make upload' on code-only changes)"
 	@echo "  migrate           Run all database migrations against the deployed Aurora cluster"
 	@echo "  invoke            Invoke a Lambda directly (FUNCTION=name PAYLOAD='{...}')"
+	@echo ""
+	@echo "Destroy targets (dev only — blocked on ENV=prod):"
+	@echo "  destroy-lambda    Delete the Lambda + API Gateway stack (rebuildable via deploy-lambda)"
+	@echo "  destroy-sns       Delete the SNS topic stack (rebuildable via deploy-base)"
+	@echo "  destroy-iam       Delete the IAM roles stack (rebuildable via deploy-base)"
 	@echo ""
 	@echo "Variables:"
 	@echo "  ENV=$(ENV)  AWS_PROFILE=$(AWS_PROFILE)  REGION=$(REGION)"
@@ -267,3 +273,41 @@ invoke:
 		--profile $(AWS_PROFILE) --region $(REGION) \
 		/tmp/lambda-response.json
 	@python3 -m json.tool /tmp/lambda-response.json
+
+# =============================================================================
+# Destroy targets — stateless/rebuildable stacks only.
+# Blocked on ENV=prod. Stateful stacks (kms, secrets, aurora, s3, cognito,
+# artifacts, backup) are intentionally excluded — they carry DeletionPolicy:
+# Retain and cannot be cleanly cycled.
+# =============================================================================
+_guard-nonprod:
+	@test "$(ENV)" != "prod" || \
+		(echo "ERROR: destroy targets are blocked on ENV=prod" && exit 1)
+
+destroy-lambda: _guard-nonprod
+	aws cloudformation delete-stack \
+		--stack-name $(STACK_LAMBDA) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	aws cloudformation wait stack-delete-complete \
+		--stack-name $(STACK_LAMBDA) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	@echo "$(STACK_LAMBDA) deleted. Rebuild with: make deploy-lambda ENV=$(ENV)"
+
+destroy-sns: _guard-nonprod
+	aws cloudformation delete-stack \
+		--stack-name $(STACK_SNS) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	aws cloudformation wait stack-delete-complete \
+		--stack-name $(STACK_SNS) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	@echo "$(STACK_SNS) deleted. Rebuild with: make deploy-base ENV=$(ENV)"
+
+destroy-iam: _guard-nonprod
+	aws cloudformation delete-stack \
+		--stack-name $(STACK_IAM_KIOSK) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	aws cloudformation wait stack-delete-complete \
+		--stack-name $(STACK_IAM_KIOSK) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	@echo "$(STACK_IAM_KIOSK) deleted. Rebuild with: make deploy-base ENV=$(ENV)"
+
