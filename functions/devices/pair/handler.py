@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import secrets
+import time
 from typing import Any
 
 import boto3
@@ -58,8 +59,8 @@ except (json.JSONDecodeError, KeyError) as _exc:
 
 CORS_HEADERS: dict[str, str] = {
     "Access-Control-Allow-Origin": CORS_ALLOW_ORIGIN,
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "OPTIONS,POST",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization,x-device-token",
+    "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PATCH,DELETE",
 }
 
 
@@ -71,86 +72,104 @@ def _error(status: int, message: str) -> dict[str, Any]:
     }
 
 
-def lambda_handler(event: dict, context: Any) -> dict[str, Any]:
+def handler(event: dict, context: Any) -> dict[str, Any]:
+    start = time.monotonic()
+    device_id: str | None = None
+
     if event.get("httpMethod") == "OPTIONS":
         return {"statusCode": 204, "headers": CORS_HEADERS, "body": ""}
 
     try:
-        body = json.loads(event.get("body") or "{}")
-    except json.JSONDecodeError:
-        return _error(400, "Invalid JSON body")
+        try:
+            body = json.loads(event.get("body") or "{}")
+        except json.JSONDecodeError as exc:
+            raise ValueError("Invalid JSON body") from exc
 
-    pairing_code: str | None = body.get("pairing_code")
-    if not pairing_code or not isinstance(pairing_code, str):
-        return _error(400, "pairing_code is required")
-    if len(pairing_code) > 64:
-        return _error(400, "pairing_code exceeds maximum length")
+        pairing_code: str | None = body.get("pairing_code")
+        if not pairing_code or not isinstance(pairing_code, str):
+            raise ValueError("pairing_code is required")
+        if len(pairing_code) > 64:
+            raise ValueError("pairing_code exceeds maximum length")
 
-    rds = boto3.client("rds-data")
+        rds = boto3.client("rds-data")
 
-    # Resolve device by pairing code. Filter on status and expiry in the
-    # query so a single lookup confirms all validity conditions atomically.
-    result = rds.execute_statement(
-        resourceArn=DB_CLUSTER_ARN,
-        secretArn=DB_SECRET_ARN,
-        database=DB_NAME,
-        sql="""
-            SELECT id
-            FROM devices
-            WHERE pairing_code             = :code
-              AND status                   = 'Pending-Pairing'
-              AND pairing_code_expires_at  > NOW()
-        """,
-        parameters=[{"name": "code", "value": {"stringValue": pairing_code}}],
-    )
+        # Generate the token before touching the DB to avoid a SELECT+UPDATE
+        # race. The single UPDATE below validates code, status, and expiry
+        # atomically — no separate SELECT is needed.
+        raw_token: str = secrets.token_hex(32)
+        hashed_token: str = hmac.new(
+            _DEVICE_TOKEN_SALT.encode(), raw_token.encode(), hashlib.sha256
+        ).hexdigest()
 
-    rows = result.get("records", [])
-    if not rows:
-        # Do not reveal whether the code exists but is expired vs never issued.
-        logger.warning("Pairing attempt failed — code invalid or expired")
-        return _error(400, "Invalid or expired pairing code")
-
-    device_id: str = rows[0][0]["stringValue"]
-
-    # Generate a 256-bit random token and store its HMAC hash.
-    raw_token: str = secrets.token_hex(32)
-    hashed_token: str = hmac.new(
-        _DEVICE_TOKEN_SALT.encode(), raw_token.encode(), hashlib.sha256
-    ).hexdigest()
-
-    # Activate the device. The WHERE clause re-checks status to guard against
-    # a concurrent pairing attempt on the same code.
-    update = rds.execute_statement(
-        resourceArn=DB_CLUSTER_ARN,
-        secretArn=DB_SECRET_ARN,
-        database=DB_NAME,
-        sql="""
-            UPDATE devices
-               SET device_token            = :token_hash,
-                   status                  = 'Active',
-                   pairing_code            = NULL,
-                   pairing_code_expires_at = NULL
-             WHERE id     = :device_id
-               AND status = 'Pending-Pairing'
-        """,
-        parameters=[
-            {"name": "token_hash", "value": {"stringValue": hashed_token}},
-            {"name": "device_id",  "value": {"stringValue": device_id}},
-        ],
-    )
-
-    if update.get("numberOfRecordsUpdated", 0) != 1:
-        # Another request activated this device between our SELECT and UPDATE.
-        logger.error(
-            "Concurrent pairing detected for device %s — UPDATE matched 0 rows",
-            device_id,
+        update = rds.execute_statement(
+            resourceArn=DB_CLUSTER_ARN,
+            secretArn=DB_SECRET_ARN,
+            database=DB_NAME,
+            sql="""
+                UPDATE devices
+                   SET device_token            = :token_hash,
+                       status                  = 'Active',
+                       pairing_code            = NULL,
+                       pairing_code_expires_at = NULL
+                 WHERE pairing_code            = :code
+                   AND status                  = 'Pending-Pairing'
+                   AND pairing_code_expires_at > NOW()
+                RETURNING id
+            """,
+            parameters=[
+                {"name": "token_hash", "value": {"stringValue": hashed_token}},
+                {"name": "code",       "value": {"stringValue": pairing_code}},
+            ],
         )
-        return _error(400, "Invalid or expired pairing code")
 
-    logger.info("Device %s successfully paired", device_id)
+        if update.get("numberOfRecordsUpdated", 0) != 1:
+            # Do not reveal whether the code was never issued, already used, or expired.
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.warning(json.dumps({
+                "request_id": context.aws_request_id,
+                "member_id": None,
+                "device_id": None,
+                "action": "pair_device",
+                "duration_ms": duration_ms,
+                "error": "InvalidPairingCode",
+            }))
+            return _error(400, "Invalid or expired pairing code")
 
-    return {
-        "statusCode": 200,
-        "headers": CORS_HEADERS,
-        "body": json.dumps({"device_token": raw_token}),
-    }
+        device_id = update["records"][0][0]["stringValue"]
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.info(json.dumps({
+            "request_id": context.aws_request_id,
+            "member_id": None,
+            "device_id": device_id,
+            "action": "pair_device",
+            "duration_ms": duration_ms,
+            "error": None,
+        }))
+        return {
+            "statusCode": 200,
+            "headers": CORS_HEADERS,
+            "body": json.dumps({"device_token": raw_token}),
+        }
+
+    except ValueError as exc:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.warning(json.dumps({
+            "request_id": context.aws_request_id,
+            "member_id": None,
+            "device_id": device_id,
+            "action": "pair_device",
+            "duration_ms": duration_ms,
+            "error": type(exc).__name__,
+        }))
+        return _error(400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.exception(json.dumps({
+            "request_id": context.aws_request_id,
+            "member_id": None,
+            "device_id": device_id,
+            "action": "pair_device",
+            "duration_ms": duration_ms,
+            "error": type(exc).__name__,
+        }))
+        return _error(500, "Internal server error")
