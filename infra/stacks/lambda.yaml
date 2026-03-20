@@ -32,7 +32,7 @@ Resources:
       FunctionName: !Sub "osc-kiosk-checkin-${Environment}"
       Description: Validates member credentials and assigns a range lane or queues a wait-list entry.
       Runtime: python3.12
-      Handler: handler.lambda_handler
+      Handler: handler.handler
       Role: !ImportValue
         Fn::Sub: "osc-role-kiosk-checkin-arn-${Environment}"
       Code:
@@ -56,6 +56,8 @@ Resources:
           Value: outdoor-sports-club
         - Key: Environment
           Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
 
   # ---------------------------------------------------------------------------
   # Kiosk — Check-out
@@ -67,7 +69,7 @@ Resources:
       FunctionName: !Sub "osc-kiosk-checkout-${Environment}"
       Description: Clears a lane and advances the wait list; sends SNS SMS if next member has a mobile phone.
       Runtime: python3.12
-      Handler: handler.lambda_handler
+      Handler: handler.handler
       Role: !ImportValue
         Fn::Sub: "osc-role-kiosk-checkout-arn-${Environment}"
       Code:
@@ -93,6 +95,8 @@ Resources:
           Value: outdoor-sports-club
         - Key: Environment
           Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
 
   # ---------------------------------------------------------------------------
   # Kiosk — Waiver
@@ -104,7 +108,7 @@ Resources:
       FunctionName: !Sub "osc-kiosk-waiver-${Environment}"
       Description: Stores a signed waiver PDF in S3 with Object Lock and records the event in Aurora.
       Runtime: python3.12
-      Handler: handler.lambda_handler
+      Handler: handler.handler
       Role: !ImportValue
         Fn::Sub: "osc-role-kiosk-waiver-arn-${Environment}"
       Code:
@@ -130,6 +134,8 @@ Resources:
           Value: outdoor-sports-club
         - Key: Environment
           Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
 
   # ---------------------------------------------------------------------------
   # Kiosk — Guest Payment
@@ -141,7 +147,7 @@ Resources:
       FunctionName: !Sub "osc-kiosk-guest-payment-${Environment}"
       Description: Looks up or creates a guest record, enforces annual visit limit, processes payment.
       Runtime: python3.12
-      Handler: handler.lambda_handler
+      Handler: handler.handler
       Role: !ImportValue
         Fn::Sub: "osc-role-kiosk-guest-payment-arn-${Environment}"
       Code:
@@ -168,6 +174,8 @@ Resources:
           Value: outdoor-sports-club
         - Key: Environment
           Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
 
   # ---------------------------------------------------------------------------
   # Kiosk — Consumable Purchase
@@ -179,7 +187,7 @@ Resources:
       FunctionName: !Sub "osc-kiosk-consumable-purchase-${Environment}"
       Description: Records a consumable purchase against the catalog; processes Stripe Terminal payment when applicable.
       Runtime: python3.12
-      Handler: handler.lambda_handler
+      Handler: handler.handler
       Role: !ImportValue
         Fn::Sub: "osc-role-kiosk-consumable-purchase-arn-${Environment}"
       Code:
@@ -205,6 +213,8 @@ Resources:
           Value: outdoor-sports-club
         - Key: Environment
           Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
 
   # ---------------------------------------------------------------------------
   # Kiosk — Dues Payment
@@ -216,7 +226,7 @@ Resources:
       FunctionName: !Sub "osc-kiosk-dues-${Environment}"
       Description: Kiosk path for annual dues payment via Stripe Terminal or cash.
       Runtime: python3.12
-      Handler: handler.lambda_handler
+      Handler: handler.handler
       Role: !ImportValue
         Fn::Sub: "osc-role-kiosk-dues-arn-${Environment}"
       Code:
@@ -242,6 +252,8 @@ Resources:
           Value: outdoor-sports-club
         - Key: Environment
           Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
 
   # ---------------------------------------------------------------------------
   # Kiosk — Range Lanes
@@ -253,7 +265,7 @@ Resources:
       FunctionName: !Sub "osc-kiosk-range-lanes-${Environment}"
       Description: Returns current lane occupancy for the kiosk's own range.
       Runtime: python3.12
-      Handler: handler.lambda_handler
+      Handler: handler.handler
       Role: !ImportValue
         Fn::Sub: "osc-role-kiosk-range-lanes-arn-${Environment}"
       Code:
@@ -277,6 +289,8 @@ Resources:
           Value: outdoor-sports-club
         - Key: Environment
           Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
 
   # ---------------------------------------------------------------------------
   # Kiosk — Wait-list Cancel
@@ -288,7 +302,7 @@ Resources:
       FunctionName: !Sub "osc-kiosk-waitlist-cancel-${Environment}"
       Description: Cancels the calling member's active wait-list entry and recalculates queue positions.
       Runtime: python3.12
-      Handler: handler.lambda_handler
+      Handler: handler.handler
       Role: !ImportValue
         Fn::Sub: "osc-role-kiosk-waitlist-cancel-arn-${Environment}"
       Code:
@@ -312,6 +326,8 @@ Resources:
           Value: outdoor-sports-club
         - Key: Environment
           Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
 
   # ---------------------------------------------------------------------------
   # Devices — Pair
@@ -323,7 +339,7 @@ Resources:
       FunctionName: !Sub "osc-devices-pair-${Environment}"
       Description: Validates a one-time pairing code, activates the device, and returns the raw device token once.
       Runtime: python3.12
-      Handler: handler.lambda_handler
+      Handler: handler.handler
       Role: !ImportValue
         Fn::Sub: "osc-role-devices-pair-arn-${Environment}"
       Code:
@@ -347,6 +363,8 @@ Resources:
           Value: outdoor-sports-club
         - Key: Environment
           Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
 
 Outputs:
 
