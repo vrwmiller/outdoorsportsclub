@@ -47,129 +47,140 @@ def handler(event: dict, context: Any) -> dict:
 
         rds = boto3.client("rds-data")
 
-        # 1. Resolve member from QR badge number
-        m_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql=(
-                "SELECT id, training_level, dues_paid_until "
-                "FROM members WHERE member_num = :member_num"
-            ),
-            parameters=[{"name": "member_num", "value": {"stringValue": member_num}}],
+        # One outer transaction for the entire handler; set_config must be first.
+        outer_tx = rds.begin_transaction(
+            resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
-        if not m_result["records"]:
-            raise PermissionError("Unknown member badge")
-        m_row = m_result["records"][0]
-        member_id = m_row[0]["stringValue"]
-        training_level: int = int(m_row[1]["longValue"])
-        dues_paid_until = m_row[2].get("stringValue")  # NULL if never paid
-
-        # 2. Resolve range — check is_open and min_training_level
-        r_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql="SELECT is_open, min_training_level FROM ranges WHERE id = :range_id",
-            parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
-        )
-        if not r_result["records"]:
-            raise ValueError("Range not found for this device")
-        r_row = r_result["records"][0]
-        is_open: bool = r_row[0]["booleanValue"]
-        min_level: int = int(r_row[1]["longValue"])
-
-        if not is_open:
-            raise PermissionError("Range is closed")
-
-        if training_level < min_level:
-            raise PermissionError(f"Level {min_level} required to access this range")
-
-        # 3. Dues current? dues_paid_until >= today (UTC)
-        import datetime
-        today = datetime.date.today().isoformat()
-        if not dues_paid_until or dues_paid_until < today:
-            raise PermissionError("Dues are not current")
-
-        # 4. Policy: max_guests for this training_level
-        p_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql="SELECT max_guests FROM training_level_policies WHERE training_level = :level",
-            parameters=[{"name": "level", "value": {"longValue": training_level}}],
-        )
-        if not p_result["records"]:
-            raise PermissionError("No policy found for this training level")
-        max_guests: int = int(p_result["records"][0][0]["longValue"])
-        if guest_count > max_guests:
-            raise PermissionError(
-                f"Guest limit exceeded: level {training_level} allows {max_guests} guest(s)"
+        try:
+            # Set RLS session variable — kiosk acts with training_level 4 (admin).
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=outer_tx["transactionId"],
+                sql="SELECT set_config('app.current_training_level', '4', true)",
             )
 
-        # 5. Check for existing active wait_list entry (Waiting status — not Called)
-        wl_check = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql=(
-                "SELECT id FROM wait_list "
-                "WHERE member_id = :member_id AND range_id = :range_id AND status = 'Waiting'"
-            ),
-            parameters=[
-                {"name": "member_id", "value": {"stringValue": member_id}},
-                {"name": "range_id", "value": {"stringValue": range_id}},
-            ],
-        )
-        if wl_check["records"]:
-            raise PermissionError("Member already has an active wait list entry for this range")
-
-        # 6. Check for existing Called wait list entry (member responding to queue call)
-        called_check = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql=(
-                "SELECT id FROM wait_list "
-                "WHERE member_id = :member_id AND range_id = :range_id AND status = 'Called'"
-            ),
-            parameters=[
-                {"name": "member_id", "value": {"stringValue": member_id}},
-                {"name": "range_id", "value": {"stringValue": range_id}},
-            ],
-        )
-        called_entry_id: str | None = None
-        if called_check["records"]:
-            called_entry_id = called_check["records"][0][0]["stringValue"]
-
-        # 7. Find available lanes for this range
-        lanes_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql=(
-                "SELECT id, lane_number FROM lanes "
-                "WHERE range_id = :range_id AND status = 'Available' "
-                "ORDER BY lane_number"
-            ),
-            parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
-        )
-        available_lanes = [
-            {"id": row[0]["stringValue"], "lane_number": int(row[1]["longValue"])}
-            for row in lanes_result["records"]
-        ]
-
-        if not available_lanes:
-            # Range is full — add to wait list (position + insert must be atomic)
-            wl_tx = rds.begin_transaction(
-                resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
+            # 1. Resolve member from QR badge number
+            m_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=outer_tx["transactionId"],
+                sql=(
+                    "SELECT id, training_level, dues_paid_until "
+                    "FROM members WHERE member_num = :member_num"
+                ),
+                parameters=[{"name": "member_num", "value": {"stringValue": member_num}}],
             )
-            try:
+            if not m_result["records"]:
+                raise PermissionError("Unknown member badge")
+            m_row = m_result["records"][0]
+            member_id = m_row[0]["stringValue"]
+            training_level: int = int(m_row[1]["longValue"])
+            dues_paid_until = m_row[2].get("stringValue")  # NULL if never paid
+
+            # 2. Resolve range — check is_open and min_training_level
+            r_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=outer_tx["transactionId"],
+                sql="SELECT is_open, min_training_level FROM ranges WHERE id = :range_id",
+                parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
+            )
+            if not r_result["records"]:
+                raise ValueError("Range not found for this device")
+            r_row = r_result["records"][0]
+            is_open: bool = r_row[0]["booleanValue"]
+            min_level: int = int(r_row[1]["longValue"])
+
+            if not is_open:
+                raise PermissionError("Range is closed")
+
+            if training_level < min_level:
+                raise PermissionError(f"Level {min_level} required to access this range")
+
+            # 3. Dues current? dues_paid_until >= today (UTC)
+            import datetime
+            today = datetime.date.today().isoformat()
+            if not dues_paid_until or dues_paid_until < today:
+                raise PermissionError("Dues are not current")
+
+            # 4. Policy: max_guests for this training_level
+            p_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=outer_tx["transactionId"],
+                sql="SELECT max_guests FROM training_level_policies WHERE training_level = :level",
+                parameters=[{"name": "level", "value": {"longValue": training_level}}],
+            )
+            if not p_result["records"]:
+                raise PermissionError("No policy found for this training level")
+            max_guests: int = int(p_result["records"][0][0]["longValue"])
+            if guest_count > max_guests:
+                raise PermissionError(
+                    f"Guest limit exceeded: level {training_level} allows {max_guests} guest(s)"
+                )
+
+            # 5+6. Single query for any active wait-list entry (Waiting OR Called).
+            # Two separate reads were a race: a Called entry could be missed and cause
+            # a duplicate-key violation on idx_wait_list_active_member_range.
+            active_wl = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=outer_tx["transactionId"],
+                sql=(
+                    "SELECT id, status FROM wait_list "
+                    "WHERE member_id = :member_id AND range_id = :range_id "
+                    "AND status IN ('Waiting', 'Called')"
+                ),
+                parameters=[
+                    {"name": "member_id", "value": {"stringValue": member_id}},
+                    {"name": "range_id", "value": {"stringValue": range_id}},
+                ],
+            )
+            called_entry_id: str | None = None
+            if active_wl["records"]:
+                entry_status = active_wl["records"][0][1]["stringValue"]
+                if entry_status == "Waiting":
+                    raise PermissionError("Member already has an active wait list entry for this range")
+                # entry_status == 'Called': member is responding to their queue call — fall through
+                # to lane assignment below; do NOT add another wait-list row.
+                called_entry_id = active_wl["records"][0][0]["stringValue"]
+
+            # 7. Find available lanes for this range
+            lanes_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=outer_tx["transactionId"],
+                sql=(
+                    "SELECT id, lane_number FROM lanes "
+                    "WHERE range_id = :range_id AND status = 'Available' "
+                    "ORDER BY lane_number"
+                ),
+                parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
+            )
+            available_lanes = [
+                {"id": row[0]["stringValue"], "lane_number": int(row[1]["longValue"])}
+                for row in lanes_result["records"]
+            ]
+
+            if not available_lanes:
+                # Range is full. Members with a Called entry cannot re-join the queue.
+                if called_entry_id:
+                    raise PermissionError(
+                        "Your lane call has expired and the range is full. Please wait to be called again."
+                    )
+                # Position + insert must be atomic to prevent duplicates.
                 pos_result = rds.execute_statement(
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,
                     database=DB_NAME,
-                    transactionId=wl_tx["transactionId"],
+                    transactionId=outer_tx["transactionId"],
                     sql=(
                         "SELECT COALESCE(MAX(position), 0) + 1 FROM wait_list "
                         "WHERE range_id = :range_id AND status = 'Waiting'"
@@ -182,7 +193,7 @@ def handler(event: dict, context: Any) -> dict:
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,
                     database=DB_NAME,
-                    transactionId=wl_tx["transactionId"],
+                    transactionId=outer_tx["transactionId"],
                     sql=(
                         "INSERT INTO wait_list "
                         "(id, range_id, member_id, device_id, guest_count, position, status, joined_at) "
@@ -200,66 +211,55 @@ def handler(event: dict, context: Any) -> dict:
                 rds.commit_transaction(
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,
-                    transactionId=wl_tx["transactionId"],
+                    transactionId=outer_tx["transactionId"],
                 )
-            except Exception:
-                rds.rollback_transaction(
-                    resourceArn=DB_CLUSTER_ARN,
-                    secretArn=DB_SECRET_ARN,
-                    transactionId=wl_tx["transactionId"],
-                )
-                raise
+                duration_ms = int((time.monotonic() - start) * 1000)
+                logger.info(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": member_id,
+                    "device_id": device_id,
+                    "action": "checkin",
+                    "training_level": training_level,
+                    "duration_ms": duration_ms,
+                    "error": None,
+                    "outcome": "wait_listed",
+                    "wait_position": wait_position,
+                }))
+                return {
+                    "statusCode": 202,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps({"wait_position": wait_position}),
+                }
 
-            duration_ms = int((time.monotonic() - start) * 1000)
-            logger.info(json.dumps({
-                "request_id": context.aws_request_id,
-                "member_id": member_id,
-                "device_id": device_id,
-                "action": "checkin",
-                "training_level": training_level,
-                "duration_ms": duration_ms,
-                "error": None,
-                "outcome": "wait_listed",
-                "wait_position": wait_position,
-            }))
-            return {
-                "statusCode": 202,
-                "headers": CORS_HEADERS,
-                "body": json.dumps({"wait_position": wait_position}),
-            }
+            # 8. Select lane that maximises spacing from occupied lanes
+            occupied_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=outer_tx["transactionId"],
+                sql=(
+                    "SELECT lane_number FROM lanes "
+                    "WHERE range_id = :range_id AND status = 'Occupied'"
+                ),
+                parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
+            )
+            occupied_numbers = {int(row[0]["longValue"]) for row in occupied_result["records"]}
 
-        # 8. Select lane that maximises spacing from occupied lanes
-        occupied_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql=(
-                "SELECT lane_number FROM lanes "
-                "WHERE range_id = :range_id AND status = 'Occupied'"
-            ),
-            parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
-        )
-        occupied_numbers = {int(row[0]["longValue"]) for row in occupied_result["records"]}
+            def min_distance(lane_num: int) -> int:
+                if not occupied_numbers:
+                    return 999  # no occupied lanes — all distances equal
+                return min(abs(lane_num - occ) for occ in occupied_numbers)
 
-        def min_distance(lane_num: int) -> int:
-            if not occupied_numbers:
-                return 999  # no occupied lanes — all distances equal
-            return min(abs(lane_num - occ) for occ in occupied_numbers)
+            selected_lane = max(available_lanes, key=lambda l: min_distance(l["lane_number"]))
+            lane_id: str = selected_lane["id"]
+            lane_number: int = selected_lane["lane_number"]
 
-        selected_lane = max(available_lanes, key=lambda l: min_distance(l["lane_number"]))
-        lane_id: str = selected_lane["id"]
-        lane_number: int = selected_lane["lane_number"]
-
-        # 9. Assign lane — write activity_log inside a transaction
-        tx = rds.begin_transaction(
-            resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
-        )
-        try:
+            # 9. Assign lane — write activity_log inside the outer transaction
             lane_update = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
                 database=DB_NAME,
-                transactionId=tx["transactionId"],
+                transactionId=outer_tx["transactionId"],
                 sql=(
                     "UPDATE lanes SET status = 'Occupied', "
                     "current_member_id = :member_id, guest_count = :guest_count, "
@@ -275,7 +275,7 @@ def handler(event: dict, context: Any) -> dict:
                 rds.rollback_transaction(
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,
-                    transactionId=tx["transactionId"],
+                    transactionId=outer_tx["transactionId"],
                 )
                 return {
                     "statusCode": 409,
@@ -286,7 +286,7 @@ def handler(event: dict, context: Any) -> dict:
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
                 database=DB_NAME,
-                transactionId=tx["transactionId"],
+                transactionId=outer_tx["transactionId"],
                 sql=(
                     "INSERT INTO activity_logs "
                     "(member_id, device_id, lane_id, activity_type, timestamp) "
@@ -304,7 +304,7 @@ def handler(event: dict, context: Any) -> dict:
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,
                     database=DB_NAME,
-                    transactionId=tx["transactionId"],
+                    transactionId=outer_tx["transactionId"],
                     sql=(
                         "UPDATE wait_list SET status = 'Checked-In' WHERE id = :entry_id"
                     ),
@@ -315,13 +315,13 @@ def handler(event: dict, context: Any) -> dict:
             rds.commit_transaction(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
-                transactionId=tx["transactionId"],
+                transactionId=outer_tx["transactionId"],
             )
         except Exception:
             rds.rollback_transaction(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
-                transactionId=tx["transactionId"],
+                transactionId=outer_tx["transactionId"],
             )
             raise
 

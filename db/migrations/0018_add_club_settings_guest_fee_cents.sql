@@ -4,6 +4,3 @@
 --              Seeded at 1000 cents ($10.00) — the current club rate.
 
 ALTER TABLE club_settings ADD COLUMN IF NOT EXISTS guest_fee_cents INTEGER NOT NULL DEFAULT 1000 CHECK (guest_fee_cents > 0);
-
--- Backfill any rows that already exist (ON CONFLICT form is safe; singleton is the PK).
-UPDATE club_settings SET guest_fee_cents = 1000 WHERE singleton = TRUE AND guest_fee_cents = 1000;

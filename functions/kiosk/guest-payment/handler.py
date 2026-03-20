@@ -77,69 +77,67 @@ def handler(event: dict, context: Any) -> dict:
 
         rds = boto3.client("rds-data")
 
-        # Resolve member
-        m_result = rds.execute_statement(
+        # One outer transaction wrapping all DB work; set_config must be first.
+        tx = rds.begin_transaction(
             resourceArn=DB_CLUSTER_ARN,
             secretArn=DB_SECRET_ARN,
             database=DB_NAME,
-            sql="SELECT id FROM members WHERE member_num = :member_num",
-            parameters=[{"name": "member_num", "value": {"stringValue": member_num}}],
         )
-        if not m_result["records"]:
-            raise PermissionError("Unknown member badge")
-        member_id = m_result["records"][0][0]["stringValue"]
-
-        # Verify lane belongs to this range and is occupied by this member
-        lane_check = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql=(
-                "SELECT id FROM lanes "
-                "WHERE id = :lane_id AND range_id = :range_id "
-                "AND current_member_id = :member_id AND status = 'Occupied'"
-            ),
-            parameters=[
-                {"name": "lane_id", "value": {"stringValue": lane_id}},
-                {"name": "range_id", "value": {"stringValue": range_id}},
-                {"name": "member_id", "value": {"stringValue": member_id}},
-            ],
-        )
-        if not lane_check["records"]:
-            raise PermissionError("Lane not found or not occupied by this member on this range")
-
-        # Look up or create guest record
-        g_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql=(
-                "SELECT id, waiver_signed_at "
-                "FROM guests "
-                "WHERE first_name = :first_name AND last_name = :last_name "
-                "AND phone = :phone AND email = :email"
-            ),
-            parameters=[
-                {"name": "first_name", "value": {"stringValue": first_name}},
-                {"name": "last_name", "value": {"stringValue": last_name}},
-                {"name": "phone", "value": {"stringValue": phone}},
-                {"name": "email", "value": {"stringValue": email}},
-            ],
-        )
-
-        if g_result["records"]:
-            guest_id: str = g_result["records"][0][0]["stringValue"]
-            waiver_signed_at = g_result["records"][0][1].get("stringValue")
-        else:
-            # Create new guest
-            create_result = rds.execute_statement(
+        try:
+            # Set RLS session variable — kiosk acts with training_level 4 (admin).
+            rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
                 database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT set_config('app.current_training_level', '4', true)",
+            )
+
+            # Resolve member
+            m_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT id FROM members WHERE member_num = :member_num",
+                parameters=[{"name": "member_num", "value": {"stringValue": member_num}}],
+            )
+            if not m_result["records"]:
+                raise PermissionError("Unknown member badge")
+            member_id = m_result["records"][0][0]["stringValue"]
+
+            # Verify lane belongs to this range and is occupied by this member
+            lane_check = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql=(
+                    "SELECT id FROM lanes "
+                    "WHERE id = :lane_id AND range_id = :range_id "
+                    "AND current_member_id = :member_id AND status = 'Occupied'"
+                ),
+                parameters=[
+                    {"name": "lane_id", "value": {"stringValue": lane_id}},
+                    {"name": "range_id", "value": {"stringValue": range_id}},
+                    {"name": "member_id", "value": {"stringValue": member_id}},
+                ],
+            )
+            if not lane_check["records"]:
+                raise PermissionError("Lane not found or not occupied by this member on this range")
+
+            # UPSERT guest — eliminates the SELECT+INSERT race condition against the unique constraint.
+            g_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
                 sql=(
                     "INSERT INTO guests (id, first_name, last_name, phone, email) "
                     "VALUES (gen_random_uuid(), :first_name, :last_name, :phone, :email) "
-                    "RETURNING id"
+                    "ON CONFLICT ON CONSTRAINT uq_guests_identity "
+                    "DO UPDATE SET id = EXCLUDED.id "
+                    "RETURNING id, waiver_signed_at"
                 ),
                 parameters=[
                     {"name": "first_name", "value": {"stringValue": first_name}},
@@ -148,42 +146,37 @@ def handler(event: dict, context: Any) -> dict:
                     {"name": "email", "value": {"stringValue": email}},
                 ],
             )
-            guest_id = create_result["records"][0][0]["stringValue"]
-            waiver_signed_at = None
+            guest_id: str = g_result["records"][0][0]["stringValue"]
+            waiver_signed_at = g_result["records"][0][1].get("stringValue")
 
-        # Check waiver validity (1-year expiration)
-        import datetime
-        if waiver_signed_at:
-            signed_date = datetime.datetime.fromisoformat(
-                waiver_signed_at.rstrip("Z")
-            ).replace(tzinfo=datetime.timezone.utc)
-            one_year_ago = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=365)
-            waiver_valid = signed_date >= one_year_ago
-        else:
-            waiver_valid = False
+            # Check waiver validity (1-year expiration)
+            import datetime
+            if waiver_signed_at:
+                signed_date = datetime.datetime.fromisoformat(
+                    waiver_signed_at.rstrip("Z")
+                ).replace(tzinfo=datetime.timezone.utc)
+                one_year_ago = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=365)
+                waiver_valid = signed_date >= one_year_ago
+            else:
+                waiver_valid = False
 
-        if not waiver_valid:
-            # Caller should invoke POST /v1/kiosk/waiver first — return 400 with context
-            raise ValueError("Guest waiver is missing or expired; capture signature first")
+            if not waiver_valid:
+                # Caller should invoke POST /v1/kiosk/waiver first — return 400 with context
+                raise ValueError("Guest waiver is missing or expired; capture signature first")
 
-        # Read current guest fee from club_settings (authoritative source)
-        settings_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql="SELECT guest_fee_cents FROM club_settings WHERE singleton = TRUE",
-        )
-        if not settings_result["records"]:
-            raise RuntimeError("club_settings row missing")
-        guest_fee_cents: int = int(settings_result["records"][0][0]["longValue"])
+            # Read current guest fee from club_settings (authoritative source)
+            settings_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT guest_fee_cents FROM club_settings WHERE singleton = TRUE",
+            )
+            if not settings_result["records"]:
+                raise RuntimeError("club_settings row missing")
+            guest_fee_cents: int = int(settings_result["records"][0][0]["longValue"])
 
-        # Annual visit limit check — serializable to prevent race conditions
-        tx = rds.begin_transaction(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-        )
-        try:
+            # Annual visit limit check — serializable to prevent race conditions
             rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,

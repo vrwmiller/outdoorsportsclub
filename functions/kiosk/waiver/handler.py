@@ -84,28 +84,47 @@ def handler(event: dict, context: Any) -> dict:
 
         if guest_id:
             # ---- Guest waiver path ----
-            # Pre-validate guest exists before uploading to avoid orphaned S3 Object Lock objects
-            pre_check = rds.execute_statement(
-                resourceArn=DB_CLUSTER_ARN,
-                secretArn=DB_SECRET_ARN,
-                database=DB_NAME,
-                sql="SELECT id FROM guests WHERE id = :guest_id",
-                parameters=[{"name": "guest_id", "value": {"stringValue": guest_id}}],
-            )
-            if not pre_check["records"]:
-                raise ValueError("guest_id not found")
             s3_key = f"waivers/guests/{guest_id}/{timestamp_str}.pdf"
-            s3.put_object(
-                Bucket=S3_WAIVER_BUCKET,
-                Key=s3_key,
-                Body=pdf_data,
-                ContentType="application/pdf",
-                ServerSideEncryption="aws:kms",
-            )
             tx = rds.begin_transaction(
                 resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
             )
             try:
+                # Set RLS session variable — kiosk acts with training_level 4 (admin).
+                rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql="SELECT set_config('app.current_training_level', '4', true)",
+                )
+                # Pre-validate guest exists before uploading to avoid orphaned S3 Object Lock objects.
+                # Pre-check runs inside the transaction so RLS session vars are set.
+                pre_check = rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql="SELECT id FROM guests WHERE id = :guest_id",
+                    parameters=[{"name": "guest_id", "value": {"stringValue": guest_id}}],
+                )
+                if not pre_check["records"]:
+                    rds.rollback_transaction(
+                        resourceArn=DB_CLUSTER_ARN,
+                        secretArn=DB_SECRET_ARN,
+                        transactionId=tx["transactionId"],
+                    )
+                    return {
+                        "statusCode": 400,
+                        "headers": CORS_HEADERS,
+                        "body": json.dumps({"error": "guest_id not found"}),
+                    }
+                s3.put_object(
+                    Bucket=S3_WAIVER_BUCKET,
+                    Key=s3_key,
+                    Body=pdf_data,
+                    ContentType="application/pdf",
+                    ServerSideEncryption="aws:kms",
+                )
                 rds.execute_statement(
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,
@@ -152,28 +171,47 @@ def handler(event: dict, context: Any) -> dict:
 
         else:
             # ---- Member waiver path ----
-            # Pre-validate member exists before uploading to avoid orphaned S3 Object Lock objects
-            pre_check = rds.execute_statement(
-                resourceArn=DB_CLUSTER_ARN,
-                secretArn=DB_SECRET_ARN,
-                database=DB_NAME,
-                sql="SELECT id FROM members WHERE id = :member_id",
-                parameters=[{"name": "member_id", "value": {"stringValue": member_id}}],
-            )
-            if not pre_check["records"]:
-                raise ValueError("member_id not found")
             s3_key = f"waivers/{member_id}/{timestamp_str}.pdf"
-            s3.put_object(
-                Bucket=S3_WAIVER_BUCKET,
-                Key=s3_key,
-                Body=pdf_data,
-                ContentType="application/pdf",
-                ServerSideEncryption="aws:kms",
-            )
             tx = rds.begin_transaction(
                 resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
             )
             try:
+                # Set RLS session variable — kiosk acts with training_level 4 (admin).
+                rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql="SELECT set_config('app.current_training_level', '4', true)",
+                )
+                # Pre-validate member exists before uploading to avoid orphaned S3 Object Lock objects.
+                # Pre-check runs inside the transaction so RLS session vars are set.
+                pre_check = rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql="SELECT id FROM members WHERE id = :member_id",
+                    parameters=[{"name": "member_id", "value": {"stringValue": member_id}}],
+                )
+                if not pre_check["records"]:
+                    rds.rollback_transaction(
+                        resourceArn=DB_CLUSTER_ARN,
+                        secretArn=DB_SECRET_ARN,
+                        transactionId=tx["transactionId"],
+                    )
+                    return {
+                        "statusCode": 400,
+                        "headers": CORS_HEADERS,
+                        "body": json.dumps({"error": "member_id not found"}),
+                    }
+                s3.put_object(
+                    Bucket=S3_WAIVER_BUCKET,
+                    Key=s3_key,
+                    Body=pdf_data,
+                    ContentType="application/pdf",
+                    ServerSideEncryption="aws:kms",
+                )
                 rds.execute_statement(
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,

@@ -48,55 +48,71 @@ def handler(event: dict, context: Any) -> dict:
 
         rds = boto3.client("rds-data")
 
-        # Resolve member
-        m_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql="SELECT id FROM members WHERE member_num = :member_num",
-            parameters=[{"name": "member_num", "value": {"stringValue": member_num}}],
-        )
-        if not m_result["records"]:
-            raise LookupError("Unknown member badge")
-        member_id = m_result["records"][0][0]["stringValue"]
-
-        # Fetch the entry — must belong to this member on this range
-        entry_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql=(
-                "SELECT id, position FROM wait_list "
-                "WHERE id = :entry_id AND member_id = :member_id "
-                "AND range_id = :range_id AND status IN ('Waiting', 'Called')"
-            ),
-            parameters=[
-                {"name": "entry_id", "value": {"stringValue": entry_id}},
-                {"name": "member_id", "value": {"stringValue": member_id}},
-                {"name": "range_id", "value": {"stringValue": range_id}},
-            ],
-        )
-        if not entry_result["records"]:
-            duration_ms = int((time.monotonic() - start) * 1000)
-            logger.warning(json.dumps({
-                "request_id": context.aws_request_id,
-                "member_id": member_id,
-                "device_id": device_id,
-                "action": "waitlist_cancel",
-                "duration_ms": duration_ms,
-                "error": "entry_not_found",
-            }))
-            return {
-                "statusCode": 404,
-                "headers": CORS_HEADERS,
-                "body": json.dumps({"error": "Wait list entry not found"}),
-            }
-        cancelled_position: int = int(entry_result["records"][0][1]["longValue"])
-
         tx = rds.begin_transaction(
             resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
         try:
+            # Set RLS session variable — kiosk acts with training_level 4 (admin).
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT set_config('app.current_training_level', '4', true)",
+            )
+
+            # Resolve member
+            m_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT id FROM members WHERE member_num = :member_num",
+                parameters=[{"name": "member_num", "value": {"stringValue": member_num}}],
+            )
+            if not m_result["records"]:
+                raise LookupError("Unknown member badge")
+            member_id = m_result["records"][0][0]["stringValue"]
+
+            # Fetch the entry — must belong to this member on this range
+            entry_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql=(
+                    "SELECT id, position FROM wait_list "
+                    "WHERE id = :entry_id AND member_id = :member_id "
+                    "AND range_id = :range_id AND status IN ('Waiting', 'Called')"
+                ),
+                parameters=[
+                    {"name": "entry_id", "value": {"stringValue": entry_id}},
+                    {"name": "member_id", "value": {"stringValue": member_id}},
+                    {"name": "range_id", "value": {"stringValue": range_id}},
+                ],
+            )
+            if not entry_result["records"]:
+                rds.rollback_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=tx["transactionId"],
+                )
+                duration_ms = int((time.monotonic() - start) * 1000)
+                logger.warning(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": member_id,
+                    "device_id": device_id,
+                    "action": "waitlist_cancel",
+                    "duration_ms": duration_ms,
+                    "error": "entry_not_found",
+                }))
+                return {
+                    "statusCode": 404,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps({"error": "Wait list entry not found"}),
+                }
+            cancelled_position: int = int(entry_result["records"][0][1]["longValue"])
+
             cancel_update = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,

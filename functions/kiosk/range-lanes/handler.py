@@ -35,35 +35,63 @@ def handler(event: dict, context: Any) -> dict:
 
         rds = boto3.client("rds-data")
 
-        # Range metadata
-        r_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql="SELECT name, is_open FROM ranges WHERE id = :range_id",
-            parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
+        # Open a transaction so RLS session variables apply to all queries.
+        tx = rds.begin_transaction(
+            resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
-        if not r_result["records"]:
-            raise ValueError("Range not found for this device")
-        r_row = r_result["records"][0]
-        range_name: str = r_row[0]["stringValue"]
-        is_open: bool = r_row[1]["booleanValue"]
+        try:
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT set_config('app.current_training_level', '4', true)",
+            )
 
-        # Lane occupancy with member_num for display
-        lanes_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql=(
-                "SELECT l.id, l.lane_number, l.status, l.current_member_id, "
-                "m.member_num, l.guest_count, l.checked_in_at "
-                "FROM lanes l "
-                "LEFT JOIN members m ON m.id = l.current_member_id "
-                "WHERE l.range_id = :range_id "
-                "ORDER BY l.lane_number"
-            ),
-            parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
-        )
+            # Range metadata
+            r_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT name, is_open FROM ranges WHERE id = :range_id",
+                parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
+            )
+            if not r_result["records"]:
+                raise ValueError("Range not found for this device")
+            r_row = r_result["records"][0]
+            range_name: str = r_row[0]["stringValue"]
+            is_open: bool = r_row[1]["booleanValue"]
+
+            # Lane occupancy with member_num for display
+            lanes_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql=(
+                    "SELECT l.id, l.lane_number, l.status, l.current_member_id, "
+                    "m.member_num, l.guest_count, l.checked_in_at "
+                    "FROM lanes l "
+                    "LEFT JOIN members m ON m.id = l.current_member_id "
+                    "WHERE l.range_id = :range_id "
+                    "ORDER BY l.lane_number"
+                ),
+                parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
+            )
+
+            rds.commit_transaction(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                transactionId=tx["transactionId"],
+            )
+        except Exception:
+            rds.rollback_transaction(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                transactionId=tx["transactionId"],
+            )
+            raise
 
         lanes = []
         for row in lanes_result["records"]:

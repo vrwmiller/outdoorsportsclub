@@ -67,11 +67,13 @@ def _advance_wait_list(rds: Any, tx_id: str, range_id: str) -> str | None:
         parameters=[{"name": "entry_id", "value": {"stringValue": entry_id}}],
     )
 
-    # Look up mobile_phone to return for post-commit SMS
+    # Look up mobile_phone to return for post-commit SMS.
+    # Must run inside the same transaction so the RLS session var is still set.
     phone_result = rds.execute_statement(
         resourceArn=DB_CLUSTER_ARN,
         secretArn=DB_SECRET_ARN,
         database=DB_NAME,
+        transactionId=tx_id,
         sql="SELECT mobile_phone FROM members WHERE id = :member_id",
         parameters=[{"name": "member_id", "value": {"stringValue": next_member_id}}],
     )
@@ -98,57 +100,73 @@ def handler(event: dict, context: Any) -> dict:
         rds = boto3.client("rds-data")
         sns = boto3.client("sns")
 
-        # Resolve member
-        m_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql="SELECT id FROM members WHERE member_num = :member_num",
-            parameters=[
-                {"name": "member_num", "value": {"stringValue": member_num}}
-            ],
-        )
-        if not m_result["records"]:
-            raise LookupError("Unknown member badge")
-        member_id = m_result["records"][0][0]["stringValue"]
-
-        # Find the lane this member currently occupies on this range
-        lane_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql=(
-                "SELECT id FROM lanes "
-                "WHERE current_member_id = :member_id AND range_id = :range_id "
-                "AND status = 'Occupied'"
-            ),
-            parameters=[
-                {"name": "member_id", "value": {"stringValue": member_id}},
-                {"name": "range_id", "value": {"stringValue": range_id}},
-            ],
-        )
-        if not lane_result["records"]:
-            duration_ms = int((time.monotonic() - start) * 1000)
-            logger.warning(json.dumps({
-                "request_id": context.aws_request_id,
-                "member_id": member_id,
-                "device_id": device_id,
-                "action": "checkout",
-                "duration_ms": duration_ms,
-                "error": "no_active_checkin",
-            }))
-            return {
-                "statusCode": 404,
-                "headers": CORS_HEADERS,
-                "body": json.dumps({"error": "No active check-in found for this member"}),
-            }
-        lane_id: str = lane_result["records"][0][0]["stringValue"]
-
         notify_phone: str | None = None
         tx = rds.begin_transaction(
             resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
         try:
+            # Set RLS session variable — kiosk acts with training_level 4 (admin).
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT set_config('app.current_training_level', '4', true)",
+            )
+
+            # Resolve member
+            m_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT id FROM members WHERE member_num = :member_num",
+                parameters=[
+                    {"name": "member_num", "value": {"stringValue": member_num}}
+                ],
+            )
+            if not m_result["records"]:
+                raise LookupError("Unknown member badge")
+            member_id = m_result["records"][0][0]["stringValue"]
+
+            # Find the lane this member currently occupies on this range
+            lane_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql=(
+                    "SELECT id FROM lanes "
+                    "WHERE current_member_id = :member_id AND range_id = :range_id "
+                    "AND status = 'Occupied'"
+                ),
+                parameters=[
+                    {"name": "member_id", "value": {"stringValue": member_id}},
+                    {"name": "range_id", "value": {"stringValue": range_id}},
+                ],
+            )
+            if not lane_result["records"]:
+                rds.rollback_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=tx["transactionId"],
+                )
+                duration_ms = int((time.monotonic() - start) * 1000)
+                logger.warning(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": member_id,
+                    "device_id": device_id,
+                    "action": "checkout",
+                    "duration_ms": duration_ms,
+                    "error": "no_active_checkin",
+                }))
+                return {
+                    "statusCode": 404,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps({"error": "No active check-in found for this member"}),
+                }
+            lane_id: str = lane_result["records"][0][0]["stringValue"]
+
             rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,

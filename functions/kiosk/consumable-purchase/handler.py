@@ -73,23 +73,7 @@ def handler(event: dict, context: Any) -> dict:
 
         rds = boto3.client("rds-data")
 
-        # Resolve optional member
-        member_num: str | None = body.get("member_num")
-        if member_num:
-            m_result = rds.execute_statement(
-                resourceArn=DB_CLUSTER_ARN,
-                secretArn=DB_SECRET_ARN,
-                database=DB_NAME,
-                sql="SELECT id FROM members WHERE member_num = :member_num",
-                parameters=[
-                    {"name": "member_num", "value": {"stringValue": member_num}}
-                ],
-            )
-            if not m_result["records"]:
-                raise ValueError("Unknown member badge")
-            member_id = m_result["records"][0][0]["stringValue"]
-
-        # Verify Stripe payment before writing
+        # Verify Stripe payment before opening the write transaction
         if payment_method in ("NFC", "Card"):
             if not _STRIPE_SECRET_ARN:
                 raise ValueError("Stripe is not configured for this environment")
@@ -116,33 +100,77 @@ def handler(event: dict, context: Any) -> dict:
                     "body": json.dumps({"error": "Payment not confirmed"}),
                 }
 
-        rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql=(
-                "INSERT INTO consumable_purchases "
-                "(id, member_id, device_id, item_name, quantity, unit_price, total, "
-                "stripe_payment_intent_id, payment_method, timestamp) "
-                "VALUES (gen_random_uuid(), :member_id, :device_id, :item_name, "
-                ":quantity, :unit_price, :total, :stripe_intent, :payment_method, now())"
-            ),
-            parameters=[
-                {"name": "member_id", "value": (
-                    {"stringValue": member_id} if member_id else {"isNull": True}
-                )},
-                {"name": "device_id", "value": {"stringValue": device_id}},
-                {"name": "item_name", "value": {"stringValue": item_name}},
-                {"name": "quantity", "value": {"longValue": quantity}},
-                {"name": "unit_price", "value": {"doubleValue": unit_price}},
-                {"name": "total", "value": {"doubleValue": total}},
-                {"name": "stripe_intent", "value": (
-                    {"stringValue": stripe_intent_id} if stripe_intent_id
-                    else {"isNull": True}
-                )},
-                {"name": "payment_method", "value": {"stringValue": payment_method}},
-            ],
+        tx = rds.begin_transaction(
+            resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
+        try:
+            # Set RLS session variable — kiosk acts with training_level 4 (admin).
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT set_config('app.current_training_level', '4', true)",
+            )
+
+            # Resolve optional member
+            member_num: str | None = body.get("member_num")
+            if member_num:
+                m_result = rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql="SELECT id FROM members WHERE member_num = :member_num",
+                    parameters=[
+                        {"name": "member_num", "value": {"stringValue": member_num}}
+                    ],
+                )
+                if not m_result["records"]:
+                    raise ValueError("Unknown member badge")
+                member_id = m_result["records"][0][0]["stringValue"]
+
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql=(
+                    "INSERT INTO consumable_purchases "
+                    "(id, member_id, device_id, item_name, quantity, unit_price, total, "
+                    "stripe_payment_intent_id, payment_method, timestamp) "
+                    "VALUES (gen_random_uuid(), :member_id, :device_id, :item_name, "
+                    ":quantity, :unit_price, :total, :stripe_intent, :payment_method, now())"
+                ),
+                parameters=[
+                    {"name": "member_id", "value": (
+                        {"stringValue": member_id} if member_id else {"isNull": True}
+                    )},
+                    {"name": "device_id", "value": {"stringValue": device_id}},
+                    {"name": "item_name", "value": {"stringValue": item_name}},
+                    {"name": "quantity", "value": {"longValue": quantity}},
+                    {"name": "unit_price", "value": {"doubleValue": unit_price}},
+                    {"name": "total", "value": {"doubleValue": total}},
+                    {"name": "stripe_intent", "value": (
+                        {"stringValue": stripe_intent_id} if stripe_intent_id
+                        else {"isNull": True}
+                    )},
+                    {"name": "payment_method", "value": {"stringValue": payment_method}},
+                ],
+            )
+
+            rds.commit_transaction(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                transactionId=tx["transactionId"],
+            )
+        except Exception:
+            rds.rollback_transaction(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                transactionId=tx["transactionId"],
+            )
+            raise
 
         duration_ms = int((time.monotonic() - start) * 1000)
         logger.info(json.dumps({

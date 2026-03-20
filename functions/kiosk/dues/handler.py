@@ -56,51 +56,68 @@ def handler(event: dict, context: Any) -> dict:
         if payment_method not in _VALID_PAYMENT_METHODS:
             raise ValueError(f"payment_method must be one of: {', '.join(_VALID_PAYMENT_METHODS)}")
 
+        import datetime
+
         rds = boto3.client("rds-data")
 
-        # Resolve member
-        m_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql="SELECT id FROM members WHERE member_num = :member_num",
-            parameters=[{"name": "member_num", "value": {"stringValue": member_num}}],
+        tx = rds.begin_transaction(
+            resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
-        if not m_result["records"]:
-            duration_ms = int((time.monotonic() - start) * 1000)
-            logger.warning(json.dumps({
-                "request_id": context.aws_request_id,
-                "member_id": None,
-                "device_id": device_id,
-                "action": "dues",
-                "stripe_payment_intent_id": None,
-                "duration_ms": duration_ms,
-                "error": "unknown_member",
-            }))
-            return {
-                "statusCode": 404,
-                "headers": CORS_HEADERS,
-                "body": json.dumps({"error": "Unknown member badge"}),
-            }
-        member_id = m_result["records"][0][0]["stringValue"]
-
-        # Read annual dues amount from club_settings
-        settings_result = rds.execute_statement(
-            resourceArn=DB_CLUSTER_ARN,
-            secretArn=DB_SECRET_ARN,
-            database=DB_NAME,
-            sql="SELECT annual_dues_cents FROM club_settings WHERE singleton = TRUE",
-        )
-        if not settings_result["records"]:
-            raise RuntimeError("club_settings row missing")
-        annual_dues_cents: int = int(settings_result["records"][0][0]["longValue"])
-
-        if payment_method == "Cash":
-            # Cash: write confirmation immediately
-            tx = rds.begin_transaction(
-                resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
+        try:
+            # Set RLS session variable — kiosk acts with training_level 4 (admin).
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT set_config('app.current_training_level', '4', true)",
             )
-            try:
+
+            # Resolve member
+            m_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT id FROM members WHERE member_num = :member_num",
+                parameters=[{"name": "member_num", "value": {"stringValue": member_num}}],
+            )
+            if not m_result["records"]:
+                rds.rollback_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=tx["transactionId"],
+                )
+                duration_ms = int((time.monotonic() - start) * 1000)
+                logger.warning(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": None,
+                    "device_id": device_id,
+                    "action": "dues",
+                    "stripe_payment_intent_id": None,
+                    "duration_ms": duration_ms,
+                    "error": "unknown_member",
+                }))
+                return {
+                    "statusCode": 404,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps({"error": "Unknown member badge"}),
+                }
+            member_id = m_result["records"][0][0]["stringValue"]
+
+            # Read annual dues amount from club_settings
+            settings_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT annual_dues_cents FROM club_settings WHERE singleton = TRUE",
+            )
+            if not settings_result["records"]:
+                raise RuntimeError("club_settings row missing")
+            annual_dues_cents: int = int(settings_result["records"][0][0]["longValue"])
+
+            if payment_method == "Cash":
                 rds.execute_statement(
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,
@@ -135,43 +152,40 @@ def handler(event: dict, context: Any) -> dict:
                     secretArn=DB_SECRET_ARN,
                     transactionId=tx["transactionId"],
                 )
-            except Exception:
-                rds.rollback_transaction(
-                    resourceArn=DB_CLUSTER_ARN,
-                    secretArn=DB_SECRET_ARN,
-                    transactionId=tx["transactionId"],
-                )
-                raise
+                # Compute the dues_paid_until value set by the SQL above (avoids a re-fetch).
+                dues_paid_until = datetime.date(
+                    datetime.datetime.now(tz=datetime.timezone.utc).year, 12, 31
+                ).isoformat()
+                duration_ms = int((time.monotonic() - start) * 1000)
+                logger.info(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": member_id,
+                    "device_id": device_id,
+                    "action": "dues",
+                    "stripe_payment_intent_id": None,
+                    "duration_ms": duration_ms,
+                    "error": None,
+                }))
+                return {
+                    "statusCode": 200,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps({"dues_paid_until": dues_paid_until}),
+                }
 
-            # Fetch the updated dues_paid_until to return to caller
-            upd_result = rds.execute_statement(
+            # NFC / Card: commit the read tx, then create a Stripe Terminal PaymentIntent.
+            rds.commit_transaction(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
-                database=DB_NAME,
-                sql="SELECT dues_paid_until FROM members WHERE id = :member_id",
-                parameters=[
-                    {"name": "member_id", "value": {"stringValue": member_id}}
-                ],
+                transactionId=tx["transactionId"],
             )
-            dues_paid_until = upd_result["records"][0][0].get("stringValue")
+        except Exception:
+            rds.rollback_transaction(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                transactionId=tx["transactionId"],
+            )
+            raise
 
-            duration_ms = int((time.monotonic() - start) * 1000)
-            logger.info(json.dumps({
-                "request_id": context.aws_request_id,
-                "member_id": member_id,
-                "device_id": device_id,
-                "action": "dues",
-                "stripe_payment_intent_id": None,
-                "duration_ms": duration_ms,
-                "error": None,
-            }))
-            return {
-                "statusCode": 200,
-                "headers": CORS_HEADERS,
-                "body": json.dumps({"dues_paid_until": dues_paid_until}),
-            }
-
-        # NFC / Card: create a Stripe Terminal PaymentIntent and return 202
         if not _STRIPE_SECRET_ARN:
             raise ValueError("Stripe is not configured for this environment")
         sm = boto3.client("secretsmanager")

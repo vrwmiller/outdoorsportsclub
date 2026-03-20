@@ -128,8 +128,10 @@ Resources:
               - Effect: Allow
                 Action:
                   - sns:Publish
-                Resource: !ImportValue
-                  Fn::Sub: "osc-sns-admin-alerts-arn-${Environment}"
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    sns:DestinationType: DirectPublish
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
