@@ -250,7 +250,7 @@ def handler(event: dict, context: Any) -> dict:
                     return 999  # no occupied lanes — all distances equal
                 return min(abs(lane_num - occ) for occ in occupied_numbers)
 
-            selected_lane = max(available_lanes, key=lambda l: min_distance(l["lane_number"]))
+            selected_lane = max(available_lanes, key=lambda lane: min_distance(lane["lane_number"]))
             lane_id: str = selected_lane["id"]
             lane_number: int = selected_lane["lane_number"]
 

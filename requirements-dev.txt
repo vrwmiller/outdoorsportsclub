@@ -1,0 +1,11 @@
+# Local development dependencies
+# Run env.sh once to create the venv and install these.
+# These are NOT deployed to Lambda — they exist only for:
+#   - Pylance import resolution (boto3, stripe)
+#   - CloudFormation linting (cfn-lint)
+#   - Python linting (ruff)
+
+boto3
+cfn-lint
+ruff
+stripe
