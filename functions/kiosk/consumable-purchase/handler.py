@@ -7,9 +7,8 @@ member_id is optional (omit for anonymous guest purchases).
 
 Expected request body:
     {
-        "item_name": "<str>",
+        "item_id": "<uuid>",                  # must exist in consumable_items with is_active = true
         "quantity": <int>,
-        "unit_price": <float>,
         "payment_method": "Cash" | "NFC" | "Card",
         "stripe_payment_intent_id": "<str>",  # required for NFC/Card
         "member_num": "<str>"                 # optional — omit for guest
@@ -50,28 +49,39 @@ def handler(event: dict, context: Any) -> dict:
         device_id: str = device["id"]
 
         body = json.loads(event.get("body") or "{}")
-        item_name: str | None = body.get("item_name")
+        item_id: str | None = body.get("item_id")
         quantity = body.get("quantity")
-        unit_price = body.get("unit_price")
         payment_method: str | None = body.get("payment_method")
 
-        if not all([item_name, quantity is not None, unit_price is not None, payment_method]):
-            raise ValueError("Required fields: item_name, quantity, unit_price, payment_method")
+        if not all([item_id, quantity is not None, payment_method]):
+            raise ValueError("Required fields: item_id, quantity, payment_method")
         if payment_method not in _VALID_PAYMENT_METHODS:
             raise ValueError(f"payment_method must be one of: {', '.join(_VALID_PAYMENT_METHODS)}")
         if not isinstance(quantity, int) or quantity <= 0:
             raise ValueError("quantity must be a positive integer")
-        if not isinstance(unit_price, (int, float)) or unit_price < 0:
-            raise ValueError("unit_price must be a non-negative number")
-
-        # Compute total server-side — never trust client-supplied total
-        total: float = round(quantity * unit_price, 2)
 
         stripe_intent_id = body.get("stripe_payment_intent_id")
         if payment_method in ("NFC", "Card") and not stripe_intent_id:
             raise ValueError("stripe_payment_intent_id is required for NFC and Card payments")
 
         rds = boto3.client("rds-data")
+
+        # Look up item from catalog — price is always server-side, never from the request
+        item_result = rds.execute_statement(
+            resourceArn=DB_CLUSTER_ARN,
+            secretArn=DB_SECRET_ARN,
+            database=DB_NAME,
+            sql="SELECT name, unit_price_cents FROM consumable_items WHERE id = :item_id AND is_active = TRUE",
+            parameters=[{"name": "item_id", "value": {"stringValue": item_id}}],
+        )
+        if not item_result["records"]:
+            raise ValueError("Unknown or inactive item")
+        item_name: str = item_result["records"][0][0]["stringValue"]
+        unit_price_cents: int = item_result["records"][0][1]["longValue"]
+
+        # Compute total server-side from catalog price — never trust client-supplied amounts
+        unit_price: float = unit_price_cents / 100.0
+        total: float = round(quantity * unit_price, 2)
 
         # Verify Stripe payment before opening the write transaction
         if payment_method in ("NFC", "Card"):
@@ -82,7 +92,7 @@ def handler(event: dict, context: Any) -> dict:
             import stripe as _stripe
             _stripe.api_key = stripe_secret
             intent = _stripe.PaymentIntent.retrieve(stripe_intent_id)
-            expected_amount = int(round(total * 100))
+            expected_amount = unit_price_cents * quantity
             if intent["status"] != "succeeded" or intent["amount"] != expected_amount:
                 duration_ms = int((time.monotonic() - start) * 1000)
                 logger.warning(json.dumps({
@@ -137,9 +147,9 @@ def handler(event: dict, context: Any) -> dict:
                 transactionId=tx["transactionId"],
                 sql=(
                     "INSERT INTO consumable_purchases "
-                    "(id, member_id, device_id, item_name, quantity, unit_price, total, "
+                    "(id, member_id, device_id, item_id, item_name, quantity, unit_price, total, "
                     "stripe_payment_intent_id, payment_method, timestamp) "
-                    "VALUES (gen_random_uuid(), :member_id, :device_id, :item_name, "
+                    "VALUES (gen_random_uuid(), :member_id, :device_id, :item_id, :item_name, "
                     ":quantity, :unit_price, :total, :stripe_intent, :payment_method, now())"
                 ),
                 parameters=[
@@ -147,6 +157,7 @@ def handler(event: dict, context: Any) -> dict:
                         {"stringValue": member_id} if member_id else {"isNull": True}
                     )},
                     {"name": "device_id", "value": {"stringValue": device_id}},
+                    {"name": "item_id", "value": {"stringValue": item_id}},
                     {"name": "item_name", "value": {"stringValue": item_name}},
                     {"name": "quantity", "value": {"longValue": quantity}},
                     {"name": "unit_price", "value": {"doubleValue": unit_price}},
