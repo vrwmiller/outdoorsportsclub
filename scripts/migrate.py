@@ -63,9 +63,6 @@ def run_migrations(dry_run: bool = False) -> None:
     if dry_run:
         log.info("DRY RUN — SQL will be parsed but not executed")
 
-    session = boto3.session.Session(profile_name=profile, region_name=region)
-    rds = session.client("rds-data")
-
     migration_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
     if not migration_files:
         log.error("No migration files found in %s", MIGRATIONS_DIR)
@@ -77,6 +74,12 @@ def run_migrations(dry_run: bool = False) -> None:
         cluster_arn,
         database,
     )
+
+    # Defer boto3 session creation so --dry-run works without AWS credentials.
+    rds = None
+    if not dry_run:
+        session = boto3.session.Session(profile_name=profile, region_name=region)
+        rds = session.client("rds-data")
 
     total_statements = 0
 

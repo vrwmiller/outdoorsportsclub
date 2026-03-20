@@ -32,8 +32,13 @@ AWS_PROFILE     ?= outdoorsportsclub
 REGION          ?= us-east-1
 CORS_ALLOW_ORIGIN ?= http://localhost:3000
 
-# Required for deploy-secrets. Generate with: make gen-salt
-DEVICE_TOKEN_SALT ?= $(error DEVICE_TOKEN_SALT is required. Run 'make gen-salt' to generate one.)
+# Optional on re-runs: when unset, CloudFormation reuses the previous value for
+# the DeviceTokenSalt parameter (UsePreviousValue behaviour). Required on first
+# deploy. Generate with: make gen-salt
+DEVICE_TOKEN_SALT ?=
+
+# Expands to a --parameter-overrides token only when DEVICE_TOKEN_SALT is set.
+_SALT_PARAM = $(if $(DEVICE_TOKEN_SALT),DeviceTokenSalt=$(DEVICE_TOKEN_SALT))
 
 BUILD_DIR = dist/lambda
 
@@ -51,7 +56,7 @@ STACK_LAMBDA    = osc-lambda-$(ENV)
 .PHONY: help gen-salt package upload \
         deploy-kms deploy-secrets deploy-sns deploy-s3 deploy-aurora \
         deploy-backup deploy-iam-kiosk deploy-artifacts deploy-lambda \
-        deploy-base deploy-all migrate invoke
+        deploy-base deploy-all update-code migrate invoke
 
 # =============================================================================
 help:
@@ -65,6 +70,7 @@ help:
 	@echo "  deploy-base       Deploy supporting stacks (kms→secrets→sns→s3→aurora→backup→iam→artifacts)"
 	@echo "  deploy-lambda     Deploy the Lambda function stack"
 	@echo "  deploy-all        Full first-time deploy: deploy-base + package + upload + deploy-lambda"
+	@echo "  update-code       Push newly uploaded ZIPs to Lambda (use after 'make upload' on code-only changes)"
 	@echo "  migrate           Run all database migrations against the deployed Aurora cluster"
 	@echo "  invoke            Invoke a Lambda directly (FUNCTION=name PAYLOAD='{...}')"
 	@echo ""
@@ -127,7 +133,7 @@ deploy-secrets:
 	aws cloudformation deploy \
 		--stack-name  $(STACK_SECRETS) \
 		--template-file infra/stacks/secrets.yaml \
-		--parameter-overrides Environment=$(ENV) DeviceTokenSalt=$(DEVICE_TOKEN_SALT) \
+		--parameter-overrides Environment=$(ENV) $(_SALT_PARAM) \
 		--no-fail-on-empty-changeset \
 		--profile $(AWS_PROFILE) --region $(REGION)
 
@@ -200,6 +206,31 @@ deploy-base: deploy-kms deploy-secrets deploy-sns deploy-s3 \
 
 # Full first-time deploy.
 deploy-all: deploy-base package upload deploy-lambda
+
+# =============================================================================
+# Code update — force Lambda to pick up a newly uploaded ZIP.
+# CloudFormation only reacts to template/parameter changes, not S3 object
+# content. Run this after 'make upload' whenever re-deploying changed code
+# without a template change.
+# =============================================================================
+update-code:
+	$(eval ACCOUNT_ID := $(shell aws sts get-caller-identity \
+		--query Account --output text --profile $(AWS_PROFILE)))
+	@echo "Updating Lambda function code from s3://osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID)/ ..."
+	@for fn in checkin checkout waiver guest-payment consumable-purchase dues range-lanes waitlist-cancel; do \
+		aws lambda update-function-code \
+			--function-name osc-kiosk-$$fn-$(ENV) \
+			--s3-bucket osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID) \
+			--s3-key kiosk-$$fn.zip \
+			--profile $(AWS_PROFILE) --region $(REGION) \
+			--output text --query 'FunctionName'; \
+	done
+	aws lambda update-function-code \
+		--function-name osc-devices-pair-$(ENV) \
+		--s3-bucket osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID) \
+		--s3-key devices-pair.zip \
+		--profile $(AWS_PROFILE) --region $(REGION) \
+		--output text --query 'FunctionName'
 
 # =============================================================================
 # Migrations — query stack outputs for the cluster/secret ARNs, then run.
