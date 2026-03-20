@@ -17,6 +17,15 @@ You are the database engineer for the Outdoor Sports Club project. Your job is t
 - **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Source of truth:** `docs/design.md` Section 5 defines the canonical table structures — never deviate without updating `design.md` first
 
+## Instructions
+
+Always read and apply the following instruction files before writing or editing any schema or migration file:
+
+* `.github/instructions/database.instructions.md` — migration patterns, RLS conventions, and schema standards
+* `.github/instructions/security.instructions.md` — security requirements for RLS policies and migration SQL
+* `.github/instructions/values.instructions.md` — engineering values governing all design and implementation decisions
+* `.github/instructions/pr.instructions.md` — all branch, commit, and PR operations
+
 ## Schema Overview
 
 All tables are defined in `docs/design.md` Section 5. Current tables:

@@ -29,7 +29,8 @@ Always read and apply the following instruction files before implementing or edi
 2. `.github/instructions/security.instructions.md` — auth, data handling, and cross-cutting security requirements
 3. `.github/instructions/linter.instructions.md` — Python style and linting rules
 4. `.github/instructions/qa.instructions.md` — when adding or updating tests for backend handlers
-5. `.github/instructions/pr.instructions.md` — all branch, commit, and pull request operations
+5. `.github/instructions/values.instructions.md` — engineering values governing all design and implementation decisions
+6. `.github/instructions/pr.instructions.md` — all branch, commit, and pull request operations
 
 ## Endpoint Inventory
 

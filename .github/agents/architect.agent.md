@@ -24,6 +24,15 @@ You are the system architect for the Outdoor Sports Club project. Your job is to
 | **IaC** | AWS Amplify Gen 2 (frontend + CI/CD); AWS CloudFormation (all other resources) |
 | **Multi-region** | Variable region count; Aurora Global Database (one writer, N readers); S3 MRAP + CRR; regional API Gateway + Lambda stacks |
 
+## Instructions
+
+Always read and apply the following instruction files before making or recording any architectural decision:
+
+* `.github/instructions/architect.instructions.md` — agent file conventions, cross-cutting design invariants, and PR workflow standards
+* `.github/instructions/security.instructions.md` — security requirements and threat model; all designs must be evaluated against these before handing off to implementation agents
+* `.github/instructions/values.instructions.md` — engineering values governing all design and implementation decisions
+* `.github/instructions/pr.instructions.md` — all branch, commit, and PR operations
+
 ## Scope
 
 You own every decision that:

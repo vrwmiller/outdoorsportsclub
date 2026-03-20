@@ -29,6 +29,7 @@ Always read and apply the following instruction files before writing or editing 
 
 * `.github/instructions/infra.instructions.md` — naming conventions, stack structure, IAM patterns, and CloudFormation standards
 * `.github/instructions/security.instructions.md` — security requirements for IAM, encryption, and network configuration
+* `.github/instructions/values.instructions.md` — engineering values governing all design and implementation decisions
 * `.github/instructions/pr.instructions.md` — all branch, commit, and PR operations
 
 ## Responsibilities

@@ -28,6 +28,7 @@ Rules:
 * `description` must be a single string — no YAML arrays or multi-line values
 * `tools` must include `read` and `search` at minimum; `edit` for agents that write files
 * Every agent must have an `## Instructions` section that names the instruction file(s) it must apply
+* Every agent **must** include a reference to `.github/instructions/values.instructions.md` — the engineering values apply to all agents
 * Every agent **must** include a reference to `.github/instructions/pr.instructions.md` — the PR workflow applies to all agents that create branches or commits
 
 ## PR Workflow (applies to all agents)
@@ -72,4 +73,5 @@ Each instruction file governs a specific file scope. When creating or editing fi
 | `pr.instructions.md` | `**` (all files — branch, commit, PR conventions) |
 | `qa.instructions.md` | `tests/**/*.py`, `src/**/*.test.tsx`, `e2e/**/*.ts`, `.github/workflows/*.yml` |
 | `security.instructions.md` | `functions/**/*.py`, `db/**/*.sql`, `infra/**/*.yaml`, `src/**/*.ts`, `src/**/*.tsx` |
+| `values.instructions.md` | `**` (all files — engineering values apply to every agent and every layer) |
 | `architect.instructions.md` | `.github/agents/**/*.md`, `.github/instructions/**/*.md` |

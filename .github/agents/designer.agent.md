@@ -28,6 +28,7 @@ Always read and apply the following instruction files before implementing or edi
 * `.github/instructions/linter.instructions.md` — TypeScript, Next.js, and linting rules
 * `.github/instructions/qa.instructions.md` — frontend test coverage expectations
 * `.github/instructions/security.instructions.md` — security requirements for auth flows and API-driven pages
+* `.github/instructions/values.instructions.md` — engineering values governing all design and implementation decisions
 * `.github/instructions/pr.instructions.md` — all branch, commit, and PR operations
 
 ## The Four Surfaces
