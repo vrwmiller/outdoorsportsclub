@@ -6,7 +6,14 @@
 # propagates to your current shell session.
 set -euo pipefail
 
-PYTHON=${PYTHON:-python3.13}
+PYTHON=${PYTHON:-python3}
+
+# Require >= 3.12 — floor matches the Lambda runtime (see ODQ #30 in docs/design.md)
+version=$("$PYTHON" -c 'import sys; print(sys.version_info >= (3, 12))')
+if [[ "$version" != "True" ]]; then
+  echo "Error: Python 3.12 or later required (found $("$PYTHON" --version))" >&2
+  exit 1
+fi
 
 if [ ! -d .venv ]; then
   echo "Creating .venv with $PYTHON..."
