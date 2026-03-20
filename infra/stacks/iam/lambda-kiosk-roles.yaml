@@ -63,7 +63,7 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !ImportValue
-                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+                  Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -119,7 +119,7 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !ImportValue
-                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+                  Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -182,7 +182,7 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !ImportValue
-                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+                  Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -251,7 +251,7 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !ImportValue
-                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+                  Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -315,7 +315,7 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !ImportValue
-                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+                  Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -379,7 +379,7 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !ImportValue
-                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+                  Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -443,7 +443,7 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !ImportValue
-                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+                  Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -498,7 +498,7 @@ Resources:
                 Action:
                   - secretsmanager:GetSecretValue
                 Resource: !ImportValue
-                  Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+                  Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
               - Effect: Allow
                 Action:
                   - kms:Decrypt
@@ -555,7 +555,7 @@ Resources:
                   - secretsmanager:GetSecretValue
                 Resource:
                   - !ImportValue
-                    Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+                    Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
                   - !ImportValue
                     Fn::Sub: "osc-device-token-salt-arn-${Environment}"
               - Effect: Allow
