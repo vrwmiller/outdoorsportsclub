@@ -25,7 +25,6 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
-            BucketKeyEnabled: true
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -45,6 +44,27 @@ Resources:
           Value: !Ref Environment
         - Key: ManagedBy
           Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Bucket policy — enforce TLS-only access
+  # ---------------------------------------------------------------------------
+  ArtifactsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyNonTLS
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "arn:aws:s3:::${ArtifactsBucket}"
+              - !Sub "arn:aws:s3:::${ArtifactsBucket}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
 
 Outputs:
 
