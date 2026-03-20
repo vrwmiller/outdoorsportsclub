@@ -298,9 +298,16 @@ erDiagram
         UUID id PK
         UUID member_id FK
         UUID device_id FK
+        UUID item_id FK
         TEXT item_name
         DECIMAL total
         TIMESTAMP timestamp
+    }
+    consumable_items {
+        UUID id PK
+        TEXT name
+        INTEGER unit_price_cents
+        BOOLEAN is_active
     }
     wait_list {
         UUID id PK
@@ -336,6 +343,7 @@ erDiagram
     lanes ||--o{ guest_visits : "on"
     members ||--o{ consumable_purchases : "purchases"
     devices ||--o{ consumable_purchases : "processed on"
+    consumable_items ||--o{ consumable_purchases : "catalog entry"
     members ||--o{ wait_list : "queued"
     ranges ||--o{ wait_list : "for"
     devices ||--o{ wait_list : "at"
@@ -464,13 +472,30 @@ Enforced at check-in by querying `training_level_policies.max_guests` for the me
 | `id` | UUID (PK) | Unique purchase record. |
 | `member_id` | UUID (FK, Nullable) | Reference to `members` table; nullable for guest purchases. |
 | `device_id` | UUID (FK) | Kiosk where the purchase was recorded. |
-| `item_name` | TEXT | Name of the consumable (e.g., `targets`, `soda`, `coffee`). |
+| `item_id` | UUID (FK, Nullable) | Reference to `consumable_items` catalog. `NULL` for records created before the catalog was introduced. |
+| `item_name` | TEXT | Name of the consumable — denormalized from `consumable_items.name` at time of sale for immutable audit trail. |
 | `quantity` | INT | Number of units purchased. |
-| `unit_price` | DECIMAL(6,2) | Price per unit at time of sale. |
+| `unit_price` | DECIMAL(6,2) | Price per unit at time of sale — denormalized from `consumable_items.unit_price_cents / 100`. |
 | `total` | DECIMAL(8,2) | `quantity × unit_price`; computed at transaction time. |
 | `stripe_payment_intent_id` | TEXT (Nullable) | Stripe Payment Intent ID for reconciliation and dispute resolution. `NULL` for cash payments. |
 | `payment_method` | TEXT | Payment method: `NFC`, `Card`, or `Cash`. |
 | `timestamp` | TIMESTAMP | Audit-ready event time. |
+
+### **5.7a Table: `consumable_items`**
+
+Server-side catalog of purchasable items. `unit_price_cents` is the authoritative price — the kiosk handler looks it up by `item_id` and never accepts a price from the request body.
+
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | UUID (PK) | Unique catalog entry. |
+| `name` | TEXT | Display name shown on the kiosk (e.g., `Targets`, `Soda`, `Coffee`). |
+| `unit_price_cents` | INTEGER | Price in cents. `CHECK (unit_price_cents > 0)`. |
+| `is_active` | BOOLEAN | `TRUE` if available for purchase; `FALSE` to retire an item without deleting it. |
+
+**Constraints and indexes:**
+
+* `CHECK (unit_price_cents > 0)` — prevents zero-price catalog entries
+* `idx_consumable_items_is_active` — speeds up active-item lookups at the kiosk
 
 ### **5.8 Table: `guests`**
 
@@ -715,9 +740,9 @@ Triggered by a QR scan at range exit. Validates an active open `Range-Checkin` e
 POST /v1/kiosk/consumable-purchase
 ```
 
-Records one or more line items (item name, quantity, unit price) to `consumable_purchases`. The kiosk presents a payment method choice (see *Payment methods* in Section 4): **Cash**, **NFC** (Tap to Pay), or **Card** (paired Stripe Terminal hardware reader). For NFC and Card, payment is processed via **Stripe Terminal SDK** before the record is inserted. `member_id` is optional — omit for anonymous guest purchases.
+Records a single line item to `consumable_purchases`. The kiosk submits `item_id` (a UUID from the `consumable_items` catalog), `quantity`, and `payment_method`. The Lambda looks up `item_name` and `unit_price_cents` from the catalog server-side — the kiosk never supplies a price. The endpoint presents a payment method choice (see *Payment methods* in Section 4): **Cash**, **NFC** (Tap to Pay), or **Card** (paired Stripe Terminal hardware reader). For NFC and Card, payment is processed via **Stripe Terminal SDK** before the record is inserted. `member_id` is optional — omit for anonymous guest purchases.
 
-**Returns:** `200 OK` (Purchase Recorded) or `402 Payment Required` (Stripe payment failure).
+**Returns:** `200 OK` (Purchase Recorded), `400 Bad Request` (unknown or inactive item), or `402 Payment Required` (Stripe payment failure).
 
 ---
 
