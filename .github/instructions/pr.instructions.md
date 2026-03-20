@@ -87,6 +87,23 @@ Keep PRs focused and reviewable:
 - If a change touches more than 3 distinct layers (e.g. migrations + Lambda handlers + IAM + frontend) or exceeds ~500 lines, split it by layer — one PR per layer
 - The test for "too large": if a reviewer would need to context-switch between unrelated concerns to evaluate the PR, it should be split
 - Prefer multiple small PRs over one large one — each gets more thorough review and is easier to revert if something goes wrong
+- **One new Lambda handler per PR.** Do not bundle multiple new handlers into a single PR even if they belong to the same feature area. Example: adding `checkin`, `checkout`, and `waiver` handlers → three handler PRs, not one. Any schema, infra, docs (including `docs/design.md` Section 7 route entries), or test changes required for that handler should either be (a) kept minimal and included in the same PR as directly coupled work, or (b) split into separate, linked PRs by layer if they grow large — while still keeping exactly one new handler per PR.
+
+## Review workflow
+
+After opening a PR, run the review workflow to process Copilot reviewer comments:
+
+> Run `.github/prompts/review.prompt.md` on PR #N
+
+This workflow fetches all inline and PR-level comments, classifies them (Valid / Invalid / Speculative), applies fixes, commits, replies, and resolves threads. Run it whenever `copilot-pull-request-reviewer` has posted comments.
+
+## QA — invoke the qa agent after handler PRs
+
+After any PR that adds or modifies a Lambda handler in `functions/`, invoke the qa agent:
+
+> "Write tests for `functions/<path>/handler.py`"
+
+Do not defer test writing to a later session. Tests must exist before the handler is considered production-ready.
 
 ## Security review before opening
 
