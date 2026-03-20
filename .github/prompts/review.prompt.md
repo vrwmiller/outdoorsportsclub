@@ -20,11 +20,25 @@ Follow these steps exactly. Do not skip any step.
    * Top-level PR comments: `gh pr view <number> --comments`
    * Inline code comments: `gh api --paginate repos/<nameWithOwner>/pulls/<number>/comments`
 
-   Also fetch thread node IDs now — you will need them for step 7:
+   Also fetch thread node IDs now — you will need them for step 7. Paginate until `hasNextPage` is false:
+   ```bash
+   gh api graphql -f query='
+     query($owner: String!, $name: String!, $pr: Int!, $after: String) {
+       repository(owner: $owner, name: $name) {
+         pullRequest(number: $pr) {
+           reviewThreads(first: 100, after: $after) {
+             pageInfo { hasNextPage endCursor }
+             nodes {
+               id
+               isResolved
+               comments(first: 1) { nodes { databaseId } }
+             }
+           }
+         }
+       }
+     }' -f owner='<owner>' -f name='<repo>' -F pr=<N>
    ```
-   gh api graphql -f query='{ repository(owner:"<owner>", name:"<repo>") { pullRequest(number: <N>) { reviewThreads(first: 100) { nodes { id isResolved comments(first: 1) { nodes { databaseId } } } } } } }'
-   ```
-   Build a map of `comment databaseId → thread node id` from this output.
+   Repeat with `-f after='<endCursor>'` while `pageInfo.hasNextPage` is true. Build a map of `comment databaseId → thread node id` from the complete set of results.
 
    > **Note:** GitHub does not reliably mark comments as "outdated" — file-level comments (no anchor line) never go outdated regardless of how many pushes occur. Do not use the `outdated` field to determine whether a comment has been addressed. Track each comment ID explicitly.
 
