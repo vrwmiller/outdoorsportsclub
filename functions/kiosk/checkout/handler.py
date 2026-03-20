@@ -29,8 +29,12 @@ logger.setLevel(logging.INFO)
 _SNS_TOPIC_ARN: str = os.environ.get("SNS_ALERTS_TOPIC_ARN", "")
 
 
-def _advance_wait_list(rds: Any, tx_id: str, range_id: str, sns: Any) -> None:
-    """Promote the next Waiting entry to Called and optionally send an SMS."""
+def _advance_wait_list(rds: Any, tx_id: str, range_id: str) -> str | None:
+    """Promote the next Waiting entry to Called; return mobile_phone to notify (or None).
+
+    The caller must publish the SMS *after* committing the transaction to avoid
+    notifying a member when the DB write ultimately fails.
+    """
     next_result = rds.execute_statement(
         resourceArn=DB_CLUSTER_ARN,
         secretArn=DB_SECRET_ARN,
@@ -44,7 +48,7 @@ def _advance_wait_list(rds: Any, tx_id: str, range_id: str, sns: Any) -> None:
         parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
     )
     if not next_result["records"]:
-        return  # nothing in queue
+        return None  # nothing in queue
 
     entry_id = next_result["records"][0][0]["stringValue"]
     next_member_id = next_result["records"][0][1]["stringValue"]
@@ -63,7 +67,7 @@ def _advance_wait_list(rds: Any, tx_id: str, range_id: str, sns: Any) -> None:
         parameters=[{"name": "entry_id", "value": {"stringValue": entry_id}}],
     )
 
-    # SNS SMS — look up mobile_phone outside the transaction (read-only)
+    # Look up mobile_phone to return for post-commit SMS
     phone_result = rds.execute_statement(
         resourceArn=DB_CLUSTER_ARN,
         secretArn=DB_SECRET_ARN,
@@ -72,19 +76,8 @@ def _advance_wait_list(rds: Any, tx_id: str, range_id: str, sns: Any) -> None:
         parameters=[{"name": "member_id", "value": {"stringValue": next_member_id}}],
     )
     if phone_result["records"]:
-        mobile = phone_result["records"][0][0].get("stringValue")
-        if mobile and _SNS_TOPIC_ARN:
-            sns.publish(
-                TopicArn=_SNS_TOPIC_ARN,
-                Message="Your lane is ready. Please check in at the kiosk now.",
-                MessageAttributes={
-                    "SMSType": {"DataType": "String", "StringValue": "Transactional"},
-                    "DefaultSMSDestinationPhoneNumber": {
-                        "DataType": "String",
-                        "StringValue": mobile,
-                    },
-                },
-            )
+        return phone_result["records"][0][0].get("stringValue")
+    return None
 
 
 def handler(event: dict, context: Any) -> dict:
@@ -135,6 +128,15 @@ def handler(event: dict, context: Any) -> dict:
             ],
         )
         if not lane_result["records"]:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.warning(json.dumps({
+                "request_id": context.aws_request_id,
+                "member_id": member_id,
+                "device_id": device_id,
+                "action": "checkout",
+                "duration_ms": duration_ms,
+                "error": "no_active_checkin",
+            }))
             return {
                 "statusCode": 404,
                 "headers": CORS_HEADERS,
@@ -142,6 +144,7 @@ def handler(event: dict, context: Any) -> dict:
             }
         lane_id: str = lane_result["records"][0][0]["stringValue"]
 
+        notify_phone: str | None = None
         tx = rds.begin_transaction(
             resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
@@ -174,7 +177,7 @@ def handler(event: dict, context: Any) -> dict:
                     {"name": "lane_id", "value": {"stringValue": lane_id}},
                 ],
             )
-            _advance_wait_list(rds, tx["transactionId"], range_id, sns)
+            notify_phone = _advance_wait_list(rds, tx["transactionId"], range_id)
             rds.commit_transaction(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
@@ -197,6 +200,15 @@ def handler(event: dict, context: Any) -> dict:
             "duration_ms": duration_ms,
             "error": None,
         }))
+        # Send SMS after commit — direct SMS to avoid leaking phone number to topic subscribers
+        if notify_phone and _SNS_TOPIC_ARN:
+            sns.publish(
+                PhoneNumber=notify_phone,
+                Message="Your lane is ready. Please check in at the kiosk now.",
+                MessageAttributes={
+                    "AWS.SNS.SMS.SMSType": {"DataType": "String", "StringValue": "Transactional"},
+                },
+            )
         return {
             "statusCode": 200,
             "headers": CORS_HEADERS,
@@ -204,6 +216,15 @@ def handler(event: dict, context: Any) -> dict:
         }
 
     except LookupError:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.warning(json.dumps({
+            "request_id": context.aws_request_id,
+            "member_id": member_id,
+            "device_id": None,
+            "action": "checkout",
+            "duration_ms": duration_ms,
+            "error": "LookupError",
+        }))
         return {
             "statusCode": 404,
             "headers": CORS_HEADERS,

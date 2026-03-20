@@ -77,6 +77,15 @@ def handler(event: dict, context: Any) -> dict:
             ],
         )
         if not entry_result["records"]:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.warning(json.dumps({
+                "request_id": context.aws_request_id,
+                "member_id": member_id,
+                "device_id": device_id,
+                "action": "waitlist_cancel",
+                "duration_ms": duration_ms,
+                "error": "entry_not_found",
+            }))
             return {
                 "statusCode": 404,
                 "headers": CORS_HEADERS,
@@ -88,16 +97,24 @@ def handler(event: dict, context: Any) -> dict:
             resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
         try:
-            rds.execute_statement(
+            cancel_update = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
                 database=DB_NAME,
                 transactionId=tx["transactionId"],
                 sql=(
-                    "UPDATE wait_list SET status = 'Cancelled' WHERE id = :entry_id"
+                    "UPDATE wait_list SET status = 'Cancelled' "
+                    "WHERE id = :entry_id AND member_id = :member_id "
+                    "AND range_id = :range_id AND status IN ('Waiting', 'Called')"
                 ),
-                parameters=[{"name": "entry_id", "value": {"stringValue": entry_id}}],
+                parameters=[
+                    {"name": "entry_id", "value": {"stringValue": entry_id}},
+                    {"name": "member_id", "value": {"stringValue": member_id}},
+                    {"name": "range_id", "value": {"stringValue": range_id}},
+                ],
             )
+            if cancel_update.get("numberOfRecordsUpdated", 0) == 0:
+                raise ValueError("Wait list entry could not be cancelled (status may have changed)")
             # Recalculate positions for entries behind the cancelled one
             rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
@@ -143,6 +160,15 @@ def handler(event: dict, context: Any) -> dict:
         }
 
     except LookupError:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.warning(json.dumps({
+            "request_id": context.aws_request_id,
+            "member_id": member_id,
+            "device_id": None,
+            "action": "waitlist_cancel",
+            "duration_ms": duration_ms,
+            "error": "LookupError",
+        }))
         return {
             "statusCode": 404,
             "headers": CORS_HEADERS,

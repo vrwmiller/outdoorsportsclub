@@ -184,6 +184,13 @@ def handler(event: dict, context: Any) -> dict:
             database=DB_NAME,
         )
         try:
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+            )
             count_result = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
@@ -207,6 +214,16 @@ def handler(event: dict, context: Any) -> dict:
                     secretArn=DB_SECRET_ARN,
                     transactionId=tx["transactionId"],
                 )
+                duration_ms = int((time.monotonic() - start) * 1000)
+                logger.warning(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": member_id,
+                    "device_id": device_id,
+                    "action": "guest_payment",
+                    "stripe_payment_intent_id": stripe_intent_id,
+                    "duration_ms": duration_ms,
+                    "error": "annual_limit_reached",
+                }))
                 return {
                     "statusCode": 403,
                     "headers": CORS_HEADERS,
@@ -215,18 +232,42 @@ def handler(event: dict, context: Any) -> dict:
 
             # Verify NFC/Card payment intent: status succeeded AND amount matches club rate
             if payment_method in ("NFC", "Card"):
+                if not _STRIPE_SECRET_ARN:
+                    rds.rollback_transaction(
+                        resourceArn=DB_CLUSTER_ARN,
+                        secretArn=DB_SECRET_ARN,
+                        transactionId=tx["transactionId"],
+                    )
+                    raise ValueError("Stripe is not configured for this environment")
                 import boto3 as _b3
                 sm = _b3.client("secretsmanager")
                 stripe_secret = sm.get_secret_value(SecretId=_STRIPE_SECRET_ARN)["SecretString"]
                 import stripe as _stripe
                 _stripe.api_key = stripe_secret
                 intent = _stripe.PaymentIntent.retrieve(stripe_intent_id)
-                if intent["status"] != "succeeded" or intent["amount"] != guest_fee_cents:
+                intent_meta = intent.get("metadata") or {}
+                intent_ok = (
+                    intent["status"] == "succeeded"
+                    and intent["amount"] == guest_fee_cents
+                    and intent.get("currency", "").lower() == "usd"
+                    and (intent_meta.get("member_id") is None or intent_meta.get("member_id") == member_id)
+                )
+                if not intent_ok:
                     rds.rollback_transaction(
                         resourceArn=DB_CLUSTER_ARN,
                         secretArn=DB_SECRET_ARN,
                         transactionId=tx["transactionId"],
                     )
+                    duration_ms = int((time.monotonic() - start) * 1000)
+                    logger.warning(json.dumps({
+                        "request_id": context.aws_request_id,
+                        "member_id": member_id,
+                        "device_id": device_id,
+                        "action": "guest_payment",
+                        "stripe_payment_intent_id": stripe_intent_id,
+                        "duration_ms": duration_ms,
+                        "error": "payment_not_confirmed",
+                    }))
                     return {
                         "statusCode": 402,
                         "headers": CORS_HEADERS,

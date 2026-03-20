@@ -32,9 +32,13 @@ DB_NAME: str = os.environ["DB_NAME"]
 CORS_ALLOW_ORIGIN: str = os.environ["CORS_ALLOW_ORIGIN"]
 
 _sm = boto3.client("secretsmanager")
-_DEVICE_TOKEN_SALT: str = _sm.get_secret_value(
+_raw_salt_secret: str = _sm.get_secret_value(
     SecretId=os.environ["DEVICE_TOKEN_SALT_ARN"]
 )["SecretString"]
+try:
+    _DEVICE_TOKEN_SALT: str = json.loads(_raw_salt_secret)["salt"]
+except (json.JSONDecodeError, KeyError) as _exc:
+    raise RuntimeError("DEVICE_TOKEN_SALT secret must be JSON with a 'salt' field") from _exc
 
 CORS_HEADERS: dict[str, str] = {
     "Access-Control-Allow-Origin": CORS_ALLOW_ORIGIN,
@@ -44,10 +48,11 @@ CORS_HEADERS: dict[str, str] = {
 
 
 def error_response(status_code: int, message: str) -> dict[str, Any]:
+    body = "Forbidden" if status_code == 403 else message
     return {
         "statusCode": status_code,
         "headers": CORS_HEADERS,
-        "body": json.dumps({"error": message}),
+        "body": json.dumps({"error": body}),
     }
 
 
@@ -57,10 +62,12 @@ def authenticate_device(event: dict) -> dict[str, Any]:
     Returns the device row dict with keys: id, range_id, status.
     Raises PermissionError if the token is missing, invalid, or the device is not Active.
     """
-    headers: dict = event.get("headers") or {}
+    headers: dict = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
     raw_token: str | None = headers.get("x-device-token")
     if not raw_token:
         raise PermissionError("Missing x-device-token header")
+    if len(raw_token) > 512:
+        raise PermissionError("x-device-token header exceeds maximum length")
 
     hashed = hmac.new(
         _DEVICE_TOKEN_SALT.encode(), raw_token.encode(), hashlib.sha256

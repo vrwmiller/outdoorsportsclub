@@ -56,11 +56,26 @@ def handler(event: dict, context: Any) -> dict:
             raise ValueError("pdf_bytes is required")
         guest_id: str | None = body.get("guest_id")
 
-        # Decode PDF — reject non-base64 payloads early
+        # Validate IDs are UUIDs to prevent S3 key path traversal
+        import re as _re
+        _UUID_RE = _re.compile(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', _re.I
+        )
+        if not _UUID_RE.match(member_id):
+            raise ValueError("member_id must be a valid UUID")
+        if guest_id and not _UUID_RE.match(guest_id):
+            raise ValueError("guest_id must be a valid UUID")
+
+        # Decode PDF — reject oversized or non-base64 payloads early
+        _MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MB
+        if len(pdf_b64) > (_MAX_PDF_BYTES * 4 // 3 + 4):
+            raise ValueError("pdf_bytes exceeds maximum allowed size (10 MB)")
         try:
             pdf_data = base64.b64decode(pdf_b64, validate=True)
         except Exception:
             raise ValueError("pdf_bytes must be valid base64")
+        if len(pdf_data) > _MAX_PDF_BYTES:
+            raise ValueError("Decoded PDF exceeds maximum allowed size (10 MB)")
 
         timestamp_str = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
@@ -69,6 +84,16 @@ def handler(event: dict, context: Any) -> dict:
 
         if guest_id:
             # ---- Guest waiver path ----
+            # Pre-validate guest exists before uploading to avoid orphaned S3 Object Lock objects
+            pre_check = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                sql="SELECT id FROM guests WHERE id = :guest_id",
+                parameters=[{"name": "guest_id", "value": {"stringValue": guest_id}}],
+            )
+            if not pre_check["records"]:
+                raise ValueError("guest_id not found")
             s3_key = f"waivers/guests/{guest_id}/{timestamp_str}.pdf"
             s3.put_object(
                 Bucket=S3_WAIVER_BUCKET,
@@ -127,6 +152,16 @@ def handler(event: dict, context: Any) -> dict:
 
         else:
             # ---- Member waiver path ----
+            # Pre-validate member exists before uploading to avoid orphaned S3 Object Lock objects
+            pre_check = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                sql="SELECT id FROM members WHERE id = :member_id",
+                parameters=[{"name": "member_id", "value": {"stringValue": member_id}}],
+            )
+            if not pre_check["records"]:
+                raise ValueError("member_id not found")
             s3_key = f"waivers/{member_id}/{timestamp_str}.pdf"
             s3.put_object(
                 Bucket=S3_WAIVER_BUCKET,

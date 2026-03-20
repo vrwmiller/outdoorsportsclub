@@ -67,6 +67,16 @@ def handler(event: dict, context: Any) -> dict:
             parameters=[{"name": "member_num", "value": {"stringValue": member_num}}],
         )
         if not m_result["records"]:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.warning(json.dumps({
+                "request_id": context.aws_request_id,
+                "member_id": None,
+                "device_id": device_id,
+                "action": "dues",
+                "stripe_payment_intent_id": None,
+                "duration_ms": duration_ms,
+                "error": "unknown_member",
+            }))
             return {
                 "statusCode": 404,
                 "headers": CORS_HEADERS,
@@ -98,7 +108,7 @@ def handler(event: dict, context: Any) -> dict:
                     transactionId=tx["transactionId"],
                     sql=(
                         "UPDATE members "
-                        "SET dues_paid_until = DATE_TRUNC('year', now()) + INTERVAL '1 year' - INTERVAL '1 day' "
+                        "SET dues_paid_until = make_date(extract(year from (now() at time zone 'utc'))::int, 12, 31) "
                         "WHERE id = :member_id"
                     ),
                     parameters=[
@@ -162,6 +172,8 @@ def handler(event: dict, context: Any) -> dict:
             }
 
         # NFC / Card: create a Stripe Terminal PaymentIntent and return 202
+        if not _STRIPE_SECRET_ARN:
+            raise ValueError("Stripe is not configured for this environment")
         sm = boto3.client("secretsmanager")
         stripe_secret = sm.get_secret_value(SecretId=_STRIPE_SECRET_ARN)["SecretString"]
         import stripe as _stripe

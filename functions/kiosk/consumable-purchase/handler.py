@@ -91,12 +91,25 @@ def handler(event: dict, context: Any) -> dict:
 
         # Verify Stripe payment before writing
         if payment_method in ("NFC", "Card"):
+            if not _STRIPE_SECRET_ARN:
+                raise ValueError("Stripe is not configured for this environment")
             sm = boto3.client("secretsmanager")
             stripe_secret = sm.get_secret_value(SecretId=_STRIPE_SECRET_ARN)["SecretString"]
             import stripe as _stripe
             _stripe.api_key = stripe_secret
             intent = _stripe.PaymentIntent.retrieve(stripe_intent_id)
-            if intent["status"] != "succeeded":
+            expected_amount = int(round(total * 100))
+            if intent["status"] != "succeeded" or intent["amount"] != expected_amount:
+                duration_ms = int((time.monotonic() - start) * 1000)
+                logger.warning(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": member_id,
+                    "device_id": device_id,
+                    "action": "consumable_purchase",
+                    "stripe_payment_intent_id": stripe_intent_id,
+                    "duration_ms": duration_ms,
+                    "error": "payment_not_confirmed",
+                }))
                 return {
                     "statusCode": 402,
                     "headers": CORS_HEADERS,

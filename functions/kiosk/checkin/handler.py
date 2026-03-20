@@ -8,7 +8,6 @@ Expected request body:
 """
 import json
 import logging
-import os
 import time
 from typing import Any
 
@@ -161,37 +160,55 @@ def handler(event: dict, context: Any) -> dict:
         ]
 
         if not available_lanes:
-            # Range is full — add to wait list
-            pos_result = rds.execute_statement(
-                resourceArn=DB_CLUSTER_ARN,
-                secretArn=DB_SECRET_ARN,
-                database=DB_NAME,
-                sql=(
-                    "SELECT COALESCE(MAX(position), 0) + 1 FROM wait_list "
-                    "WHERE range_id = :range_id AND status = 'Waiting'"
-                ),
-                parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
+            # Range is full — add to wait list (position + insert must be atomic)
+            wl_tx = rds.begin_transaction(
+                resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
             )
-            wait_position: int = int(pos_result["records"][0][0]["longValue"])
+            try:
+                pos_result = rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=wl_tx["transactionId"],
+                    sql=(
+                        "SELECT COALESCE(MAX(position), 0) + 1 FROM wait_list "
+                        "WHERE range_id = :range_id AND status = 'Waiting'"
+                    ),
+                    parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
+                )
+                wait_position: int = int(pos_result["records"][0][0]["longValue"])
 
-            rds.execute_statement(
-                resourceArn=DB_CLUSTER_ARN,
-                secretArn=DB_SECRET_ARN,
-                database=DB_NAME,
-                sql=(
-                    "INSERT INTO wait_list "
-                    "(id, range_id, member_id, device_id, guest_count, position, status, joined_at) "
-                    "VALUES (gen_random_uuid(), :range_id, :member_id, :device_id, "
-                    ":guest_count, :position, 'Waiting', now())"
-                ),
-                parameters=[
-                    {"name": "range_id", "value": {"stringValue": range_id}},
-                    {"name": "member_id", "value": {"stringValue": member_id}},
-                    {"name": "device_id", "value": {"stringValue": device_id}},
-                    {"name": "guest_count", "value": {"longValue": guest_count}},
-                    {"name": "position", "value": {"longValue": wait_position}},
-                ],
-            )
+                rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=wl_tx["transactionId"],
+                    sql=(
+                        "INSERT INTO wait_list "
+                        "(id, range_id, member_id, device_id, guest_count, position, status, joined_at) "
+                        "VALUES (gen_random_uuid(), :range_id, :member_id, :device_id, "
+                        ":guest_count, :position, 'Waiting', now())"
+                    ),
+                    parameters=[
+                        {"name": "range_id", "value": {"stringValue": range_id}},
+                        {"name": "member_id", "value": {"stringValue": member_id}},
+                        {"name": "device_id", "value": {"stringValue": device_id}},
+                        {"name": "guest_count", "value": {"longValue": guest_count}},
+                        {"name": "position", "value": {"longValue": wait_position}},
+                    ],
+                )
+                rds.commit_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=wl_tx["transactionId"],
+                )
+            except Exception:
+                rds.rollback_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=wl_tx["transactionId"],
+                )
+                raise
 
             duration_ms = int((time.monotonic() - start) * 1000)
             logger.info(json.dumps({
@@ -238,7 +255,7 @@ def handler(event: dict, context: Any) -> dict:
             resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
         try:
-            rds.execute_statement(
+            lane_update = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
                 database=DB_NAME,
@@ -254,6 +271,17 @@ def handler(event: dict, context: Any) -> dict:
                     {"name": "lane_id", "value": {"stringValue": lane_id}},
                 ],
             )
+            if lane_update.get("numberOfRecordsUpdated", 0) == 0:
+                rds.rollback_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=tx["transactionId"],
+                )
+                return {
+                    "statusCode": 409,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps({"error": "Lane no longer available; please retry"}),
+                }
             rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
