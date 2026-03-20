@@ -116,7 +116,7 @@ except Exception:
 
 ### Row-Level Security and `set_config`
 
-This project uses PostgreSQL Row-Level Security (RLS) with a transaction-scoped GUC. The **first** `execute_statement` in every transaction must be:
+This project uses PostgreSQL Row-Level Security (RLS) with two transaction-scoped GUCs. The **first two** `execute_statement` calls in every transaction must set both:
 
 ```python
 rds.execute_statement(
@@ -124,16 +124,25 @@ rds.execute_statement(
     secretArn=SECRET_ARN,
     database=DB_NAME,
     transactionId=tx["transactionId"],
+    sql="SELECT set_config('app.current_member_id', :member_id, true)",
+    parameters=[{"name": "member_id", "value": {"stringValue": str(member_id)}}],
+)
+rds.execute_statement(
+    resourceArn=CLUSTER_ARN,
+    secretArn=SECRET_ARN,
+    database=DB_NAME,
+    transactionId=tx["transactionId"],
     sql="SELECT set_config('app.current_training_level', :level, true)",
-    parameters=[{"name": "level", "value": {"stringValue": "4"}}],
+    parameters=[{"name": "level", "value": {"stringValue": str(training_level)}}],
 )
 ```
 
 * `is_local=true` (third argument to `set_config`) makes the setting **transaction-scoped** — it resets to NULL the moment the transaction ends or if any query runs outside a transaction
-* If a query against an RLS-protected table runs without an active transaction, `current_setting('app.current_training_level', true)` returns NULL and RLS will deny **all rows silently** — this will not raise an exception, it will just return empty results
+* Both GUCs are required: `app.current_member_id` is used by self-service policies (SELECT/INSERT for the authenticated member's own rows); `app.current_training_level` is used by admin policies (Level 4+ access to all rows)
+* If either GUC is missing, RLS will deny **all rows silently** on SELECT (returns empty results, not an error), and will reject INSERT/UPDATE/DELETE with an RLS violation error
 * Tables under RLS: `members`, `activity_logs`, `consumable_purchases`, `guest_visits`, `guests`
 * Tables **not** under RLS: `wait_list`, `lanes`, `ranges`, `club_settings`, `devices`, `training_level_policies`
-* Never issue a SELECT, INSERT, UPDATE, or DELETE against an RLS-protected table outside of a transaction that started with `set_config`
+* Never issue a SELECT, INSERT, UPDATE, or DELETE against an RLS-protected table outside of a transaction that started with both `set_config` calls
 
 ## Secrets & Environment Variables
 

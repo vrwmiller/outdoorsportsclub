@@ -353,7 +353,7 @@ erDiagram
 | `social_provider_id` | TEXT (Nullable) | Linked Google/Facebook ID (Cleared during **Recovery**). |
 | `service_hours` | DECIMAL(5,2) | Running total for **Level 1** promotion tracking. |
 | `waiver_signed_at` | TIMESTAMP | Used to calculate the 1-year automated expiration. |
-| `waiver_version` | INT | Incremented each time the member signs or re-signs a waiver. Defaults to `0`; set to `1` on first signing. Used by the kiosk waiver handler to distinguish first-time signing from renewal. |
+| `waiver_version` | INT | Incremented each time the member signs or re-signs a waiver. Defaults to `0`; set to `1` on first signing. Used as a monotonically increasing version counter for waiver history and auditing; the kiosk waiver handler increments it unconditionally and does not branch on its value. |
 | `dues_paid_until` | DATE | Membership standing flag. Always set to December 31 of the year in which dues are paid — membership covers the full calendar year (January 1 – December 31) regardless of payment date. |
 | `home_phone` | TEXT (Nullable) | Home telephone number. |
 | `mobile_phone` | TEXT (Nullable) | Mobile number in E.164 format (e.g., `+15551234567`); validated/normalized for **Amazon SNS** delivery of SMS range alerts. |
