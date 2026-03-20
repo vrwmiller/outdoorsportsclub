@@ -1187,4 +1187,4 @@ These decisions are final. They must not be reopened without a documented reason
 | **Frontend framework** | **Next.js** (App Router) deployed via **AWS Amplify Gen 2**. See Section 9. |
 | **Deployment environment model** | Single AWS account; two stacks (`dev` / `prod`); `osc/dev/…` and `osc/prod/…` secret prefixes; no staging tier. See ODQ #28. |
 | **`dev` deployment region** | `us-east-1` only. All development, integration testing, and pre-merge validation runs in `us-east-1`. |
-| **`prod` deployment region** | `us-east-1` (primary) and `us-east-2` (secondary). Aurora Global Database secondary replica in `us-east-2`; all Lambda and API Gateway resources deployed in both regions per the multi-region design in Section 8. |
+| **`prod` deployment region** | `us-east-1` only at launch. Cross-region disaster recovery uses **AWS Backup** replication as defined in Section 8; **Aurora Global Database is out of scope for `prod`** (see ODQ 17). |
