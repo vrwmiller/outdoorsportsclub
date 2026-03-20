@@ -166,6 +166,17 @@ def handler(event: dict, context: Any) -> dict:
             # Caller should invoke POST /v1/kiosk/waiver first — return 400 with context
             raise ValueError("Guest waiver is missing or expired; capture signature first")
 
+        # Read current guest fee from club_settings (authoritative source)
+        settings_result = rds.execute_statement(
+            resourceArn=DB_CLUSTER_ARN,
+            secretArn=DB_SECRET_ARN,
+            database=DB_NAME,
+            sql="SELECT guest_fee_cents FROM club_settings WHERE singleton = TRUE",
+        )
+        if not settings_result["records"]:
+            raise RuntimeError("club_settings row missing")
+        guest_fee_cents: int = int(settings_result["records"][0][0]["longValue"])
+
         # Annual visit limit check — serializable to prevent race conditions
         tx = rds.begin_transaction(
             resourceArn=DB_CLUSTER_ARN,
@@ -202,7 +213,7 @@ def handler(event: dict, context: Any) -> dict:
                     "body": json.dumps({"error": "Annual guest visit limit reached"}),
                 }
 
-            # Verify NFC/Card payment intent succeeded before writing
+            # Verify NFC/Card payment intent: status succeeded AND amount matches club rate
             if payment_method in ("NFC", "Card"):
                 import boto3 as _b3
                 sm = _b3.client("secretsmanager")
@@ -210,7 +221,7 @@ def handler(event: dict, context: Any) -> dict:
                 import stripe as _stripe
                 _stripe.api_key = stripe_secret
                 intent = _stripe.PaymentIntent.retrieve(stripe_intent_id)
-                if intent["status"] != "succeeded":
+                if intent["status"] != "succeeded" or intent["amount"] != guest_fee_cents:
                     rds.rollback_transaction(
                         resourceArn=DB_CLUSTER_ARN,
                         secretArn=DB_SECRET_ARN,
