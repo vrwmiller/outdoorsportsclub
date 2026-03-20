@@ -114,6 +114,27 @@ except Exception:
     raise
 ```
 
+### Row-Level Security and `set_config`
+
+This project uses PostgreSQL Row-Level Security (RLS) with a transaction-scoped GUC. The **first** `execute_statement` in every transaction must be:
+
+```python
+rds.execute_statement(
+    resourceArn=CLUSTER_ARN,
+    secretArn=SECRET_ARN,
+    database=DB_NAME,
+    transactionId=tx["transactionId"],
+    sql="SELECT set_config('app.current_training_level', :level, true)",
+    parameters=[{"name": "level", "value": {"stringValue": "4"}}],
+)
+```
+
+* `is_local=true` (third argument to `set_config`) makes the setting **transaction-scoped** — it resets to NULL the moment the transaction ends or if any query runs outside a transaction
+* If a query against an RLS-protected table runs without an active transaction, `current_setting('app.current_training_level', true)` returns NULL and RLS will deny **all rows silently** — this will not raise an exception, it will just return empty results
+* Tables under RLS: `members`, `activity_logs`, `consumable_purchases`, `guest_visits`, `guests`
+* Tables **not** under RLS: `wait_list`, `lanes`, `ranges`, `club_settings`, `devices`, `training_level_policies`
+* Never issue a SELECT, INSERT, UPDATE, or DELETE against an RLS-protected table outside of a transaction that started with `set_config`
+
 ## Secrets & Environment Variables
 
 * All secrets are fetched at cold-start from **AWS Secrets Manager** — cache in a module-level variable; never re-fetch per invocation
@@ -161,6 +182,7 @@ def generate_device_token(salt: str) -> tuple[str, str]:
 * Use `stripe.PaymentIntent` for all Tap to Pay flows — never store card data
 * Confirm payment success via Stripe webhook or synchronous `PaymentIntent` status check before writing to the database
 * On Stripe failure, return `402 Payment Required` with a sanitised error message
+* **Never read monetary amounts from the client request body.** `unit_price`, fee amounts, or any cents value must be looked up server-side from a catalog table (e.g. `consumable_items`) or `club_settings` — client-supplied amounts are trivially forgeable
 
 ## S3 Waiver Storage
 
