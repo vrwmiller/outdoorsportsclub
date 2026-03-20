@@ -53,7 +53,7 @@ Every system boundary must define:
 
 Silence is not a valid failure mode. An operation that fails silently is a correctness violation.
 
-**In this project:** Missing GUCs for RLS (`app.current_member_id`, `app.current_training_level`) cause silent empty `SELECT` results — violating this value. All Lambda handlers must return structured error responses and log failures at `ERROR` level.
+**In this project:** RLS policies use `current_setting(..., true)` (missing-ok) so missing GUCs (`app.current_member_id`, `app.current_training_level`) fail closed at the DB layer — `SELECT` returns empty results silently; `INSERT`/`UPDATE`/`DELETE` raise an RLS violation error. The fail-closed DB behavior is intentional. What violates this value is application code that does not detect or log those conditions: Lambda handlers that receive an unexpected empty result set must treat it as an error, log at `ERROR` with request context, and fail the request explicitly rather than silently returning empty data to the caller. All Lambda handlers must return structured error responses and log failures at `ERROR` level.
 
 ---
 
@@ -95,7 +95,7 @@ Failures that cannot be detected in production are equivalent to failures that a
 - All Lambda handlers log structured `ERROR` entries with request context (member ID or device ID, route, timestamp) on any unhandled exception or 5xx response
 - Payment flows log Stripe event IDs and DB write outcomes so a "payment posted, no DB row" scenario can be diagnosed from CloudWatch alone
 - S3 waiver upload failures log the attempted key and the error — never silently discard a waiver
-- CloudWatch alarms exist for Lambda error rate and Aurora ACU spikes
+- CloudWatch alarms must be configured for Lambda error rate and Aurora ACU spikes
 - No debug or trace logging in production that includes PII (member name, email, phone)
 
 **In this project:** There is currently no defined behavior for kiosk-side S3 upload failures or mid-transaction Stripe errors. Explicit failure handling and logging for these paths is a known gap to be addressed.
