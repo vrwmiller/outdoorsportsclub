@@ -16,3 +16,6 @@ CREATE INDEX IF NOT EXISTS idx_consumable_items_is_active ON consumable_items (i
 
 ALTER TABLE consumable_purchases
     ADD COLUMN IF NOT EXISTS item_id UUID REFERENCES consumable_items(id);
+
+CREATE INDEX IF NOT EXISTS idx_consumable_purchases_item_id
+    ON consumable_purchases (item_id);

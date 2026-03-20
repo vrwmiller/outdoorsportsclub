@@ -18,6 +18,8 @@ import json
 import logging
 import os
 import time
+import uuid
+from decimal import Decimal
 from typing import Any
 
 import boto3
@@ -59,6 +61,10 @@ def handler(event: dict, context: Any) -> dict:
             raise ValueError(f"payment_method must be one of: {', '.join(_VALID_PAYMENT_METHODS)}")
         if not isinstance(quantity, int) or quantity <= 0:
             raise ValueError("quantity must be a positive integer")
+        try:
+            uuid.UUID(item_id)
+        except (ValueError, AttributeError):
+            raise ValueError("item_id must be a valid UUID")
 
         stripe_intent_id = body.get("stripe_payment_intent_id")
         if payment_method in ("NFC", "Card") and not stripe_intent_id:
@@ -79,9 +85,9 @@ def handler(event: dict, context: Any) -> dict:
         item_name: str = item_result["records"][0][0]["stringValue"]
         unit_price_cents: int = item_result["records"][0][1]["longValue"]
 
-        # Compute total server-side from catalog price — never trust client-supplied amounts
-        unit_price: float = unit_price_cents / 100.0
-        total: float = round(quantity * unit_price, 2)
+        # Use Decimal for exact monetary arithmetic — avoids float rounding drift
+        unit_price: Decimal = Decimal(unit_price_cents) / Decimal(100)
+        total: Decimal = unit_price * quantity
 
         # Verify Stripe payment before opening the write transaction
         if payment_method in ("NFC", "Card"):
@@ -160,8 +166,8 @@ def handler(event: dict, context: Any) -> dict:
                     {"name": "item_id", "value": {"stringValue": item_id}},
                     {"name": "item_name", "value": {"stringValue": item_name}},
                     {"name": "quantity", "value": {"longValue": quantity}},
-                    {"name": "unit_price", "value": {"doubleValue": unit_price}},
-                    {"name": "total", "value": {"doubleValue": total}},
+                    {"name": "unit_price", "value": {"stringValue": str(unit_price)}},
+                    {"name": "total", "value": {"stringValue": str(total)}},
                     {"name": "stripe_intent", "value": (
                         {"stringValue": stripe_intent_id} if stripe_intent_id
                         else {"isNull": True}

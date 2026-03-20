@@ -740,7 +740,7 @@ Triggered by a QR scan at range exit. Validates an active open `Range-Checkin` e
 POST /v1/kiosk/consumable-purchase
 ```
 
-Records one or more line items to `consumable_purchases`. The kiosk submits `item_id` (a UUID from the `consumable_items` catalog), `quantity`, and `payment_method`. The Lambda looks up `item_name` and `unit_price_cents` from the catalog server-side — the kiosk never supplies a price. The endpoint presents a payment method choice (see *Payment methods* in Section 4): **Cash**, **NFC** (Tap to Pay), or **Card** (paired Stripe Terminal hardware reader). For NFC and Card, payment is processed via **Stripe Terminal SDK** before the record is inserted. `member_id` is optional — omit for anonymous guest purchases.
+Records a single line item to `consumable_purchases`. The kiosk submits `item_id` (a UUID from the `consumable_items` catalog), `quantity`, and `payment_method`. The Lambda looks up `item_name` and `unit_price_cents` from the catalog server-side — the kiosk never supplies a price. The endpoint presents a payment method choice (see *Payment methods* in Section 4): **Cash**, **NFC** (Tap to Pay), or **Card** (paired Stripe Terminal hardware reader). For NFC and Card, payment is processed via **Stripe Terminal SDK** before the record is inserted. `member_id` is optional — omit for anonymous guest purchases.
 
 **Returns:** `200 OK` (Purchase Recorded), `400 Bad Request` (unknown or inactive item), or `402 Payment Required` (Stripe payment failure).
 
