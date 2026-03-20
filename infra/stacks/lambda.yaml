@@ -46,7 +46,7 @@ Resources:
           DB_CLUSTER_ARN: !ImportValue
             Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
           DB_SECRET_ARN: !ImportValue
-            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
           DB_NAME: osc
           DEVICE_TOKEN_SALT_ARN: !ImportValue
             Fn::Sub: "osc-device-token-salt-arn-${Environment}"
@@ -83,7 +83,7 @@ Resources:
           DB_CLUSTER_ARN: !ImportValue
             Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
           DB_SECRET_ARN: !ImportValue
-            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
           DB_NAME: osc
           DEVICE_TOKEN_SALT_ARN: !ImportValue
             Fn::Sub: "osc-device-token-salt-arn-${Environment}"
@@ -122,7 +122,7 @@ Resources:
           DB_CLUSTER_ARN: !ImportValue
             Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
           DB_SECRET_ARN: !ImportValue
-            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
           DB_NAME: osc
           DEVICE_TOKEN_SALT_ARN: !ImportValue
             Fn::Sub: "osc-device-token-salt-arn-${Environment}"
@@ -161,7 +161,7 @@ Resources:
           DB_CLUSTER_ARN: !ImportValue
             Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
           DB_SECRET_ARN: !ImportValue
-            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
           DB_NAME: osc
           DEVICE_TOKEN_SALT_ARN: !ImportValue
             Fn::Sub: "osc-device-token-salt-arn-${Environment}"
@@ -201,7 +201,7 @@ Resources:
           DB_CLUSTER_ARN: !ImportValue
             Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
           DB_SECRET_ARN: !ImportValue
-            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
           DB_NAME: osc
           DEVICE_TOKEN_SALT_ARN: !ImportValue
             Fn::Sub: "osc-device-token-salt-arn-${Environment}"
@@ -240,7 +240,7 @@ Resources:
           DB_CLUSTER_ARN: !ImportValue
             Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
           DB_SECRET_ARN: !ImportValue
-            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
           DB_NAME: osc
           DEVICE_TOKEN_SALT_ARN: !ImportValue
             Fn::Sub: "osc-device-token-salt-arn-${Environment}"
@@ -279,7 +279,7 @@ Resources:
           DB_CLUSTER_ARN: !ImportValue
             Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
           DB_SECRET_ARN: !ImportValue
-            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
           DB_NAME: osc
           DEVICE_TOKEN_SALT_ARN: !ImportValue
             Fn::Sub: "osc-device-token-salt-arn-${Environment}"
@@ -316,7 +316,7 @@ Resources:
           DB_CLUSTER_ARN: !ImportValue
             Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
           DB_SECRET_ARN: !ImportValue
-            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
           DB_NAME: osc
           DEVICE_TOKEN_SALT_ARN: !ImportValue
             Fn::Sub: "osc-device-token-salt-arn-${Environment}"
@@ -353,7 +353,7 @@ Resources:
           DB_CLUSTER_ARN: !ImportValue
             Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
           DB_SECRET_ARN: !ImportValue
-            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
           DB_NAME: osc
           DEVICE_TOKEN_SALT_ARN: !ImportValue
             Fn::Sub: "osc-device-token-salt-arn-${Environment}"

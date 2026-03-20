@@ -153,7 +153,7 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: "0.0.0.0/0"
-          Description: "HTTPS outbound — restricted to VPC-private subnets (no IGW/NAT); replace with VPC endpoints to harden"
+          Description: "HTTPS outbound - restricted to VPC-private subnets (no IGW/NAT); replace with VPC endpoints to harden"
       Tags:
         - Key: Name
           Value: !Sub "osc-aurora-sg-${Environment}"
@@ -189,7 +189,7 @@ Resources:
   AuroraClusterParameterGroup:
     Type: AWS::RDS::DBClusterParameterGroup
     Properties:
-      Description: !Sub "Aurora PostgreSQL cluster parameters — osc-aurora-${Environment}"
+      Description: !Sub "Aurora PostgreSQL cluster parameters - osc-aurora-${Environment}"
       Family: aurora-postgresql16
       Parameters:
         # Log all connections and disconnections for audit purposes.
@@ -239,14 +239,13 @@ Resources:
       EngineVersion: "16.6"
       DatabaseName: osc
       MasterUsername: oscadmin
-      # Aurora reads the master password from the secret created in secrets.yaml.
-      # Automatic Secrets Manager rotation is handled natively by Aurora — no
-      # separate rotation Lambda is required.
-      MasterUserSecret:
-        SecretArn: !ImportValue
-          Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
-        KmsKeyId: !ImportValue
-          Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+      # Aurora manages the master credential natively — it creates a Secrets Manager
+      # secret, stores the password there, and rotates it automatically. The managed
+      # secret ARN is exported as osc-aurora-managed-secret-arn-<env> for use by
+      # Lambda execution roles and the lambda.yaml stack.
+      ManageMasterUserPassword: true
+      MasterUserSecretKmsKeyId: !ImportValue
+        Fn::Sub: "osc-kms-aurora-arn-${Environment}"
       StorageEncrypted: true
       KmsKeyId: !ImportValue
         Fn::Sub: "osc-kms-aurora-arn-${Environment}"
@@ -319,3 +318,9 @@ Outputs:
     Value: !Ref AuroraSecurityGroup
     Export:
       Name: !Sub "osc-aurora-sg-id-${Environment}"
+
+  AuroraManagedSecretArn:
+    Description: ARN of the Aurora-managed master-credential secret (rotation-enabled).
+    Value: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+    Export:
+      Name: !Sub "osc-aurora-managed-secret-arn-${Environment}"
