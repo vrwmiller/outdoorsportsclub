@@ -57,7 +57,7 @@ Install these tools once on your machine before working with this repository.
 | :--- | :--- | :--- |
 | [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2-mac.html) | `brew install awscli` | Deploy CloudFormation stacks, invoke Lambda |
 | [gh CLI](https://cli.github.com/) | `brew install gh` | Open PRs, manage issues, check CI status |
-| Python 3.12+ | `brew install python@3.12` or system Python | Required by `env.sh` to create the project venv |
+| Python 3.12+ | `brew install python@3.12` or existing `python3` (must be 3.12+, check with `python3 --version`) | Required by `env.sh` to create the project venv |
 
 Configure the AWS CLI with the project profile:
 
@@ -69,13 +69,21 @@ aws configure --profile outdoorsportsclub
 
 ### Python dev environment
 
-`env.sh` creates a project `.venv` and installs `ruff`, `cfn-lint`, `boto3`, and `stripe` — used for Python linting and Pylance import resolution. Run once after cloning:
+`env.sh` creates a project `.venv` and installs `ruff`, `cfn-lint`, `boto3`, and `stripe` — used for Python linting and Pylance import resolution.
+
+Run once to create or update the venv:
 
 ```bash
 source env.sh
 ```
 
 Must be **sourced** (not executed as a subshell) so `.venv` activation propagates to your shell. Requires Python 3.12 or later. Override the interpreter with `PYTHON=python3.12 source env.sh`.
+
+In a new shell where the venv is already set up, activate it directly:
+
+```bash
+source .venv/bin/activate
+```
 
 ## Repeatable workflows
 
