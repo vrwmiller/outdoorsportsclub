@@ -87,7 +87,7 @@ Keep PRs focused and reviewable:
 - If a change touches more than 3 distinct layers (e.g. migrations + Lambda handlers + IAM + frontend) or exceeds ~500 lines, split it by layer — one PR per layer
 - The test for "too large": if a reviewer would need to context-switch between unrelated concerns to evaluate the PR, it should be split
 - Prefer multiple small PRs over one large one — each gets more thorough review and is easier to revert if something goes wrong
-- **Each new Lambda handler is its own PR.** Do not bundle multiple new handlers into a single PR even if they belong to the same feature area. Example: adding `checkin`, `checkout`, and `waiver` handlers → three PRs, not one.
+- **One new Lambda handler per PR.** Do not bundle multiple new handlers into a single PR even if they belong to the same feature area. Example: adding `checkin`, `checkout`, and `waiver` handlers → three handler PRs, not one. Any schema, infra, docs (including `docs/design.md` Section 7 route entries), or test changes required for that handler should either be (a) kept minimal and included in the same PR as directly coupled work, or (b) split into separate, linked PRs by layer if they grow large — while still keeping exactly one new handler per PR.
 
 ## Review workflow
 
