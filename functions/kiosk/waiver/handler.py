@@ -1,0 +1,235 @@
+"""POST /v1/kiosk/waiver
+
+Stores a signed waiver PDF in S3 and records the event in Aurora.
+Handles both member waivers and guest waivers based on presence of guest_id.
+
+Expected request body:
+    {
+        "member_id": "<uuid>",
+        "pdf_bytes": "<base64-encoded PDF>",
+        "guest_id": "<uuid>"     # optional — omit for member waiver
+    }
+"""
+import base64
+import json
+import logging
+import os
+import time
+from datetime import datetime, timezone
+from typing import Any
+
+import boto3
+
+from _auth import (
+    DB_CLUSTER_ARN,
+    DB_SECRET_ARN,
+    DB_NAME,
+    CORS_HEADERS,
+    authenticate_device,
+    error_response,
+)
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+if not os.environ.get("S3_WAIVER_BUCKET"):
+    raise RuntimeError("Missing required environment variable: S3_WAIVER_BUCKET")
+
+S3_WAIVER_BUCKET: str = os.environ["S3_WAIVER_BUCKET"]
+
+
+def handler(event: dict, context: Any) -> dict:
+    start = time.monotonic()
+    member_id: str | None = None
+    error_name: str | None = None
+
+    try:
+        device = authenticate_device(event)
+        device_id: str = device["id"]
+
+        body = json.loads(event.get("body") or "{}")
+        member_id = body.get("member_id")
+        if not member_id:
+            raise ValueError("member_id is required")
+        pdf_b64: str | None = body.get("pdf_bytes")
+        if not pdf_b64:
+            raise ValueError("pdf_bytes is required")
+        guest_id: str | None = body.get("guest_id")
+
+        # Decode PDF — reject non-base64 payloads early
+        try:
+            pdf_data = base64.b64decode(pdf_b64, validate=True)
+        except Exception:
+            raise ValueError("pdf_bytes must be valid base64")
+
+        timestamp_str = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+        s3 = boto3.client("s3")
+        rds = boto3.client("rds-data")
+
+        if guest_id:
+            # ---- Guest waiver path ----
+            s3_key = f"waivers/guests/{guest_id}/{timestamp_str}.pdf"
+            s3.put_object(
+                Bucket=S3_WAIVER_BUCKET,
+                Key=s3_key,
+                Body=pdf_data,
+                ContentType="application/pdf",
+                ServerSideEncryption="aws:kms",
+            )
+            tx = rds.begin_transaction(
+                resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
+            )
+            try:
+                rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql=(
+                        "UPDATE guests SET waiver_signed_at = now(), waiver_s3_key = :s3_key "
+                        "WHERE id = :guest_id"
+                    ),
+                    parameters=[
+                        {"name": "s3_key", "value": {"stringValue": s3_key}},
+                        {"name": "guest_id", "value": {"stringValue": guest_id}},
+                    ],
+                )
+                rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql=(
+                        "INSERT INTO activity_logs "
+                        "(member_id, device_id, guest_id, activity_type, waiver_s3_key, timestamp) "
+                        "VALUES (:member_id, :device_id, :guest_id, 'Waiver-Signed', :s3_key, now())"
+                    ),
+                    parameters=[
+                        {"name": "member_id", "value": {"stringValue": member_id}},
+                        {"name": "device_id", "value": {"stringValue": device_id}},
+                        {"name": "guest_id", "value": {"stringValue": guest_id}},
+                        {"name": "s3_key", "value": {"stringValue": s3_key}},
+                    ],
+                )
+                rds.commit_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=tx["transactionId"],
+                )
+            except Exception:
+                rds.rollback_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=tx["transactionId"],
+                )
+                raise
+
+        else:
+            # ---- Member waiver path ----
+            s3_key = f"waivers/{member_id}/{timestamp_str}.pdf"
+            s3.put_object(
+                Bucket=S3_WAIVER_BUCKET,
+                Key=s3_key,
+                Body=pdf_data,
+                ContentType="application/pdf",
+                ServerSideEncryption="aws:kms",
+            )
+            tx = rds.begin_transaction(
+                resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
+            )
+            try:
+                rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql=(
+                        "UPDATE members "
+                        "SET waiver_signed_at = now(), waiver_version = waiver_version + 1 "
+                        "WHERE id = :member_id"
+                    ),
+                    parameters=[
+                        {"name": "member_id", "value": {"stringValue": member_id}}
+                    ],
+                )
+                rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql=(
+                        "INSERT INTO activity_logs "
+                        "(member_id, device_id, activity_type, waiver_s3_key, timestamp) "
+                        "VALUES (:member_id, :device_id, 'Waiver-Signed', :s3_key, now())"
+                    ),
+                    parameters=[
+                        {"name": "member_id", "value": {"stringValue": member_id}},
+                        {"name": "device_id", "value": {"stringValue": device_id}},
+                        {"name": "s3_key", "value": {"stringValue": s3_key}},
+                    ],
+                )
+                rds.commit_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=tx["transactionId"],
+                )
+            except Exception:
+                rds.rollback_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=tx["transactionId"],
+                )
+                raise
+
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.info(json.dumps({
+            "request_id": context.aws_request_id,
+            "member_id": member_id,
+            "device_id": device_id,
+            "action": "waiver",
+            "duration_ms": duration_ms,
+            "error": None,
+        }))
+        return {
+            "statusCode": 200,
+            "headers": CORS_HEADERS,
+            "body": json.dumps({"message": "Waiver stored"}),
+        }
+
+    except PermissionError as exc:
+        error_name = type(exc).__name__
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.warning(json.dumps({
+            "request_id": context.aws_request_id,
+            "member_id": member_id,
+            "device_id": None,
+            "action": "waiver",
+            "duration_ms": duration_ms,
+            "error": error_name,
+        }))
+        return error_response(403, str(exc))
+    except ValueError as exc:
+        error_name = type(exc).__name__
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.warning(json.dumps({
+            "request_id": context.aws_request_id,
+            "member_id": member_id,
+            "device_id": None,
+            "action": "waiver",
+            "duration_ms": duration_ms,
+            "error": error_name,
+        }))
+        return error_response(400, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        error_name = type(exc).__name__
+        duration_ms = int((time.monotonic() - start) * 1000)
+        logger.exception(json.dumps({
+            "request_id": context.aws_request_id,
+            "member_id": member_id,
+            "device_id": None,
+            "action": "waiver",
+            "duration_ms": duration_ms,
+            "error": error_name,
+        }))
+        return error_response(500, "Internal server error")
