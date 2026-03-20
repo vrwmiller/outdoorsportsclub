@@ -20,6 +20,16 @@ The **Home Page** is the club's primary public-facing interface — the first th
 - **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Linting:** All `.ts` / `.tsx` files must satisfy `.github/instructions/linter.instructions.md`
 
+## Instructions
+
+Always read and apply the following instruction files before implementing or editing any frontend code:
+
+* `.github/instructions/designer.instructions.md` — UI conventions, component patterns, and design tokens
+* `.github/instructions/linter.instructions.md` — TypeScript, Next.js, and linting rules
+* `.github/instructions/qa.instructions.md` — frontend test coverage expectations
+* `.github/instructions/security.instructions.md` — security requirements for auth flows and API-driven pages
+* `.github/instructions/pr.instructions.md` — all branch, commit, and PR operations
+
 ## The Four Surfaces
 
 | Surface | Role in the app | Primary Users | Key Screens |

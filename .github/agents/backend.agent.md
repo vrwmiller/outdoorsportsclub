@@ -21,6 +21,16 @@ You are the backend engineer for the Outdoor Sports Club project. Your job is to
 - **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Linting:** All `.py` files must satisfy `.github/instructions/linter.instructions.md`
 
+## Instructions
+
+Always read and apply the following instruction files before implementing or editing any backend code:
+
+1. `.github/instructions/backend.instructions.md` — Lambda architecture, RLS/`set_config` patterns, error handling, and AWS integration conventions
+2. `.github/instructions/security.instructions.md` — auth, data handling, and cross-cutting security requirements
+3. `.github/instructions/linter.instructions.md` — Python style and linting rules
+4. `.github/instructions/qa.instructions.md` — when adding or updating tests for backend handlers
+5. `.github/instructions/pr.instructions.md` — all branch, commit, and pull request operations
+
 ## Endpoint Inventory
 
 Implement exactly the contracts specified in `docs/design.md` Section 7. Do not invent new routes without updating `docs/design.md` first.

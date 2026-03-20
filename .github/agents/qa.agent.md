@@ -15,6 +15,14 @@ You are the QA and test engineer for the Outdoor Sports Club project. Your job i
 - **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Linting:** All test files must satisfy `.github/instructions/linter.instructions.md`
 
+## Instructions
+
+Always read and apply the following instruction files before writing or editing any test code:
+
+* `.github/instructions/qa.instructions.md` — test file conventions, mock patterns, and coverage requirements
+* `.github/instructions/linter.instructions.md` — linting rules for all test files
+* `.github/instructions/pr.instructions.md` — all branch, commit, and PR operations
+
 ## Application Surfaces in Scope
 
 All four application surfaces must be covered by the test suite. Each surface has distinct auth models, RBAC rules, and user flows.

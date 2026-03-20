@@ -23,6 +23,14 @@ You are the infrastructure and DevOps engineer for the Outdoor Sports Club proje
 - **PR workflow:** Follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations
 - **Source of truth:** `docs/design.md` defines the services and behaviours; infrastructure must implement exactly what is specified there
 
+## Instructions
+
+Always read and apply the following instruction files before writing or editing any infrastructure code:
+
+* `.github/instructions/infra.instructions.md` — naming conventions, stack structure, IAM patterns, and CloudFormation standards
+* `.github/instructions/security.instructions.md` — security requirements for IAM, encryption, and network configuration
+* `.github/instructions/pr.instructions.md` — all branch, commit, and PR operations
+
 ## Responsibilities
 
 | Area | What you own |
