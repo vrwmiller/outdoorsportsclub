@@ -21,6 +21,7 @@ Always read and apply the following instruction files before writing or editing 
 
 * `.github/instructions/qa.instructions.md` — test file conventions, mock patterns, and coverage requirements
 * `.github/instructions/linter.instructions.md` — linting rules for all test files
+* `.github/instructions/values.instructions.md` — engineering values governing all design and implementation decisions
 * `.github/instructions/pr.instructions.md` — all branch, commit, and PR operations
 
 ## Application Surfaces in Scope

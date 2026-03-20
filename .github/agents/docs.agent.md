@@ -18,6 +18,7 @@ Always read and apply the following instruction files before writing or editing 
 
 * `.github/instructions/docs.instructions.md` — doc roles, locked decisions, writing conventions, and ODQ rules
 * `.github/instructions/linter.instructions.md` — Markdown linting rules
+* `.github/instructions/values.instructions.md` — engineering values governing all design and implementation decisions
 * `.github/instructions/pr.instructions.md` — all branch, commit, and PR operations
 
 ## Constraints
