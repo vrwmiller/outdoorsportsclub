@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  S3 bucket for Lambda deployment artifacts (ZIP packages).
+  Versioned so that previous deployments remain recoverable.
+  No sensitive data — AES-256 server-managed encryption is sufficient.
+
+Parameters:
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+Resources:
+
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "osc-lambda-artifacts-${Environment}-${AWS::AccountId}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-old-noncurrent-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+              NewerNoncurrentVersions: 5
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+Outputs:
+
+  ArtifactsBucketName:
+    Description: Name of the Lambda artifacts bucket.
+    Value: !Ref ArtifactsBucket
+    Export:
+      Name: !Sub "osc-artifacts-bucket-name-${Environment}"
+
+  ArtifactsBucketArn:
+    Description: ARN of the Lambda artifacts bucket.
+    Value: !GetAtt ArtifactsBucket.Arn
+    Export:
+      Name: !Sub "osc-artifacts-bucket-arn-${Environment}"

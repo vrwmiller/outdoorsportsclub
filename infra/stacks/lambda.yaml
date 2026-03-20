@@ -1,0 +1,396 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Lambda function definitions for all kiosk handlers and device pairing.
+  All functions use the RDS Data API — no VPC attachment required.
+  IAM execution roles are imported from osc-iam-kiosk-<env>.
+  ZIP packages are loaded from the osc-artifacts bucket.
+
+Parameters:
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+  CorsAllowOrigin:
+    Type: String
+    Default: "http://localhost:3000"
+    Description: >-
+      Value for the Access-Control-Allow-Origin response header on all Lambda
+      responses. Set to the Amplify domain for deployed environments.
+      Example: https://outdoorsportsclub.com
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # Kiosk — Check-in
+  # POST /v1/kiosk/check-in
+  # ---------------------------------------------------------------------------
+  KioskCheckInFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-kiosk-checkin-${Environment}"
+      Description: Validates member credentials and assigns a range lane or queues a wait-list entry.
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-kiosk-checkin-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: kiosk-checkin.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+          DB_NAME: osc
+          DEVICE_TOKEN_SALT_ARN: !ImportValue
+            Fn::Sub: "osc-device-token-salt-arn-${Environment}"
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # Kiosk — Check-out
+  # POST /v1/kiosk/check-out
+  # ---------------------------------------------------------------------------
+  KioskCheckOutFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-kiosk-checkout-${Environment}"
+      Description: Clears a lane and advances the wait list; sends SNS SMS if next member has a mobile phone.
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-kiosk-checkout-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: kiosk-checkout.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+          DB_NAME: osc
+          DEVICE_TOKEN_SALT_ARN: !ImportValue
+            Fn::Sub: "osc-device-token-salt-arn-${Environment}"
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+          SNS_ALERTS_TOPIC_ARN: !ImportValue
+            Fn::Sub: "osc-sns-admin-alerts-arn-${Environment}"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # Kiosk — Waiver
+  # POST /v1/kiosk/waiver
+  # ---------------------------------------------------------------------------
+  KioskWaiverFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-kiosk-waiver-${Environment}"
+      Description: Stores a signed waiver PDF in S3 with Object Lock and records the event in Aurora.
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-kiosk-waiver-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: kiosk-waiver.zip
+      MemorySize: 256
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+          DB_NAME: osc
+          DEVICE_TOKEN_SALT_ARN: !ImportValue
+            Fn::Sub: "osc-device-token-salt-arn-${Environment}"
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+          S3_WAIVER_BUCKET: !ImportValue
+            Fn::Sub: "osc-s3-waivers-name-${Environment}"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # Kiosk — Guest Payment
+  # POST /v1/kiosk/guest-payment
+  # ---------------------------------------------------------------------------
+  KioskGuestPaymentFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-kiosk-guest-payment-${Environment}"
+      Description: Looks up or creates a guest record, enforces annual visit limit, processes payment.
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-kiosk-guest-payment-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: kiosk-guest-payment.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+          DB_NAME: osc
+          DEVICE_TOKEN_SALT_ARN: !ImportValue
+            Fn::Sub: "osc-device-token-salt-arn-${Environment}"
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+          # STRIPE_SECRET_ARN intentionally omitted — Stripe blocked per ODQ #29.
+          # Add this variable when the Webmaster lifts the hold.
+          STRIPE_SECRET_ARN: ""
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # Kiosk — Consumable Purchase
+  # POST /v1/kiosk/consumable-purchase
+  # ---------------------------------------------------------------------------
+  KioskConsumablePurchaseFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-kiosk-consumable-purchase-${Environment}"
+      Description: Records a consumable purchase against the catalog; processes Stripe Terminal payment when applicable.
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-kiosk-consumable-purchase-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: kiosk-consumable-purchase.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+          DB_NAME: osc
+          DEVICE_TOKEN_SALT_ARN: !ImportValue
+            Fn::Sub: "osc-device-token-salt-arn-${Environment}"
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+          # STRIPE_SECRET_ARN intentionally omitted — Stripe blocked per ODQ #29.
+          STRIPE_SECRET_ARN: ""
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # Kiosk — Dues Payment
+  # POST /v1/kiosk/dues
+  # ---------------------------------------------------------------------------
+  KioskDuesFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-kiosk-dues-${Environment}"
+      Description: Kiosk path for annual dues payment via Stripe Terminal or cash.
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-kiosk-dues-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: kiosk-dues.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+          DB_NAME: osc
+          DEVICE_TOKEN_SALT_ARN: !ImportValue
+            Fn::Sub: "osc-device-token-salt-arn-${Environment}"
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+          # STRIPE_SECRET_ARN intentionally omitted — Stripe blocked per ODQ #29.
+          STRIPE_SECRET_ARN: ""
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # Kiosk — Range Lanes
+  # GET /v1/kiosk/range/lanes
+  # ---------------------------------------------------------------------------
+  KioskRangeLanesFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-kiosk-range-lanes-${Environment}"
+      Description: Returns current lane occupancy for the kiosk's own range.
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-kiosk-range-lanes-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: kiosk-range-lanes.zip
+      MemorySize: 128
+      Timeout: 29
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+          DB_NAME: osc
+          DEVICE_TOKEN_SALT_ARN: !ImportValue
+            Fn::Sub: "osc-device-token-salt-arn-${Environment}"
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # Kiosk — Wait-list Cancel
+  # DELETE /v1/kiosk/wait-list/{entry_id}
+  # ---------------------------------------------------------------------------
+  KioskWaitlistCancelFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-kiosk-waitlist-cancel-${Environment}"
+      Description: Cancels the calling member's active wait-list entry and recalculates queue positions.
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-kiosk-waitlist-cancel-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: kiosk-waitlist-cancel.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+          DB_NAME: osc
+          DEVICE_TOKEN_SALT_ARN: !ImportValue
+            Fn::Sub: "osc-device-token-salt-arn-${Environment}"
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------------------------------------------------------------------------
+  # Devices — Pair
+  # POST /v1/devices/pair
+  # ---------------------------------------------------------------------------
+  DevicesPairFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-devices-pair-${Environment}"
+      Description: Validates a one-time pairing code, activates the device, and returns the raw device token once.
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-devices-pair-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: devices-pair.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-master-secret-arn-${Environment}"
+          DB_NAME: osc
+          DEVICE_TOKEN_SALT_ARN: !ImportValue
+            Fn::Sub: "osc-device-token-salt-arn-${Environment}"
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+
+  KioskCheckInFunctionArn:
+    Value: !GetAtt KioskCheckInFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-kiosk-checkin-arn-${Environment}"
+
+  KioskCheckOutFunctionArn:
+    Value: !GetAtt KioskCheckOutFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-kiosk-checkout-arn-${Environment}"
+
+  KioskWaiverFunctionArn:
+    Value: !GetAtt KioskWaiverFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-kiosk-waiver-arn-${Environment}"
+
+  KioskGuestPaymentFunctionArn:
+    Value: !GetAtt KioskGuestPaymentFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-kiosk-guest-payment-arn-${Environment}"
+
+  KioskConsumablePurchaseFunctionArn:
+    Value: !GetAtt KioskConsumablePurchaseFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-kiosk-consumable-purchase-arn-${Environment}"
+
+  KioskDuesFunctionArn:
+    Value: !GetAtt KioskDuesFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-kiosk-dues-arn-${Environment}"
+
+  KioskRangeLanesFunctionArn:
+    Value: !GetAtt KioskRangeLanesFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-kiosk-range-lanes-arn-${Environment}"
+
+  KioskWaitlistCancelFunctionArn:
+    Value: !GetAtt KioskWaitlistCancelFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-kiosk-waitlist-cancel-arn-${Environment}"
+
+  DevicesPairFunctionArn:
+    Value: !GetAtt DevicesPairFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-devices-pair-arn-${Environment}"
