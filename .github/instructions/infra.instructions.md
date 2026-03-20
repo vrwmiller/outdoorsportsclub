@@ -94,7 +94,17 @@ CheckInLambdaRole:
               Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/osc-checkin-prod:*"
 ```
 
-* Never use `"Resource": "*"` for data-plane permissions
+* Never use `"Resource": "*"` for data-plane permissions — with one exception: SNS `sns:Publish` for **direct-to-phone SMS** requires `Resource: "*"` because phone-number targets are not ARNs. Scope it with a condition guard to prevent use against topics:
+
+```yaml
+- Effect: Allow
+  Action: sns:Publish
+  Resource: "*"
+  Condition:
+    StringEquals:
+      sns:DestinationType: DirectPublish
+```
+
 * Always include `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents` scoped to the function's log group
 
 ## API Gateway

@@ -1,43 +1,86 @@
 ---
 agent: agent
-description: Read all review comments on the current PR, address each one, and push the fixes.
+description: Read all review comments on the current PR, validate each against authoritative project docs and the changed files, fix valid claims, and post replies.
 ---
 
 Follow these steps exactly. Do not skip any step.
 
-1. **Identify the PR number** — run `gh pr view --json number,headRefName` to get the PR number and branch name. If the current branch has no open PR, stop and tell the user.
+1. **Identify the PR** — run `gh pr view --json number,headRefName` to get the PR number and branch name. If the current branch has no open PR, stop and tell the user.
 
-2. **Read review comments** — fetch all feedback:
+2. **Gather authoritative context** — before reading any comments, establish the ground truth you will use to validate reviewer claims:
+   * List the files changed in the PR: `gh pr view <number> --json files --jq '.files[].path'`
+   * Read each changed file in full.
+   * Invoke the architect agent: *"What sections of docs/design.md, docs/architecture.md, docs/stack-decisions.md, and which .github/instructions files are authoritative for these changed files: [list]?"*
+   * Read every document the architect identifies in full before proceeding.
+
+   The reviewer is expected to have sound software engineering knowledge but may not know this codebase. Their suggestions about general patterns are likely correct; their claims about project-specific decisions, existing conventions, or what the code already does must be verified against the files and docs you just read.
+
+3. **Read review comments** — fetch all feedback:
    * Derive the repo path: `gh repo view --json nameWithOwner --jq .nameWithOwner`
-   * Top-level review comments: `gh pr view <number> --comments`
+   * Top-level PR comments: `gh pr view <number> --comments`
    * Inline code comments: `gh api --paginate repos/<nameWithOwner>/pulls/<number>/comments`
-   Read both outputs before proceeding.
 
-3. **Summarise and evaluate the feedback** — print a concise, numbered list of every distinct change requested, including the comment ID. Group inline comments by file. For each comment, verify the reviewer's claim against the actual file content, the relevant instruction file, and `docs/design.md` or `docs/architecture.md` where applicable. A reviewer may be unfamiliar with the codebase — note any comment whose claim is contradicted by the code, established patterns, or a documented design decision, and do not act on it without flagging the discrepancy to the user. Ask the user to confirm before making any edits if anything is ambiguous.
-
-   > **Note:** GitHub does not reliably mark comments as "outdated" — file-level comments (no anchor line) never go outdated regardless of how many pushes occur. Do not use the `outdated` field to determine whether a comment has been addressed. Instead, track each comment ID explicitly and verify the fix is present in the file before marking it resolved.
-
-4. **Address each comment** — work through the list in order:
-   * Make the requested code or doc changes using file-edit tools.
-   * After each fix, verify the change is present in the file by searching for the updated text.
-   * Do not make unrequested changes alongside a fix.
-   * If a comment is a question rather than a change request, note the answer but do not change code.
-   * If a comment was flagged as incorrect or contradictory in step 3, skip the change and record the reason.
-
-5. **Reply to each comment** — after completing step 4, reply to every inline comment using:
+   Also fetch thread node IDs now — you will need them for step 7. Paginate until `hasNextPage` is false:
+   ```bash
+   gh api graphql -f query='
+     query($owner: String!, $name: String!, $pr: Int!, $after: String) {
+       repository(owner: $owner, name: $name) {
+         pullRequest(number: $pr) {
+           reviewThreads(first: 100, after: $after) {
+             pageInfo { hasNextPage endCursor }
+             nodes {
+               id
+               isResolved
+               comments(first: 1) { nodes { databaseId } }
+             }
+           }
+         }
+       }
+     }' -f owner='<owner>' -f name='<repo>' -F pr=<N>
    ```
-   gh api repos/<nameWithOwner>/pulls/<number>/comments/<comment_id>/replies -X POST -f body="<reply>"
-   ```
-   * For comments that were acted on: confirm what was changed and why.
-   * For comments that were skipped (incorrect or contradicted by the codebase): explain the discrepancy clearly — cite the relevant file, section, or established pattern that contradicts the reviewer's claim.
-   * For questions: answer the question directly without making code changes.
-   * Keep replies concise and factual. Do not be defensive — just state what happened and why.
+   Repeat with `-f after='<endCursor>'` while `pageInfo.hasNextPage` is true. Build a map of `comment databaseId → thread node id` from the complete set of results.
 
-6. **Commit the fixes** — stage only the files you changed. Do not stage `.env*`, secrets, or credentials. Then commit:
+   > **Note:** GitHub does not reliably mark comments as "outdated" — file-level comments (no anchor line) never go outdated regardless of how many pushes occur. Do not use the `outdated` field to determine whether a comment has been addressed. Track each comment ID explicitly.
+
+4. **Classify every comment** — print a numbered list of every distinct comment with its ID. Group by file. For each comment, check the claim against the current file content and the authoritative documents from step 2. Assign exactly one classification:
+
+   * **✅ Valid** — the claim is correct; a change is warranted. State what will be changed.
+   * **❌ Rejected** — the claim contradicts the actual file content, a documented design decision, or an instruction file convention. Name the specific document and section that contradicts it. Do not act on it.
+   * **⚠️ Ambiguous** — cannot be determined from available documents. Describe what is unclear and pause for user input before proceeding.
+
+   Do not ask the user about ✅ Valid or ❌ Rejected comments — proceed directly for those.
+
+5. **Process in batches of 5–6** — work through Valid comments in groups. For each batch:
+
+   **a. Fix** — make the code or doc changes using file-edit tools. After each change, verify it is present in the file. Do not make unrequested changes alongside a fix. If a comment is a question only (no code change required), note the answer and move on.
+
+   **b. Commit the batch**:
    ```
    git add <changed files>
-   git commit -m "fix: address PR review comments"
+   git commit -m "fix: address PR review comments (batch N)"
    ```
-   Use a more descriptive message if the changes cover a single clear topic (e.g., `fix: correct RLS policy for activity_logs`).
+   Use a descriptive message if the batch covers a single topic (e.g., `fix: wrap all DB queries in transactions`).
 
-7. **Push** — run `git push`.
+   **c. Reply to each comment in the batch** — for each reply, write the body to `/tmp/reply.json` using the file-creation tool (never shell redirection or echo), then post it:
+   ```json
+   {"body": "Your reply text here."}
+   ```
+   ```
+   gh api repos/<nameWithOwner>/pulls/<number>/comments/<comment_id>/replies --input /tmp/reply.json
+   ```
+   * **Valid comments that were fixed:** confirm what changed and why.
+   * **Rejected comments:** explain the discrepancy — cite the specific document, section, or established pattern that contradicts the claim.
+   * **Questions only:** answer directly; no code change needed.
+   * Keep replies concise and factual. Do not be defensive.
+
+   Repeat until all Valid comments are processed.
+
+6. **Push** — run `git push` once after all batches are committed.
+
+7. **Update docs if needed** — review the full set of fixes applied. If any fix changed an API contract, request/response shape, error code, auth level, schema column, or AWS service behavior, invoke the docs agent: *"Update docs/design.md to reflect [list of specific changes from this PR]"*. Do not resolve threads until the docs agent confirms the update is complete or confirms no update is needed.
+
+8. **Resolve threads** — for every comment that was either fixed or rejected, resolve its review thread using the node ID map built in step 3:
+   ```
+   gh api graphql -f query='mutation { resolveReviewThread(input: { threadId: "<thread_node_id>" }) { thread { isResolved } } }'
+   ```
+   Resolve all threads before ending.

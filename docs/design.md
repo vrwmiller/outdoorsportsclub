@@ -241,6 +241,7 @@ erDiagram
         INT training_level
         TEXT email
         TIMESTAMP waiver_signed_at
+        INT waiver_version
         DATE dues_paid_until
     }
     training_level_policies {
@@ -316,6 +317,7 @@ erDiagram
     club_settings {
         BOOLEAN singleton PK
         INTEGER annual_dues_cents
+        INTEGER guest_fee_cents
         TIMESTAMP updated_at
         UUID updated_by_member_id FK
     }
@@ -351,6 +353,7 @@ erDiagram
 | `social_provider_id` | TEXT (Nullable) | Linked Google/Facebook ID (Cleared during **Recovery**). |
 | `service_hours` | DECIMAL(5,2) | Running total for **Level 1** promotion tracking. |
 | `waiver_signed_at` | TIMESTAMP | Used to calculate the 1-year automated expiration. |
+| `waiver_version` | INT | Incremented each time the member signs or re-signs a waiver. Defaults to `0`; set to `1` on first signing. Used as a monotonically increasing version counter for waiver history and auditing; the kiosk waiver handler increments it unconditionally and does not branch on its value. |
 | `dues_paid_until` | DATE | Membership standing flag. Always set to December 31 of the year in which dues are paid — membership covers the full calendar year (January 1 – December 31) regardless of payment date. |
 | `home_phone` | TEXT (Nullable) | Home telephone number. |
 | `mobile_phone` | TEXT (Nullable) | Mobile number in E.164 format (e.g., `+15551234567`); validated/normalized for **Amazon SNS** delivery of SMS range alerts. |
@@ -554,6 +557,7 @@ A single-row configuration table. Stores club-wide scalars that Administrators m
 | :--- | :--- | :--- |
 | `singleton` | BOOLEAN (PK) | Always `TRUE`. `CHECK (singleton = TRUE)` enforces a single-row invariant. |
 | `annual_dues_cents` | INTEGER | Annual membership dues in US cents (e.g., `7500` = $75.00). Stored as an integer to avoid floating-point rounding. Used by `POST /v1/members/me/dues` to create the Stripe Payment Intent amount. |
+| `guest_fee_cents` | INTEGER | Per-guest fee in US cents (e.g., `1000` = $10.00). Seeded at `1000`. Looked up server-side by `POST /v1/kiosk/guest-payment` — never accepted from the client. |
 | `updated_at` | TIMESTAMP | Timestamp of the last change. |
 | `updated_by_member_id` | UUID (FK, Nullable) | FK to `members.id` — the Administrator who last updated the row. |
 
@@ -561,6 +565,7 @@ A single-row configuration table. Stores club-wide scalars that Administrators m
 
 * `CHECK (singleton = TRUE)` — enforces single-row invariant.
 * `CHECK (annual_dues_cents > 0)` — dues must be a positive amount.
+* `CHECK (guest_fee_cents > 0)` — guest fee must be a positive amount.
 
 ## 6. Infrastructure & Security (AWS)
 

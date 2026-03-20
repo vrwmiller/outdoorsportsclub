@@ -80,6 +80,22 @@ Why this change is needed — reference the open issue if one exists (`Closes #N
 - If the PR partially addresses an issue, say so explicitly
 - When referencing Open Design Questions, write **ODQ N** (no `#`) — bare `#N` is auto-linked by GitHub to the issue or PR with that number, which is never the intent
 
+## PR size
+
+Keep PRs focused and reviewable:
+
+- If a change touches more than 3 distinct layers (e.g. migrations + Lambda handlers + IAM + frontend) or exceeds ~500 lines, split it by layer — one PR per layer
+- The test for "too large": if a reviewer would need to context-switch between unrelated concerns to evaluate the PR, it should be split
+- Prefer multiple small PRs over one large one — each gets more thorough review and is easier to revert if something goes wrong
+
+## Security review before opening
+
+Before opening any PR that touches `functions/**/*.py`, `db/**/*.sql`, or `infra/**/*.yaml`, invoke the security agent on the changed files:
+
+> "Security review [list of changed files]"
+
+Research and fix any **High** or **Critical** findings before opening the PR. **Medium** and **Low** findings may be noted in the PR description and addressed in a follow-up. This prevents a second review round for issues the security agent would have caught before the PR was opened.
+
 ## Checklist before opening
 
 - [ ] Branch is not `main`

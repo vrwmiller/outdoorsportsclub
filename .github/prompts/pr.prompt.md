@@ -13,12 +13,14 @@ Follow these steps exactly. Do not skip any step.
 
 3. **Stage files** — run `git add` for all modified or new files that are relevant to the current change. Do not stage unrelated files. Do not stage `.env*`, secrets, or credentials.
 
-4. **Commit** — write a concise commit message following the convention: `feat:`, `fix:`, or `chore:` prefix. Run `git commit -m "<message>"`.
+4. **Security pre-flight** — check whether any staged file is under `functions/`, `db/`, or `infra/`. If so, invoke the security agent on those files before committing: *"Security review [list of staged files]"*. Fix any **High** or **Critical** findings before proceeding. Note **Medium** and **Low** findings in the PR description Security considerations section — they may be addressed in a follow-up. If no staged files match those paths, skip to step 5.
 
-5. **Push** — run `git push -u origin <branch>` using the branch name captured in step 1 (or set in step 2).
+5. **Commit** — write a concise commit message following the convention: `feat:`, `fix:`, or `chore:` prefix. Run `git commit -m "<message>"`.
 
-6. **Write the PR body** — use the `create_file` tool to write the PR description to `/tmp/pr-body.txt`. Follow the PR description structure from the PR instructions: Summary, Changes, Motivation, Security considerations, Testing, Breaking changes. Never use shell heredocs or echo to write this file.
+6. **Push** — run `git push -u origin <branch>` using the branch name captured in step 1 (or set in step 2).
 
-7. **Open the PR** — run `gh pr create --title "<title>" --body-file /tmp/pr-body.txt --base main`.
+7. **Write the PR body** — use the `create_file` tool to write the PR description to `/tmp/pr-body.txt`. Follow the PR description structure from the PR instructions: Summary, Changes, Motivation, Security considerations, Testing, Breaking changes. Never use shell heredocs or echo to write this file.
 
-8. **Clean up** — run `rm /tmp/pr-body.txt`.
+8. **Open the PR** — run `gh pr create --title "<title>" --body-file /tmp/pr-body.txt --base main`.
+
+9. **Clean up** — run `rm /tmp/pr-body.txt`.
