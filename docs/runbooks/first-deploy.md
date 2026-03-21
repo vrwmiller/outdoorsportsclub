@@ -11,7 +11,8 @@ This runbook covers deploying the full Outdoor Sports Club infrastructure and La
 ```mermaid
 flowchart TD
     A[Prerequisites:\nAWS profile + permissions] --> B["make gen-salt\n(copy output)"]
-    B --> C["make deploy-base ENV=dev\nDEVICE_TOKEN_SALT=<salt>"]
+    B --> BC["export USER_POOL_DOMAIN_PREFIX=...\nmake deploy-cognito ENV=dev"]
+    BC --> C["make deploy-base ENV=dev\nDEVICE_TOKEN_SALT=<salt>"]
     C --> D{All stacks\nUPDATE_COMPLETE?}
     D -- No --> E[Check CloudFormation\nevents, fix template,\nre-run failed target]
     E --> C
@@ -59,13 +60,14 @@ Copy the output (a 64-character hex string). You will pass it as `DEVICE_TOKEN_S
 ## Step 2 — Deploy the Cognito User Pool
 
 ```bash
+export USER_POOL_DOMAIN_PREFIX=osc-members-dev-<account-suffix>
 make deploy-cognito ENV=dev
 ```
 
 This deploys `osc-cognito-<env>` from `infra/stacks/cognito.yaml`, creating the Cognito
 User Pool, User Pool Domain, and App Client used for member authentication.
 
-Social login is disabled by default. For dev, no additional parameters are required.
+Social login is disabled by default. For dev, no social login parameters are required.
 For prod with Google and Facebook social login:
 
 ```bash

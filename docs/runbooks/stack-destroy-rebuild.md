@@ -40,7 +40,7 @@ and cannot be cleanly cycled without manual cleanup:
 * AWS CLI configured with the `outdoorsportsclub` profile (`us-east-1`)
 * `ENV` set to `dev` (destroy targets must never run with `ENV=prod`)
 * The stacks to be destroyed exist (`aws cloudformation list-stacks` to verify)
-* `osc-cognito-<env>` exists — `osc-iam-admin-<env>` and `osc-iam-member-<env>` import the Cognito User Pool ARN; `deploy-base` will fail with a missing-export error if this stack is absent. Run `make deploy-cognito ENV=dev` if it does not exist.
+* `osc-cognito-<env>` exists — `osc-iam-admin-<env>` and `osc-iam-member-<env>` import the Cognito User Pool ARN; `deploy-base` will fail with a missing-export error if this stack is absent. If the Cognito stack does not exist, first set a valid hosted UI domain prefix (`export USER_POOL_DOMAIN_PREFIX=osc-members-dev-<account-suffix>`), then run `make deploy-cognito ENV=dev`.
 
 ---
 

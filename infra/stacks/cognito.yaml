@@ -76,6 +76,7 @@ Parameters:
 
   UserPoolDomainPrefix:
     Type: String
+    MinLength: 1
     Description: >-
       Globally unique prefix for the Cognito hosted UI domain.
       Must be unique across all AWS accounts worldwide.
@@ -98,7 +99,7 @@ Rules:
 Conditions:
   # Social identity providers are optional. Set SocialLoginEnabled=true
   # once Google and Facebook OAuth apps are configured for the environment.
-  SocialLoginEnabled: !Equals [!Ref SocialLoginEnabled, "true"]
+  IsSocialLoginEnabled: !Equals [!Ref SocialLoginEnabled, "true"]
 
 Resources:
 
@@ -163,7 +164,7 @@ Resources:
   # ---------------------------------------------------------------------------
   GoogleIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
-    Condition: SocialLoginEnabled
+    Condition: IsSocialLoginEnabled
     Properties:
       UserPoolId: !Ref UserPool
       ProviderName: Google
@@ -182,7 +183,7 @@ Resources:
 
   FacebookIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
-    Condition: SocialLoginEnabled
+    Condition: IsSocialLoginEnabled
     Properties:
       UserPoolId: !Ref UserPool
       ProviderName: Facebook
@@ -217,7 +218,7 @@ Resources:
       # its ProviderName ("Google", "Facebook"). When SocialLoginEnabled is
       # false the providers are excluded by condition, so no dependency exists.
       SupportedIdentityProviders: !If
-        - SocialLoginEnabled
+        - IsSocialLoginEnabled
         - - COGNITO
           - !Ref GoogleIdentityProvider
           - !Ref FacebookIdentityProvider
