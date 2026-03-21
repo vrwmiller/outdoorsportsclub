@@ -73,7 +73,9 @@ This deploys stacks in dependency order:
 | 5 | `osc-aurora-dev` | `infra/stacks/aurora.yaml` |
 | 6 | `osc-backup-dev` | `infra/stacks/backup.yaml` |
 | 7 | `osc-iam-kiosk-dev` | `infra/stacks/iam/lambda-kiosk-roles.yaml` |
-| 8 | `osc-artifacts-dev` | `infra/stacks/artifacts.yaml` |
+| 8 | `osc-iam-admin-dev` | `infra/stacks/iam/lambda-admin-roles.yaml` |
+| 9 | `osc-iam-member-dev` | `infra/stacks/iam/lambda-member-roles.yaml` |
+| 10 | `osc-artifacts-dev` | `infra/stacks/artifacts.yaml` |
 
 **Verify:** in the AWS Console → CloudFormation, confirm every stack shows `UPDATE_COMPLETE` or `CREATE_COMPLETE` before proceeding. If any stack fails, check **Events** for the failing resource, fix the template, and re-run the specific target (e.g., `make deploy-aurora ENV=dev`).
 
