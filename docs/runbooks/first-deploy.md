@@ -11,7 +11,8 @@ This runbook covers deploying the full Outdoor Sports Club infrastructure and La
 ```mermaid
 flowchart TD
     A[Prerequisites:\nAWS profile + permissions] --> B["make gen-salt\n(copy output)"]
-    B --> C["make deploy-base ENV=dev\nDEVICE_TOKEN_SALT=<salt>"]
+    B --> BC["export USER_POOL_DOMAIN_PREFIX=...\nmake deploy-cognito ENV=dev"]
+    BC --> C["make deploy-base ENV=dev\nDEVICE_TOKEN_SALT=<salt>"]
     C --> D{All stacks\nUPDATE_COMPLETE?}
     D -- No --> E[Check CloudFormation\nevents, fix template,\nre-run failed target]
     E --> C
@@ -56,7 +57,44 @@ Copy the output (a 64-character hex string). You will pass it as `DEVICE_TOKEN_S
 
 ---
 
-## Step 2 — Deploy all supporting stacks
+## Step 2 — Deploy the Cognito User Pool
+
+```bash
+export USER_POOL_DOMAIN_PREFIX=osc-members-dev-<account-suffix>
+make deploy-cognito ENV=dev
+```
+
+This deploys `osc-cognito-<env>` from `infra/stacks/cognito.yaml`, creating the Cognito
+User Pool, User Pool Domain, and App Client used for member authentication.
+
+Social login is disabled by default. For dev, no social login parameters are required.
+For prod with Google and Facebook social login:
+
+```bash
+# Export secrets so they are not recorded in shell history
+export GOOGLE_CLIENT_SECRET=<secret>
+export FACEBOOK_APP_SECRET=<secret>
+
+make deploy-cognito ENV=prod SOCIAL_LOGIN_ENABLED=true \
+  GOOGLE_CLIENT_ID=<id> \
+  FACEBOOK_APP_ID=<id> \
+  CALLBACK_URL=https://outdoorsportsclub.com/auth/callback \
+  LOGOUT_URL=https://outdoorsportsclub.com \
+  USER_POOL_DOMAIN_PREFIX=osc-members-prod-a1b2c3
+```
+
+> `USER_POOL_DOMAIN_PREFIX` must be globally unique across all AWS accounts. Use the
+> convention `osc-members-<env>-<short-account-suffix>` (e.g. `osc-members-prod-a1b2c3`).
+> The exported `GOOGLE_CLIENT_SECRET` and `FACEBOOK_APP_SECRET` values are picked up
+> automatically by Make from the environment.
+>
+> `osc-iam-admin-<env>` and `osc-iam-member-<env>` import the Cognito User Pool ARN.
+> `deploy-base` will fail with `No export named osc-cognito-user-pool-arn-<env> found`
+> if this step is skipped.
+
+---
+
+## Step 3 — Deploy all supporting stacks
 
 ```bash
 make deploy-base ENV=dev DEVICE_TOKEN_SALT=<output-from-step-1>
@@ -83,7 +121,7 @@ This deploys stacks in dependency order:
 
 ---
 
-## Step 3 — Package Lambda handlers
+## Step 4 — Package Lambda handlers
 
 ```bash
 make package ENV=dev
@@ -93,7 +131,7 @@ Zips each handler together with its `_auth.py` dependency into `dist/lambda/`. N
 
 ---
 
-## Step 4 — Upload ZIPs to S3
+## Step 5 — Upload ZIPs to S3
 
 ```bash
 make upload ENV=dev
@@ -103,19 +141,19 @@ Copies each ZIP from `dist/lambda/` to `s3://osc-lambda-artifacts-dev-<account-i
 
 ---
 
-## Step 5 — Deploy Lambda function stack
+## Step 6 — Deploy Lambda function stack
 
 ```bash
 make deploy-lambda ENV=dev
 ```
 
-Deploys `osc-lambda-dev` from `infra/stacks/lambda.yaml`, which creates all Lambda functions referencing the ZIPs uploaded in Step 4.
+Deploys `osc-lambda-dev` from `infra/stacks/lambda.yaml`, which creates all Lambda functions referencing the ZIPs uploaded in Step 5.
 
 **Verify:** confirm `osc-lambda-dev` shows `UPDATE_COMPLETE` or `CREATE_COMPLETE`.
 
 ---
 
-## Step 6 — Run database migrations
+## Step 7 — Run database migrations
 
 ```bash
 make migrate ENV=dev
@@ -129,7 +167,7 @@ Queries `osc-aurora-<env>` for the cluster ARN (`AuroraClusterArn`) and the Auro
 
 ---
 
-## Step 7 — Smoke test
+## Step 8 — Smoke test
 
 Invoke a handler directly to confirm the end-to-end path (Lambda → Aurora) is functional:
 
@@ -142,9 +180,12 @@ Expected response: `{"statusCode": 403, ...}`. A 403 confirms the Lambda is runn
 
 ---
 
-## Shortcut — full first deploy in two commands
+## Shortcut — full first deploy
+
+`deploy-cognito` is not part of `deploy-all` and must be run separately first:
 
 ```bash
+make deploy-cognito ENV=dev
 make deploy-all ENV=dev DEVICE_TOKEN_SALT=<salt>
 make migrate ENV=dev
 ```

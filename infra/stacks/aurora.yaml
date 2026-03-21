@@ -244,8 +244,9 @@ Resources:
       # secret ARN is exported as osc-aurora-managed-secret-arn-<env> for use by
       # Lambda execution roles and the lambda.yaml stack.
       ManageMasterUserPassword: true
-      MasterUserSecretKmsKeyId: !ImportValue
-        Fn::Sub: "osc-kms-aurora-arn-${Environment}"
+      MasterUserSecret:
+        KmsKeyId: !ImportValue
+          Fn::Sub: "osc-kms-aurora-arn-${Environment}"
       StorageEncrypted: true
       KmsKeyId: !ImportValue
         Fn::Sub: "osc-kms-aurora-arn-${Environment}"

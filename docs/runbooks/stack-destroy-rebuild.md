@@ -40,6 +40,7 @@ and cannot be cleanly cycled without manual cleanup:
 * AWS CLI configured with the `outdoorsportsclub` profile (`us-east-1`)
 * `ENV` set to `dev` (destroy targets must never run with `ENV=prod`)
 * The stacks to be destroyed exist (`aws cloudformation list-stacks` to verify)
+* `osc-cognito-<env>` exists — `osc-iam-admin-<env>` and `osc-iam-member-<env>` import the Cognito User Pool ARN; `deploy-base` will fail with a missing-export error if this stack is absent. If the Cognito stack does not exist, first set a valid hosted UI domain prefix (`export USER_POOL_DOMAIN_PREFIX=osc-members-dev-<account-suffix>`), then run `make deploy-cognito ENV=dev`.
 
 ---
 
@@ -107,6 +108,17 @@ destroyed — it will skip stacks that are already up to date.
 
 **Rebuild Lambda:**
 
+Lambda reads its ZIP artifacts directly from the S3 artifacts bucket. If the ZIPs are
+not present in S3 (e.g. after a fresh checkout or on a new machine), `deploy-lambda`
+will fail with a key-not-found error. Package and upload them first:
+
+```bash
+make package ENV=dev
+make upload ENV=dev
+```
+
+Then deploy:
+
 ```bash
 make deploy-lambda ENV=dev
 ```
@@ -144,3 +156,23 @@ immediately. Wait 2–3 minutes and retry `make destroy-lambda ENV=dev`.
 
 **`make deploy-lambda` fails with "role does not exist"**
 `osc-iam-kiosk-<env>` was destroyed and not yet rebuilt. Run `make deploy-base ENV=dev` first.
+
+**Stack in `ROLLBACK_COMPLETE` state — cannot update**
+A failed deploy (not a destroy) can leave a stack in `ROLLBACK_COMPLETE`. CloudFormation
+will refuse all subsequent `deploy` attempts with "is in ROLLBACK_COMPLETE state and
+cannot be updated". Delete the stack manually and redeploy:
+
+```bash
+aws cloudformation delete-stack \
+  --stack-name <stack-name> \
+  --profile outdoorsportsclub --region us-east-1
+aws cloudformation wait stack-delete-complete \
+  --stack-name <stack-name> \
+  --profile outdoorsportsclub --region us-east-1
+```
+
+Then re-run the relevant deploy target. Stacks most likely to reach this state are
+`osc-iam-admin-<env>` and `osc-iam-member-<env>`, which fail when `osc-cognito-<env>`
+is missing — if their initial deploy attempt fails before the Cognito stack exists,
+they land in `ROLLBACK_COMPLETE` and must be deleted before `deploy-base` can succeed.
+Ensure `make deploy-cognito ENV=dev` has been run before retrying.

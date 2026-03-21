@@ -12,33 +12,51 @@ Parameters:
     AllowedValues: [dev, prod]
     Description: Deployment environment (dev or prod).
 
+  SocialLoginEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+    Description: >-
+      Set to true to enable Google and Facebook social login.
+      Requires GoogleClientId, GoogleClientSecret, FacebookAppId, and
+      FacebookAppSecret to be supplied. Leave false for dev environments
+      that do not yet have OAuth apps configured.
+
   GoogleClientId:
     Type: String
+    Default: ""
     Description: >-
       Google OAuth 2.0 client ID from the Google Cloud Console.
       This value appears in browser URLs and is not secret, but it must
       match the client ID registered for this environment's callback URL.
+      Required when SocialLoginEnabled is true.
 
   GoogleClientSecret:
     Type: String
+    Default: ""
     NoEcho: true
     Description: >-
       Google OAuth 2.0 client secret from the Google Cloud Console.
       Treat as a secret — do not log or commit this value.
+      Required when SocialLoginEnabled is true.
 
   FacebookAppId:
     Type: String
+    Default: ""
     Description: >-
       Facebook app ID from Meta for Developers.
       This value is not secret, but it must match the app configured
       for this environment's OAuth redirect URI.
+      Required when SocialLoginEnabled is true.
 
   FacebookAppSecret:
     Type: String
+    Default: ""
     NoEcho: true
     Description: >-
       Facebook app secret from Meta for Developers.
       Treat as a secret — do not log or commit this value.
+      Required when SocialLoginEnabled is true.
 
   CallbackUrl:
     Type: String
@@ -58,11 +76,30 @@ Parameters:
 
   UserPoolDomainPrefix:
     Type: String
+    MinLength: 1
     Description: >-
       Globally unique prefix for the Cognito hosted UI domain.
       Must be unique across all AWS accounts worldwide.
       Convention: osc-members-<env>-<short-account-suffix>
       Example:    osc-members-prod-a1b2c3
+
+Rules:
+  SocialLoginParamsRequired:
+    RuleCondition: !Equals [!Ref SocialLoginEnabled, "true"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref GoogleClientId, ""]]
+        AssertDescription: "GoogleClientId is required when SocialLoginEnabled is true"
+      - Assert: !Not [!Equals [!Ref GoogleClientSecret, ""]]
+        AssertDescription: "GoogleClientSecret is required when SocialLoginEnabled is true"
+      - Assert: !Not [!Equals [!Ref FacebookAppId, ""]]
+        AssertDescription: "FacebookAppId is required when SocialLoginEnabled is true"
+      - Assert: !Not [!Equals [!Ref FacebookAppSecret, ""]]
+        AssertDescription: "FacebookAppSecret is required when SocialLoginEnabled is true"
+
+Conditions:
+  # Social identity providers are optional. Set SocialLoginEnabled=true
+  # once Google and Facebook OAuth apps are configured for the environment.
+  IsSocialLoginEnabled: !Equals [!Ref SocialLoginEnabled, "true"]
 
 Resources:
 
@@ -123,10 +160,11 @@ Resources:
         ManagedBy: cloudformation
 
   # ---------------------------------------------------------------------------
-  # Social Identity Providers
+  # Social Identity Providers (optional — only created when SocialLoginEnabled=true)
   # ---------------------------------------------------------------------------
   GoogleIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: IsSocialLoginEnabled
     Properties:
       UserPoolId: !Ref UserPool
       ProviderName: Google
@@ -145,6 +183,7 @@ Resources:
 
   FacebookIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
+    Condition: IsSocialLoginEnabled
     Properties:
       UserPoolId: !Ref UserPool
       ProviderName: Facebook
@@ -165,10 +204,6 @@ Resources:
     Type: AWS::Cognito::UserPoolClient
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
-    # Identity providers must exist before the client can reference them.
-    DependsOn:
-      - GoogleIdentityProvider
-      - FacebookIdentityProvider
     Properties:
       ClientName: !Sub "osc-portal-client-${Environment}"
       UserPoolId: !Ref UserPool
@@ -177,10 +212,17 @@ Resources:
       # uses PKCE with the authorization code flow; no secret is needed.
       GenerateSecret: false
 
-      SupportedIdentityProviders:
-        - COGNITO   # email/password for test accounts and initial Webmaster setup
-        - Google
-        - Facebook
+      # Use !Ref on the provider resources (not string literals) so that
+      # CloudFormation creates an implicit dependency and does not race when
+      # SocialLoginEnabled is true. !Ref on a UserPoolIdentityProvider returns
+      # its ProviderName ("Google", "Facebook"). When SocialLoginEnabled is
+      # false the providers are excluded by condition, so no dependency exists.
+      SupportedIdentityProviders: !If
+        - IsSocialLoginEnabled
+        - - COGNITO
+          - !Ref GoogleIdentityProvider
+          - !Ref FacebookIdentityProvider
+        - - COGNITO   # email/password only until social login is enabled
 
       AllowedOAuthFlows:
         - code  # authorization code + PKCE only; implicit flow is not enabled
