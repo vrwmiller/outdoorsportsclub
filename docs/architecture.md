@@ -176,11 +176,11 @@ Every Lambda invocation enforces RBAC independently of the surface routing above
 
 ## CloudFormation Stack Dependencies
 
-Each arrow means "must be deployed before". The circled numbers match the `make deploy-base` order. Stacks with no incoming arrows have no CloudFormation `ImportValue` dependencies and can be deployed first.
+Each arrow means "must be deployed before". The circled numbers reflect the full deploy sequence: `make deploy-base` stacks ①–⑩, then `make deploy-lambda` stack ⑪. Stacks with no incoming arrows have no CloudFormation `ImportValue` dependencies and can be deployed first within their respective command.
 
 ```mermaid
 flowchart TD
-    subgraph BASE["No imports"]
+    subgraph BASE["No imports (deploy-base)"]
         kms["① osc-kms\nkms.yaml"]
         sns["③ osc-sns\nsns.yaml"]
         art["⑩ osc-artifacts\nartifacts.yaml"]
@@ -200,7 +200,7 @@ flowchart TD
     end
 
     lam["⑪ osc-lambda\nlambda.yaml"]
-    cog([Cognito\nAmplify-managed])
+    cog["osc-cognito\ncognito.yaml\n(deployed separately)"]
 
     kms --> sec
     kms --> s3
@@ -228,10 +228,10 @@ flowchart TD
     art --> lam
     iak --> lam
 
-    cog -.->|osc-cognito-user-pool-arn| iaa
+    cog -->|osc-cognito-user-pool-arn| iaa
 ```
 
-`osc-lambda` is the only stack in `make deploy-lambda` — all other stacks are in `make deploy-base`. The Cognito User Pool ARN is exported by the Amplify-managed Cognito stack (not a CloudFormation stack in this repo) and is consumed only by `osc-iam-admin`.
+`osc-lambda` is the only stack in `make deploy-lambda` — all other stacks are in `make deploy-base`. `osc-cognito` (`cognito.yaml`) has no `ImportValue` dependencies of its own and is deployed outside the `deploy-base`/`deploy-lambda` sequence; its `osc-cognito-user-pool-arn` export is consumed only by `osc-iam-admin`.
 
 ## Extensibility Notes
 
