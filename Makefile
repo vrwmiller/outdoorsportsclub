@@ -57,7 +57,7 @@ STACK_LAMBDA    = osc-lambda-$(ENV)
         deploy-kms deploy-secrets deploy-sns deploy-s3 deploy-aurora \
         deploy-backup deploy-iam-kiosk deploy-artifacts deploy-lambda \
         deploy-base deploy-all update-code migrate invoke \
-        destroy-lambda destroy-sns destroy-iam
+        _guard-nonprod destroy-lambda destroy-sns destroy-iam-kiosk
 
 # =============================================================================
 help:
@@ -78,7 +78,7 @@ help:
 	@echo "Destroy targets (dev only — blocked on ENV=prod):"
 	@echo "  destroy-lambda    Delete the Lambda + API Gateway stack (rebuildable via deploy-lambda)"
 	@echo "  destroy-sns       Delete the SNS topic stack (rebuildable via deploy-base)"
-	@echo "  destroy-iam       Delete the IAM roles stack (rebuildable via deploy-base)"
+	@echo "  destroy-iam-kiosk Delete the IAM kiosk roles stack (rebuildable via deploy-base)"
 	@echo ""
 	@echo "Variables:"
 	@echo "  ENV=$(ENV)  AWS_PROFILE=$(AWS_PROFILE)  REGION=$(REGION)"
@@ -294,6 +294,9 @@ destroy-lambda: _guard-nonprod
 	@echo "$(STACK_LAMBDA) deleted. Rebuild with: make deploy-lambda ENV=$(ENV)"
 
 destroy-sns: _guard-nonprod
+	@aws cloudformation describe-stacks --stack-name $(STACK_LAMBDA) \
+		--profile $(AWS_PROFILE) --region $(REGION) > /dev/null 2>&1 && \
+		echo "ERROR: $(STACK_LAMBDA) still exists and imports $(STACK_SNS) exports. Run 'make destroy-lambda ENV=$(ENV)' first." && exit 1 || true
 	aws cloudformation delete-stack \
 		--stack-name $(STACK_SNS) \
 		--profile $(AWS_PROFILE) --region $(REGION)
@@ -301,8 +304,10 @@ destroy-sns: _guard-nonprod
 		--stack-name $(STACK_SNS) \
 		--profile $(AWS_PROFILE) --region $(REGION)
 	@echo "$(STACK_SNS) deleted. Rebuild with: make deploy-base ENV=$(ENV)"
-
-destroy-iam: _guard-nonprod
+destroy-iam-kiosk: _guard-nonprod
+	@aws cloudformation describe-stacks --stack-name $(STACK_LAMBDA) \
+		--profile $(AWS_PROFILE) --region $(REGION) > /dev/null 2>&1 && \
+		echo "ERROR: $(STACK_LAMBDA) still exists and imports $(STACK_IAM_KIOSK) exports. Run 'make destroy-lambda ENV=$(ENV)' first." && exit 1 || true
 	aws cloudformation delete-stack \
 		--stack-name $(STACK_IAM_KIOSK) \
 		--profile $(AWS_PROFILE) --region $(REGION)
