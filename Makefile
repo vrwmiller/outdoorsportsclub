@@ -50,14 +50,16 @@ STACK_S3        = osc-s3-$(ENV)
 STACK_AURORA    = osc-aurora-$(ENV)
 STACK_BACKUP    = osc-backup-$(ENV)
 STACK_IAM_KIOSK = osc-iam-kiosk-$(ENV)
+STACK_IAM_ADMIN = osc-iam-admin-$(ENV)
+STACK_IAM_MEMBER= osc-iam-member-$(ENV)
 STACK_ARTIFACTS = osc-artifacts-$(ENV)
 STACK_LAMBDA    = osc-lambda-$(ENV)
 
 .PHONY: help gen-salt package upload \
         deploy-kms deploy-secrets deploy-sns deploy-s3 deploy-aurora \
-        deploy-backup deploy-iam-kiosk deploy-artifacts deploy-lambda \
+        deploy-backup deploy-iam-kiosk deploy-iam-admin deploy-iam-member deploy-artifacts deploy-lambda \
         deploy-base deploy-all update-code migrate invoke \
-        _guard-nonprod destroy-lambda destroy-sns destroy-iam-kiosk
+        _guard-nonprod destroy-lambda destroy-sns destroy-iam-kiosk destroy-iam-admin destroy-iam-member
 
 # =============================================================================
 help:
@@ -68,7 +70,7 @@ help:
 	@echo "  gen-salt          Generate a random device token salt (copy output to DEVICE_TOKEN_SALT)"
 	@echo "  package           Zip Lambda handlers into $(BUILD_DIR)/"
 	@echo "  upload            Upload ZIPs to the S3 artifacts bucket"
-	@echo "  deploy-base       Deploy supporting stacks (kms→secrets→sns→s3→aurora→backup→iam→artifacts)"
+	@echo "  deploy-base       Deploy supporting stacks (kms→secrets→sns→s3→aurora→backup→iam-kiosk→iam-admin→iam-member→artifacts)"
 	@echo "  deploy-lambda     Deploy the Lambda function stack"
 	@echo "  deploy-all        Full first-time deploy: deploy-base + package + upload + deploy-lambda"
 	@echo "  update-code       Push newly uploaded ZIPs to Lambda (use after 'make upload' on code-only changes)"
@@ -78,7 +80,9 @@ help:
 	@echo "Destroy targets (dev only — blocked on ENV=prod):"
 	@echo "  destroy-lambda    Delete the Lambda + API Gateway stack (rebuildable via deploy-lambda)"
 	@echo "  destroy-sns       Delete the SNS topic stack (rebuildable via deploy-base)"
-	@echo "  destroy-iam-kiosk Delete the IAM kiosk roles stack (rebuildable via deploy-base)"
+	@echo "  destroy-iam-kiosk   Delete the IAM kiosk roles stack (rebuildable via deploy-base)
+  destroy-iam-admin   Delete the IAM admin roles stack (rebuildable via deploy-base)
+  destroy-iam-member  Delete the IAM member roles stack (rebuildable via deploy-base)"
 	@echo ""
 	@echo "Variables:"
 	@echo "  ENV=$(ENV)  AWS_PROFILE=$(AWS_PROFILE)  REGION=$(REGION)"
@@ -185,6 +189,24 @@ deploy-iam-kiosk:
 		--no-fail-on-empty-changeset \
 		--profile $(AWS_PROFILE) --region $(REGION)
 
+deploy-iam-admin:
+	aws cloudformation deploy \
+		--stack-name  $(STACK_IAM_ADMIN) \
+		--template-file infra/stacks/iam/lambda-admin-roles.yaml \
+		--parameter-overrides Environment=$(ENV) \
+		--capabilities CAPABILITY_NAMED_IAM \
+		--no-fail-on-empty-changeset \
+		--profile $(AWS_PROFILE) --region $(REGION)
+
+deploy-iam-member:
+	aws cloudformation deploy \
+		--stack-name  $(STACK_IAM_MEMBER) \
+		--template-file infra/stacks/iam/lambda-member-roles.yaml \
+		--parameter-overrides Environment=$(ENV) \
+		--capabilities CAPABILITY_NAMED_IAM \
+		--no-fail-on-empty-changeset \
+		--profile $(AWS_PROFILE) --region $(REGION)
+
 deploy-artifacts:
 	aws cloudformation deploy \
 		--stack-name  $(STACK_ARTIFACTS) \
@@ -208,7 +230,7 @@ deploy-lambda:
 # Deploy all stacks except lambda (does not need DEVICE_TOKEN_SALT after first
 # run — CloudFormation will detect no-change on secrets if the value is the same).
 deploy-base: deploy-kms deploy-secrets deploy-sns deploy-s3 \
-             deploy-aurora deploy-backup deploy-iam-kiosk deploy-artifacts
+             deploy-aurora deploy-backup deploy-iam-kiosk deploy-iam-admin deploy-iam-member deploy-artifacts
 
 # Full first-time deploy.
 deploy-all: deploy-base package upload deploy-lambda
@@ -315,4 +337,20 @@ destroy-iam-kiosk: _guard-nonprod
 		--stack-name $(STACK_IAM_KIOSK) \
 		--profile $(AWS_PROFILE) --region $(REGION)
 	@echo "$(STACK_IAM_KIOSK) deleted. Rebuild with: make deploy-base ENV=$(ENV)"
+destroy-iam-admin: _guard-nonprod
+	aws cloudformation delete-stack \
+		--stack-name $(STACK_IAM_ADMIN) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	aws cloudformation wait stack-delete-complete \
+		--stack-name $(STACK_IAM_ADMIN) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	@echo "$(STACK_IAM_ADMIN) deleted. Rebuild with: make deploy-base ENV=$(ENV)"
+destroy-iam-member: _guard-nonprod
+	aws cloudformation delete-stack \
+		--stack-name $(STACK_IAM_MEMBER) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	aws cloudformation wait stack-delete-complete \
+		--stack-name $(STACK_IAM_MEMBER) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	@echo "$(STACK_IAM_MEMBER) deleted. Rebuild with: make deploy-base ENV=$(ENV)"
 
