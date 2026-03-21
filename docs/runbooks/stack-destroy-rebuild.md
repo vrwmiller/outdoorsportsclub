@@ -14,7 +14,9 @@ or exercise the deployment path from a clean state.
 
 ## Which stacks can be destroyed
 
-Only stacks without stateful resources are eligible. The three supported targets are:
+Only stacks without stateful resources are eligible. There are three Makefile
+destroy targets; `osc-iam-admin-<env>` and `osc-iam-member-<env>` can also be
+deleted manually when needed:
 
 | Target | Stack deleted | Rebuild command |
 | :--- | :--- | :--- |
@@ -52,12 +54,13 @@ and cannot be cleanly cycled without manual cleanup:
 
 ## Dependency order
 
-`osc-lambda-<env>` imports exports from `osc-iam-kiosk-<env>` (the execution role ARN).
-`osc-iam-admin-<env>` and `osc-iam-member-<env>` both import the
-`osc-sns-admin-alerts-arn-<env>` export from `osc-sns-<env>`.
+`osc-lambda-<env>` imports exports from `osc-iam-kiosk-<env>` (the execution role ARN)
+and also imports `osc-sns-admin-alerts-arn-<env>` from `osc-sns-<env>` (as the
+`SNS_ALERTS_TOPIC_ARN` environment variable). `osc-iam-admin-<env>` and
+`osc-iam-member-<env>` also import `osc-sns-admin-alerts-arn-<env>`.
 CloudFormation blocks deletion of any stack whose exports are in use.
 
-If you are destroying all three supported stacks (lambda, iam, sns), the correct order is:
+If you are doing a full teardown (lambda, iam, and sns), the correct order is:
 
 ```text
 Destroy order:   lambda → iam-kiosk → iam-admin → iam-member → sns   (most-dependent first)
@@ -65,9 +68,9 @@ Rebuild order:   sns/iam (via deploy-base) → lambda
 ```
 
 If you only need to destroy Lambda or IAM-kiosk, SNS does not need to be touched.
-If you only need to destroy SNS, `osc-iam-admin-<env>` and `osc-iam-member-<env>`
-must be deleted first (they import the SNS export) — even though they are not
-themselves being rebuilt from scratch.
+If you need to destroy SNS, **all** stacks that import its exports must be deleted
+first (`osc-lambda-<env>`, `osc-iam-admin-<env>`, and `osc-iam-member-<env>`),
+even if those stacks are not themselves being rebuilt from scratch.
 
 ---
 
