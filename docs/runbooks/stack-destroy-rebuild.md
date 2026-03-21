@@ -17,7 +17,7 @@ or exercise the deployment path from a clean state.
 Only stacks without stateful resources are eligible. The three supported targets are:
 
 | Target | Stack deleted | Rebuild command |
-|---|---|---|
+| :--- | :--- | :--- |
 | `make destroy-lambda` | `osc-lambda-<env>` (Lambda functions + API Gateway) | `make deploy-lambda ENV=<env>` |
 | `make destroy-sns` | `osc-sns-<env>` (SNS topic) | `make deploy-base ENV=<env>` |
 | `make destroy-iam-kiosk` | `osc-iam-kiosk-<env>` (IAM roles + policies) | `make deploy-base ENV=<env>` |
@@ -25,21 +25,21 @@ Only stacks without stateful resources are eligible. The three supported targets
 **Do not attempt to destroy** the following — they carry `DeletionPolicy: Retain`
 and cannot be cleanly cycled without manual cleanup:
 
-- `osc-kms-<env>` — KMS key deletion has a 7–30 day waiting period; existing ciphertext breaks
-- `osc-secrets-<env>` — holds the device token salt and DB credentials referenced by Lambda
-- `osc-aurora-<env>` — dataset; slow to reprovision
-- `osc-s3-<env>` — waiver documents
-- `osc-cognito-<env>` — pool IDs are baked into Amplify config and kiosk device configs
-- `osc-artifacts-<env>` — Lambda deployment packages
-- `osc-backup-<env>` — AWS Backup vault
+* `osc-kms-<env>` — KMS key deletion has a 7–30 day waiting period; existing ciphertext breaks
+* `osc-secrets-<env>` — holds the device token salt and DB credentials referenced by Lambda
+* `osc-aurora-<env>` — dataset; slow to reprovision
+* `osc-s3-<env>` — waiver documents
+* `osc-cognito-<env>` — pool IDs are baked into Amplify config and kiosk device configs
+* `osc-artifacts-<env>` — Lambda deployment packages
+* `osc-backup-<env>` — AWS Backup vault
 
 ---
 
 ## Prerequisites
 
-- AWS CLI configured with the `outdoorsportsclub` profile (`us-east-1`)
-- `ENV` set to `dev` (or a non-prod environment)
-- The stacks to be destroyed exist (`aws cloudformation list-stacks` to verify)
+* AWS CLI configured with the `outdoorsportsclub` profile (`us-east-1`)
+* `ENV` set to `dev` (destroy targets must never run with `ENV=prod`)
+* The stacks to be destroyed exist (`aws cloudformation list-stacks` to verify)
 
 ---
 
@@ -120,8 +120,10 @@ make invoke ENV=dev \
   PAYLOAD='{"headers":{"x-device-token":"<token>"},"httpMethod":"GET","path":"/v1/kiosk/range/lanes"}'
 ```
 
-Expected: HTTP 200 with a JSON body. A 401 or 403 indicates the IAM role or
-Cognito Authorizer is not configured correctly.
+Expected: HTTP 200 with a JSON body. A 401 or 403 indicates the kiosk device
+token is missing or invalid and the handler's device-token authorization logic
+is rejecting the request; IAM permission issues typically surface as a
+`FunctionError` or an unhandled exception in the invocation response.
 
 ---
 

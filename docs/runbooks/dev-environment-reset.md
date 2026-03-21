@@ -14,7 +14,7 @@ broken state, or you want to verify the deployment templates work from scratch.
 ## What this resets
 
 | Stack | Action |
-|---|---|
+| :--- | :--- |
 | `osc-lambda-dev` | Destroyed and redeployed |
 | `osc-iam-kiosk-dev` | Destroyed and redeployed |
 | `osc-sns-dev` | Destroyed and redeployed |
@@ -28,8 +28,8 @@ left intact. No data is lost and no credentials rotate.
 
 ## Prerequisites
 
-- AWS CLI configured with the `outdoorsportsclub` profile (`us-east-1`)
-- Lambda ZIPs are already uploaded to `osc-lambda-artifacts-dev-<account-id>`
+* AWS CLI configured with the `outdoorsportsclub` profile (`us-east-1`)
+* Lambda ZIPs are already uploaded to `osc-lambda-artifacts-dev-<account-id>`
   (if not, run `make package upload ENV=dev` first — see the [Lambda code deploy runbook](lambda-code-deploy.md))
 
 ---
@@ -121,7 +121,7 @@ make invoke ENV=dev FUNCTION=osc-kiosk-range-lanes-dev PAYLOAD='{"httpMethod":"G
 `deploy-base` did not complete successfully or `osc-iam-kiosk-dev` is still deleting.
 Wait for `deploy-base` to finish fully before running `deploy-lambda`.
 
-**`make invoke` returns 502**
+**`make invoke` returns a `FunctionError` or a non-200 `statusCode` in the response body**
 Lambda deployed but the handler is failing at startup. Check CloudWatch Logs:
 ```bash
 aws logs tail /aws/lambda/osc-kiosk-range-lanes-dev --since 5m --profile outdoorsportsclub
