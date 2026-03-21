@@ -140,7 +140,7 @@ find infra -name "*.yaml" | xargs cfn-lint
 - Warnings (`W` prefix) may be noted in the PR description and addressed in a follow-up if they are not actionable.
 - If the PR touches no infra files (e.g., handler-only, docs-only, schema-only), running cfn-lint is not required.
 
-## markdownlint gate before opening
+## pymarkdown gate before opening
 
 Before opening any PR that touches `**/*.md`, run pymarkdown on all Markdown files and verify there are no errors:
 
