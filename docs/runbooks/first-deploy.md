@@ -11,7 +11,7 @@ This runbook covers deploying the full Outdoor Sports Club infrastructure and La
 ```mermaid
 flowchart TD
     A[Prerequisites:\nAWS profile + permissions] --> B["make gen-salt\n(copy output)"]
-    B --> C["make deploy-base ENV=dev\nDEVICE_TOKEN_SALT=&lt;salt&gt;"]
+    B --> C["make deploy-base ENV=dev\nDEVICE_TOKEN_SALT=<salt>"]
     C --> D{All stacks\nUPDATE_COMPLETE?}
     D -- No --> E[Check CloudFormation\nevents, fix template,\nre-run failed target]
     E --> C
@@ -36,7 +36,7 @@ flowchart TD
 Before running any `make` commands:
 
 * AWS CLI installed and the `outdoorsportsclub` profile configured (`aws configure --profile outdoorsportsclub`)
-* IAM user or role has permissions for: `cloudformation:*`, `lambda:*`, `s3:*`, `secretsmanager:*`, `rds-data:*`, `sts:GetCallerIdentity`
+* IAM user or role has permissions for: `cloudformation:*`, `iam:*`, `kms:*`, `lambda:*`, `s3:*`, `secretsmanager:*`, `rds-data:*`, `sts:GetCallerIdentity` (see [aws-account-setup.md](aws-account-setup.md) — `AdministratorAccess` covers all of these)
 * You are deploying to `us-east-1` (the only supported region for both `dev` and `prod`)
 * The repo is checked out and you are on the `main` branch at the commit you intend to deploy
 
@@ -69,11 +69,11 @@ This deploys stacks in dependency order:
 | 1 | `osc-kms-dev` | `infra/stacks/kms.yaml` |
 | 2 | `osc-secrets-dev` | `infra/stacks/secrets.yaml` |
 | 3 | `osc-sns-dev` | `infra/stacks/sns.yaml` |
-| 3 | `osc-s3-dev` | `infra/stacks/s3.yaml` |
-| 4 | `osc-aurora-dev` | `infra/stacks/aurora.yaml` |
-| 5 | `osc-backup-dev` | `infra/stacks/backup.yaml` |
-| 5 | `osc-iam-kiosk-dev` | `infra/stacks/iam/lambda-kiosk-roles.yaml` |
-| 6 | `osc-artifacts-dev` | `infra/stacks/artifacts.yaml` |
+| 4 | `osc-s3-dev` | `infra/stacks/s3.yaml` |
+| 5 | `osc-aurora-dev` | `infra/stacks/aurora.yaml` |
+| 6 | `osc-backup-dev` | `infra/stacks/backup.yaml` |
+| 7 | `osc-iam-kiosk-dev` | `infra/stacks/iam/lambda-kiosk-roles.yaml` |
+| 8 | `osc-artifacts-dev` | `infra/stacks/artifacts.yaml` |
 
 **Verify:** in the AWS Console → CloudFormation, confirm every stack shows `UPDATE_COMPLETE` or `CREATE_COMPLETE` before proceeding. If any stack fails, check **Events** for the failing resource, fix the template, and re-run the specific target (e.g., `make deploy-aurora ENV=dev`).
 
@@ -119,7 +119,9 @@ Deploys `osc-lambda-dev` from `infra/stacks/lambda.yaml`, which creates all Lamb
 make migrate ENV=dev
 ```
 
-Queries CloudFormation for the Aurora cluster ARN and master secret ARN, then runs `scripts/migrate.py`, which executes all files in `db/migrations/` in filename order via the RDS Data API.
+Queries CloudFormation for the Aurora cluster ARN and the Aurora-managed master secret ARN (exported as `osc-aurora-managed-secret-arn-<env>` from `osc-aurora-<env>`), then runs `scripts/migrate.py`, which executes all files in `db/migrations/` in filename order via the RDS Data API.
+
+> **Known issue (ODQ 32):** The current `make migrate` implementation queries `osc-secrets-<env>` for `AuroraMasterSecretArn` instead of the Aurora-managed secret. If migrations fail with an authentication error on a fresh environment, this is the cause. ODQ 32 tracks the Makefile fix.
 
 **Verify:** `migrate.py` prints each migration filename and `OK` or raises on failure. Confirm all 19 migrations complete without error.
 

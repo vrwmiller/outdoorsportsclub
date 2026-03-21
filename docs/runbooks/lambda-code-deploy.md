@@ -14,9 +14,11 @@ There are two code deployment paths depending on whether the Lambda CloudFormati
 flowchart TD
     A["Edit handler.py"] --> B["make package ENV=dev\n(zip handlers + _auth.py)"]
     B --> C["make upload ENV=dev\n(s3 cp ZIPs to artifacts bucket)"]
-    C --> D{Did infra/stacks/lambda.yaml\nor IAM templates also change?}
+    C --> D{Did infra/stacks/lambda.yaml\nalso change?}
     D -- Yes --> E["make deploy-lambda ENV=dev\n(CloudFormation deploy)"]
     D -- No --> F["make update-code ENV=dev\n(lambda update-function-code)"]
+    C --> G2{Did an IAM template\nin infra/stacks/iam/ change?}
+    G2 -- Yes --> E2["make deploy-iam-kiosk ENV=dev\n(separate IAM stack)"]
     E --> G["make invoke — smoke test"]
     F --> G
     G --> H[Done]
@@ -48,13 +50,21 @@ Copies each ZIP to `s3://osc-lambda-artifacts-dev-<account-id>/`. This overwrite
 
 ## Step 3 — Push new code to Lambda
 
-### If `infra/stacks/lambda.yaml` (or any IAM template) also changed:
+### If `infra/stacks/lambda.yaml` also changed:
 
 ```bash
 make deploy-lambda ENV=dev
 ```
 
-CloudFormation updates the stack. Lambda picks up the new ZIP from S3 as part of the resource update.
+CloudFormation updates the `osc-lambda-<env>` stack. Lambda picks up the new ZIP from S3 as part of the resource update.
+
+### If an IAM template in `infra/stacks/iam/` also changed:
+
+```bash
+make deploy-iam-kiosk ENV=dev
+```
+
+IAM roles live in a separate stack (`osc-iam-kiosk-<env>`) and are deployed independently. Run this before `deploy-lambda` if the execution role or policies changed.
 
 ### If only handler code changed (no template change):
 
