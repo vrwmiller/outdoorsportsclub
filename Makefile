@@ -5,26 +5,31 @@
 # Quickstart:
 #   1. Generate a device token salt:
 #        make gen-salt
-#      Copy the output — you will need it in step 2.
+#      Copy the output — you will need it in step 3.
 #
-#   2. Deploy all supporting infrastructure stacks:
+#   2. Deploy the Cognito User Pool (prerequisite for deploy-base):
+#        make deploy-cognito ENV=dev
+#
+#   3. Deploy all supporting infrastructure stacks:
 #        make deploy-base ENV=dev DEVICE_TOKEN_SALT=<output-from-step-1>
 #
-#   3. Package Lambda handlers and upload to S3:
+#   4. Package Lambda handlers and upload to S3:
 #        make package upload ENV=dev
 #
-#   4. Deploy Lambda function stack:
+#   5. Deploy Lambda function stack:
 #        make deploy-lambda ENV=dev
 #
-#   5. Run database migrations:
+#   6. Run database migrations:
 #        make migrate ENV=dev
 #
-#   6. Invoke a function directly (no API Gateway required):
+#   7. Invoke a function directly (no API Gateway required):
 #        make invoke FUNCTION=osc-kiosk-range-lanes-dev \
 #                    PAYLOAD='{"headers":{"x-device-token":"<token>"},"httpMethod":"GET"}'
 #
-# For a full first-time deploy in a single command:
-#   make deploy-all ENV=dev DEVICE_TOKEN_SALT=<salt> && make migrate ENV=dev
+# For a full first-time deploy:
+#   make deploy-cognito ENV=dev && \
+#   make deploy-all ENV=dev DEVICE_TOKEN_SALT=<salt> && \
+#   make migrate ENV=dev
 # =============================================================================
 
 ENV             ?= dev
@@ -52,13 +57,26 @@ STACK_BACKUP    = osc-backup-$(ENV)
 STACK_IAM_KIOSK = osc-iam-kiosk-$(ENV)
 STACK_IAM_ADMIN = osc-iam-admin-$(ENV)
 STACK_IAM_MEMBER= osc-iam-member-$(ENV)
+STACK_COGNITO   = osc-cognito-$(ENV)
 STACK_ARTIFACTS = osc-artifacts-$(ENV)
 STACK_LAMBDA    = osc-lambda-$(ENV)
+
+# Social login is disabled by default. Set SOCIAL_LOGIN_ENABLED=true and supply
+# GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, FACEBOOK_APP_ID, FACEBOOK_APP_SECRET
+# once OAuth apps are configured for the environment.
+SOCIAL_LOGIN_ENABLED   ?= false
+GOOGLE_CLIENT_ID       ?=
+GOOGLE_CLIENT_SECRET   ?=
+FACEBOOK_APP_ID        ?=
+FACEBOOK_APP_SECRET    ?=
+CALLBACK_URL           ?= http://localhost:3000/auth/callback
+LOGOUT_URL             ?= http://localhost:3000
+USER_POOL_DOMAIN_PREFIX ?= osc-members-$(ENV)
 
 .PHONY: help gen-salt package upload \
         deploy-kms deploy-secrets deploy-sns deploy-s3 deploy-aurora \
         deploy-backup deploy-iam-kiosk deploy-iam-admin deploy-iam-member deploy-artifacts deploy-lambda \
-        deploy-base deploy-all update-code migrate invoke \
+        deploy-cognito deploy-base deploy-all update-code migrate invoke \
         _guard-nonprod destroy-lambda destroy-sns destroy-iam-kiosk destroy-iam-admin destroy-iam-member
 
 # =============================================================================
@@ -70,6 +88,7 @@ help:
 	@echo "  gen-salt          Generate a random device token salt (copy output to DEVICE_TOKEN_SALT)"
 	@echo "  package           Zip Lambda handlers into $(BUILD_DIR)/"
 	@echo "  upload            Upload ZIPs to the S3 artifacts bucket"
+	@echo "  deploy-cognito    Deploy the Cognito User Pool stack (prerequisite for deploy-base)"
 	@echo "  deploy-base       Deploy supporting stacks (kms→secrets→sns→s3→aurora→backup→iam-kiosk→iam-admin→iam-member→artifacts)"
 	@echo "  deploy-lambda     Deploy the Lambda function stack"
 	@echo "  deploy-all        Full first-time deploy: deploy-base + package + upload + deploy-lambda"
@@ -212,6 +231,22 @@ deploy-artifacts:
 		--stack-name  $(STACK_ARTIFACTS) \
 		--template-file infra/stacks/artifacts.yaml \
 		--parameter-overrides Environment=$(ENV) \
+		--no-fail-on-empty-changeset \
+		--profile $(AWS_PROFILE) --region $(REGION)
+
+deploy-cognito:
+	aws cloudformation deploy \
+		--stack-name  $(STACK_COGNITO) \
+		--template-file infra/stacks/cognito.yaml \
+		--parameter-overrides Environment=$(ENV) \
+		  SocialLoginEnabled=$(SOCIAL_LOGIN_ENABLED) \
+		  GoogleClientId=$(GOOGLE_CLIENT_ID) \
+		  GoogleClientSecret=$(GOOGLE_CLIENT_SECRET) \
+		  FacebookAppId=$(FACEBOOK_APP_ID) \
+		  FacebookAppSecret=$(FACEBOOK_APP_SECRET) \
+		  CallbackUrl=$(CALLBACK_URL) \
+		  LogoutUrl=$(LOGOUT_URL) \
+		  UserPoolDomainPrefix=$(USER_POOL_DOMAIN_PREFIX) \
 		--no-fail-on-empty-changeset \
 		--profile $(AWS_PROFILE) --region $(REGION)
 
