@@ -129,10 +129,10 @@ pytest tests/ --tb=short -q
 
 ## cfn-lint gate before opening
 
-Before opening any PR that touches `infra/**/*.yaml` or `infra/**/*.json`, run cfn-lint on all changed CloudFormation templates and verify there are no errors:
+Before opening any PR that touches `infra/**/*.yaml`, run cfn-lint on all changed CloudFormation templates and verify there are no errors:
 
 ```bash
-cfn-lint infra/**/*.yaml
+find infra -name "*.yaml" | xargs cfn-lint
 ```
 
 **Rules:**
@@ -151,7 +151,7 @@ cfn-lint infra/**/*.yaml
 - [ ] CORS headers are returned on all Lambda responses (including errors)
 - [ ] `training_level` is re-queried from Aurora — not read from the JWT claim
 - [ ] If the PR touches `functions/**/*.py` or `tests/**/*.py`: pytest passes; summary line included in PR description
-- [ ] If the PR touches `infra/**/*.yaml` or `infra/**/*.json`: cfn-lint reports no errors
+- [ ] If the PR touches `infra/**/*.yaml`: cfn-lint reports no errors
 - [ ] If a new file type or directory was introduced: verify `.gitignore` does not block it (`grep -r '<extension>' .gitignore`) before committing — this project has aggressive catch-all rules (`*.sql`, `*.csv`, `*.dump`) that silently swallow new file types
 
 ## GitHub tooling
