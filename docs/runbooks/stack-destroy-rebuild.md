@@ -19,8 +19,14 @@ Only stacks without stateful resources are eligible. The three supported targets
 | Target | Stack deleted | Rebuild command |
 | :--- | :--- | :--- |
 | `make destroy-lambda` | `osc-lambda-<env>` (Lambda functions + API Gateway) | `make deploy-lambda ENV=<env>` |
+| `make destroy-iam-kiosk` | `osc-iam-kiosk-<env>` (Kiosk IAM roles + policies) | `make deploy-base ENV=<env>` |
+| *(manual)* | `osc-iam-admin-<env>` (Admin IAM roles + policies) | `make deploy-base ENV=<env>` |
+| *(manual)* | `osc-iam-member-<env>` (Member IAM roles + policies) | `make deploy-base ENV=<env>` |
 | `make destroy-sns` | `osc-sns-<env>` (SNS topic) | `make deploy-base ENV=<env>` |
-| `make destroy-iam-kiosk` | `osc-iam-kiosk-<env>` (IAM roles + policies) | `make deploy-base ENV=<env>` |
+
+> **Note:** There are no `destroy-iam-admin` or `destroy-iam-member` Makefile targets.
+> To remove those stacks manually, use `aws cloudformation delete-stack` +
+> `aws cloudformation wait stack-delete-complete` (see [Troubleshooting](#troubleshooting)).
 
 **Do not attempt to destroy** the following — they carry `DeletionPolicy: Retain`
 and cannot be cleanly cycled without manual cleanup:
@@ -47,16 +53,21 @@ and cannot be cleanly cycled without manual cleanup:
 ## Dependency order
 
 `osc-lambda-<env>` imports exports from `osc-iam-kiosk-<env>` (the execution role ARN).
-If you destroy both, destroy Lambda first, then IAM. Rebuild in the opposite order:
-IAM first, then Lambda.
+`osc-iam-admin-<env>` and `osc-iam-member-<env>` both import the
+`osc-sns-admin-alerts-arn-<env>` export from `osc-sns-<env>`.
+CloudFormation blocks deletion of any stack whose exports are in use.
+
+If you are destroying all three supported stacks (lambda, iam, sns), the correct order is:
 
 ```text
-Destroy order:   lambda → iam → sns   (most-dependent first)
+Destroy order:   lambda → iam-kiosk → iam-admin → iam-member → sns   (most-dependent first)
 Rebuild order:   sns/iam (via deploy-base) → lambda
 ```
 
-SNS has no CloudFormation cross-stack dependency on the others and can be destroyed
-independently at any point.
+If you only need to destroy Lambda or IAM-kiosk, SNS does not need to be touched.
+If you only need to destroy SNS, `osc-iam-admin-<env>` and `osc-iam-member-<env>`
+must be deleted first (they import the SNS export) — even though they are not
+themselves being rebuilt from scratch.
 
 ---
 
@@ -82,11 +93,27 @@ make destroy-iam-kiosk ENV=dev
 make destroy-sns ENV=dev
 ```
 
-**All three** (in dependency order):
+**All stacks** (in dependency order):
 
 ```bash
 make destroy-lambda ENV=dev
 make destroy-iam-kiosk ENV=dev
+
+# iam-admin and iam-member have no Makefile targets — delete manually:
+aws cloudformation delete-stack \
+  --stack-name osc-iam-admin-dev \
+  --profile outdoorsportsclub --region us-east-1
+aws cloudformation wait stack-delete-complete \
+  --stack-name osc-iam-admin-dev \
+  --profile outdoorsportsclub --region us-east-1
+
+aws cloudformation delete-stack \
+  --stack-name osc-iam-member-dev \
+  --profile outdoorsportsclub --region us-east-1
+aws cloudformation wait stack-delete-complete \
+  --stack-name osc-iam-member-dev \
+  --profile outdoorsportsclub --region us-east-1
+
 make destroy-sns ENV=dev
 ```
 
