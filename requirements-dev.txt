@@ -4,8 +4,13 @@
 #   - Pylance import resolution (boto3, stripe)
 #   - CloudFormation linting (cfn-lint)
 #   - Python linting (ruff)
+#   - Unit tests (pytest + moto)
 
 boto3
 cfn-lint
+moto[s3,secretsmanager,sns]>=5.0
+pytest>=8.0
+pytest-cov>=5.0
+pytest-mock>=3.12
 ruff
 stripe
