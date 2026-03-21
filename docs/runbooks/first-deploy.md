@@ -119,9 +119,7 @@ Deploys `osc-lambda-dev` from `infra/stacks/lambda.yaml`, which creates all Lamb
 make migrate ENV=dev
 ```
 
-Queries CloudFormation for the Aurora cluster ARN and the Aurora-managed master secret ARN (exported as `osc-aurora-managed-secret-arn-<env>` from `osc-aurora-<env>`), then runs `scripts/migrate.py`, which executes all files in `db/migrations/` in filename order via the RDS Data API.
-
-> **Known issue (ODQ 32):** The current `make migrate` implementation queries `osc-secrets-<env>` for `AuroraMasterSecretArn` instead of the Aurora-managed secret. If migrations fail with an authentication error on a fresh environment, this is the cause. ODQ 32 tracks the Makefile fix.
+Queries `osc-aurora-<env>` for the cluster ARN (`AuroraClusterArn`) and the Aurora-managed master secret ARN (`AuroraManagedSecretArn`), then runs `scripts/migrate.py`, which executes all files in `db/migrations/` in filename order via the RDS Data API.
 
 **Verify:** `migrate.py` prints each migration filename and `OK` or raises on failure. Confirm all 19 migrations complete without error.
 

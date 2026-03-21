@@ -247,8 +247,8 @@ migrate:
 		--query "Stacks[0].Outputs[?OutputKey=='AuroraClusterArn'].OutputValue" \
 		--output text --profile $(AWS_PROFILE) --region $(REGION)))
 	$(eval SECRET_ARN := $(shell aws cloudformation describe-stacks \
-		--stack-name $(STACK_SECRETS) \
-		--query "Stacks[0].Outputs[?OutputKey=='AuroraMasterSecretArn'].OutputValue" \
+		--stack-name $(STACK_AURORA) \
+		--query "Stacks[0].Outputs[?OutputKey=='AuroraManagedSecretArn'].OutputValue" \
 		--output text --profile $(AWS_PROFILE) --region $(REGION)))
 	CLUSTER_ARN="$(CLUSTER_ARN)" \
 	SECRET_ARN="$(SECRET_ARN)" \
