@@ -4,14 +4,12 @@ GET /v1/kiosk/range/lanes — returns current lane occupancy for the device's ra
 """
 import json
 import sys
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from tests.conftest import (
     FakeContext,
-    HASHED_TOKEN,
-    RAW_TOKEN,
     active_device_row,
     device_event,
     load_kiosk_handler,
@@ -84,8 +82,6 @@ def _make_execute_side_effect(range_found, is_open, lanes):
 
 class TestRangeLanes:
     def test_happy_path_returns_lanes(self, mod):
-        rds = MagicMock()
-        rds.begin_transaction.return_value = {"transactionId": "tx-1"}
         auth_rds = MagicMock()
         auth_rds.execute_statement.return_value = {"records": [active_device_row()]}
 

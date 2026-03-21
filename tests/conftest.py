@@ -34,7 +34,7 @@ HASHED_TOKEN = hmac.new(FAKE_SALT.encode(), RAW_TOKEN.encode(), hashlib.sha256).
 # Helpers
 # ---------------------------------------------------------------------------
 
-def make_sm_client(*, include_stripe: bool = False) -> MagicMock:
+def make_sm_client() -> MagicMock:
     """Return a mock secretsmanager client that returns canned secrets."""
 
     def _get_secret_value(SecretId: str, **_):
@@ -113,8 +113,6 @@ def load_kiosk_handler(subpath: str):
     Returns the imported module.  The caller is responsible for removing
     the module from sys.modules after the test.
     """
-    import importlib.util
-
     kiosk_dir = os.path.join(os.path.dirname(__file__), "../functions/kiosk")
     handler_path = os.path.join(kiosk_dir, subpath, "handler.py")
     mod_name = f"kiosk_{subpath}_handler"
@@ -130,7 +128,6 @@ def load_kiosk_handler(subpath: str):
 
     with patch("boto3.client", side_effect=_kiosk_boto_factory):
         # Import _auth first so the salt is cached
-        import importlib as _il
         auth_spec = importlib.util.spec_from_file_location("_auth", os.path.join(kiosk_dir, "_auth.py"))
         auth_mod = importlib.util.module_from_spec(auth_spec)
         sys.modules["_auth"] = auth_mod

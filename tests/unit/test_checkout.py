@@ -22,7 +22,7 @@ def mod():
             del sys.modules[key]
 
 
-def _happy_rds(*, notify_phone: str | None = None):
+def _happy_rds():
     """RDS mock for a successful checkout (no wait list to advance)."""
     return make_rds({
         "set_config": {},

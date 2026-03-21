@@ -6,7 +6,6 @@ limit (≤ 2), verify Stripe intent for NFC/Card, record visit.
 import json
 import sys
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timezone, timedelta
 
 import pytest
 
@@ -17,7 +16,7 @@ FAKE_MEMBER_ID = "member-id-1"
 FAKE_GUEST_ID = "guest-id-1"
 FAKE_LANE_ID = "lane-id-1"
 GUEST_FEE_CENTS = 1000
-VALID_WAIVER_DATE = (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat()
+VALID_WAIVER_DATE = "2026-02-19T00:00:00+00:00"
 
 
 def _base_body(**overrides):
@@ -43,7 +42,7 @@ def mod():
             del sys.modules[key]
 
 
-def _rds_happy(*, visit_count: int = 0, payment_method: str = "Cash"):
+def _rds_happy(*, visit_count: int = 0):
     """RDS mock for the full happy-path guest-payment flow."""
     return make_rds({
         "set_config": {"records": []},
@@ -76,13 +75,13 @@ def _client_factory(rds_mock, sm_mock=None):
 
 class TestGuestPayment:
     def test_happy_path_cash(self, mod):
-        rds = _rds_happy(payment_method="Cash")
+        rds = _rds_happy()
         with patch("boto3.client", side_effect=_client_factory(rds)):
             resp = mod.handler(device_event(_base_body()), FakeContext())
         assert resp["statusCode"] == 200
 
     def test_happy_path_nfc_verified_intent(self, mod):
-        rds = _rds_happy(payment_method="NFC")
+        rds = _rds_happy()
         sm = _sm_mock()
         mock_intent = {
             "status": "succeeded",
@@ -147,7 +146,7 @@ class TestGuestPayment:
         assert resp["statusCode"] == 403
 
     def test_unconfirmed_stripe_intent_returns_402(self, mod):
-        rds = _rds_happy(payment_method="NFC")
+        rds = _rds_happy()
         sm = _sm_mock()
         bad_intent = {"status": "requires_payment_method", "amount": GUEST_FEE_CENTS, "currency": "usd", "metadata": {}}
         with patch("boto3.client", side_effect=_client_factory(rds, sm)):
@@ -172,14 +171,3 @@ class TestGuestPayment:
             resp = mod.handler(device_event(_base_body()), FakeContext())
         assert "Access-Control-Allow-Origin" in resp["headers"]
 
-
-# ---------------------------------------------------------------------------
-# Helpers referenced above
-# ---------------------------------------------------------------------------
-
-def active_device_row():
-    return [
-        {"stringValue": "device-id-1"},
-        {"stringValue": "range-id-1"},
-        {"stringValue": "Active"},
-    ]

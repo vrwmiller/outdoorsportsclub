@@ -3,14 +3,13 @@
 POST /v1/devices/pair — validates a pairing code and activates the device,
 returning the raw device token exactly once.
 """
-import importlib
 import json
 import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.conftest import FakeContext, FAKE_SALT, make_sm_client
+from tests.conftest import FakeContext, make_sm_client
 
 
 # ---------------------------------------------------------------------------
