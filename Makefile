@@ -51,7 +51,7 @@ STACK_AURORA    = osc-aurora-$(ENV)
 STACK_BACKUP    = osc-backup-$(ENV)
 STACK_IAM_KIOSK = osc-iam-kiosk-$(ENV)
 STACK_IAM_ADMIN = osc-iam-admin-$(ENV)
-STACK_IAM_MEMBER = osc-iam-member-$(ENV)
+STACK_IAM_MEMBER= osc-iam-member-$(ENV)
 STACK_ARTIFACTS = osc-artifacts-$(ENV)
 STACK_LAMBDA    = osc-lambda-$(ENV)
 
@@ -59,7 +59,7 @@ STACK_LAMBDA    = osc-lambda-$(ENV)
         deploy-kms deploy-secrets deploy-sns deploy-s3 deploy-aurora \
         deploy-backup deploy-iam-kiosk deploy-iam-admin deploy-iam-member deploy-artifacts deploy-lambda \
         deploy-base deploy-all update-code migrate invoke \
-        _guard-nonprod destroy-lambda destroy-sns destroy-iam-kiosk
+        _guard-nonprod destroy-lambda destroy-sns destroy-iam-kiosk destroy-iam-admin destroy-iam-member
 
 # =============================================================================
 help:
@@ -80,7 +80,9 @@ help:
 	@echo "Destroy targets (dev only — blocked on ENV=prod):"
 	@echo "  destroy-lambda    Delete the Lambda + API Gateway stack (rebuildable via deploy-lambda)"
 	@echo "  destroy-sns       Delete the SNS topic stack (rebuildable via deploy-base)"
-	@echo "  destroy-iam-kiosk Delete the IAM kiosk roles stack (rebuildable via deploy-base)"
+	@echo "  destroy-iam-kiosk   Delete the IAM kiosk roles stack (rebuildable via deploy-base)
+  destroy-iam-admin   Delete the IAM admin roles stack (rebuildable via deploy-base)
+  destroy-iam-member  Delete the IAM member roles stack (rebuildable via deploy-base)"
 	@echo ""
 	@echo "Variables:"
 	@echo "  ENV=$(ENV)  AWS_PROFILE=$(AWS_PROFILE)  REGION=$(REGION)"
@@ -335,4 +337,20 @@ destroy-iam-kiosk: _guard-nonprod
 		--stack-name $(STACK_IAM_KIOSK) \
 		--profile $(AWS_PROFILE) --region $(REGION)
 	@echo "$(STACK_IAM_KIOSK) deleted. Rebuild with: make deploy-base ENV=$(ENV)"
+destroy-iam-admin: _guard-nonprod
+	aws cloudformation delete-stack \
+		--stack-name $(STACK_IAM_ADMIN) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	aws cloudformation wait stack-delete-complete \
+		--stack-name $(STACK_IAM_ADMIN) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	@echo "$(STACK_IAM_ADMIN) deleted. Rebuild with: make deploy-base ENV=$(ENV)"
+destroy-iam-member: _guard-nonprod
+	aws cloudformation delete-stack \
+		--stack-name $(STACK_IAM_MEMBER) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	aws cloudformation wait stack-delete-complete \
+		--stack-name $(STACK_IAM_MEMBER) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	@echo "$(STACK_IAM_MEMBER) deleted. Rebuild with: make deploy-base ENV=$(ENV)"
 
