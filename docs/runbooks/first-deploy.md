@@ -69,14 +69,23 @@ Social login is disabled by default. For dev, no additional parameters are requi
 For prod with Google and Facebook social login:
 
 ```bash
+# Export secrets so they are not recorded in shell history
+export GOOGLE_CLIENT_SECRET=<secret>
+export FACEBOOK_APP_SECRET=<secret>
+
 make deploy-cognito ENV=prod SOCIAL_LOGIN_ENABLED=true \
-  GOOGLE_CLIENT_ID=<id> GOOGLE_CLIENT_SECRET=<secret> \
-  FACEBOOK_APP_ID=<id> FACEBOOK_APP_SECRET=<secret> \
+  GOOGLE_CLIENT_ID=<id> \
+  FACEBOOK_APP_ID=<id> \
   CALLBACK_URL=https://outdoorsportsclub.com/auth/callback \
   LOGOUT_URL=https://outdoorsportsclub.com \
-  USER_POOL_DOMAIN_PREFIX=osc-members-prod
+  USER_POOL_DOMAIN_PREFIX=osc-members-prod-a1b2c3
 ```
 
+> `USER_POOL_DOMAIN_PREFIX` must be globally unique across all AWS accounts. Use the
+> convention `osc-members-<env>-<short-account-suffix>` (e.g. `osc-members-prod-a1b2c3`).
+> The exported `GOOGLE_CLIENT_SECRET` and `FACEBOOK_APP_SECRET` values are picked up
+> automatically by Make from the environment.
+>
 > `osc-iam-admin-<env>` and `osc-iam-member-<env>` import the Cognito User Pool ARN.
 > `deploy-base` will fail with `No export named osc-cognito-user-pool-arn-<env> found`
 > if this step is skipped.

@@ -82,6 +82,19 @@ Parameters:
       Convention: osc-members-<env>-<short-account-suffix>
       Example:    osc-members-prod-a1b2c3
 
+Rules:
+  SocialLoginParamsRequired:
+    RuleCondition: !Equals [!Ref SocialLoginEnabled, "true"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref GoogleClientId, ""]]
+        AssertDescription: "GoogleClientId is required when SocialLoginEnabled is true"
+      - Assert: !Not [!Equals [!Ref GoogleClientSecret, ""]]
+        AssertDescription: "GoogleClientSecret is required when SocialLoginEnabled is true"
+      - Assert: !Not [!Equals [!Ref FacebookAppId, ""]]
+        AssertDescription: "FacebookAppId is required when SocialLoginEnabled is true"
+      - Assert: !Not [!Equals [!Ref FacebookAppSecret, ""]]
+        AssertDescription: "FacebookAppSecret is required when SocialLoginEnabled is true"
+
 Conditions:
   # Social identity providers are optional. Set SocialLoginEnabled=true
   # once Google and Facebook OAuth apps are configured for the environment.
@@ -198,11 +211,16 @@ Resources:
       # uses PKCE with the authorization code flow; no secret is needed.
       GenerateSecret: false
 
+      # Use !Ref on the provider resources (not string literals) so that
+      # CloudFormation creates an implicit dependency and does not race when
+      # SocialLoginEnabled is true. !Ref on a UserPoolIdentityProvider returns
+      # its ProviderName ("Google", "Facebook"). When SocialLoginEnabled is
+      # false the providers are excluded by condition, so no dependency exists.
       SupportedIdentityProviders: !If
         - SocialLoginEnabled
         - - COGNITO
-          - Google
-          - Facebook
+          - !Ref GoogleIdentityProvider
+          - !Ref FacebookIdentityProvider
         - - COGNITO   # email/password only until social login is enabled
 
       AllowedOAuthFlows:

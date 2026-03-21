@@ -71,7 +71,7 @@ FACEBOOK_APP_ID        ?=
 FACEBOOK_APP_SECRET    ?=
 CALLBACK_URL           ?= http://localhost:3000/auth/callback
 LOGOUT_URL             ?= http://localhost:3000
-USER_POOL_DOMAIN_PREFIX ?= osc-members-$(ENV)
+USER_POOL_DOMAIN_PREFIX ?=
 
 .PHONY: help gen-salt package upload \
         deploy-kms deploy-secrets deploy-sns deploy-s3 deploy-aurora \
@@ -235,7 +235,7 @@ deploy-artifacts:
 		--profile $(AWS_PROFILE) --region $(REGION)
 
 deploy-cognito:
-	aws cloudformation deploy \
+	@aws cloudformation deploy \
 		--stack-name  $(STACK_COGNITO) \
 		--template-file infra/stacks/cognito.yaml \
 		--parameter-overrides Environment=$(ENV) \
