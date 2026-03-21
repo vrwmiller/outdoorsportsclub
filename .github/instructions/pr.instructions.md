@@ -113,6 +113,20 @@ Before opening any PR that touches `functions/**/*.py`, `db/**/*.sql`, or `infra
 
 Research and fix any **High** or **Critical** findings before opening the PR. **Medium** and **Low** findings may be noted in the PR description and addressed in a follow-up. This prevents a second review round for issues the security agent would have caught before the PR was opened.
 
+## Test gate before opening
+
+Before opening any PR that touches `functions/**/*.py` or `tests/**/*.py`, run the full pytest suite locally and verify it passes:
+
+```bash
+pytest tests/ --tb=short -q
+```
+
+**Rules:**
+- If any test fails, fix it before opening the PR. Do not open a PR with a known failing test.
+- Paste the final summary line (e.g., `80 passed in 0.17s`) into the PR description under **Testing**.
+- If the PR adds or modifies a handler, also confirm the corresponding `tests/unit/test_<handler>.py` file exists and covers the changed behavior — add or update tests before opening.
+- If the PR touches no handler or test files (e.g., docs-only, infra-only, schema-only), running pytest is not required. Omit the test summary from the PR description rather than filling in "N/A".
+
 ## Checklist before opening
 
 - [ ] Branch is not `main`
@@ -123,6 +137,7 @@ Research and fix any **High** or **Critical** findings before opening the PR. **
 - [ ] New CloudFormation resources have `DeletionPolicy: Retain` if stateful
 - [ ] CORS headers are returned on all Lambda responses (including errors)
 - [ ] `training_level` is re-queried from Aurora — not read from the JWT claim
+- [ ] If the PR touches `functions/**/*.py` or `tests/**/*.py`: pytest passes; summary line included in PR description
 - [ ] If a new file type or directory was introduced: verify `.gitignore` does not block it (`grep -r '<extension>' .gitignore`) before committing — this project has aggressive catch-all rules (`*.sql`, `*.csv`, `*.dump`) that silently swallow new file types
 
 ## GitHub tooling
