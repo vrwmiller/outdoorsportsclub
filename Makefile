@@ -80,9 +80,9 @@ help:
 	@echo "Destroy targets (dev only — blocked on ENV=prod):"
 	@echo "  destroy-lambda    Delete the Lambda + API Gateway stack (rebuildable via deploy-lambda)"
 	@echo "  destroy-sns       Delete the SNS topic stack (rebuildable via deploy-base)"
-	@echo "  destroy-iam-kiosk   Delete the IAM kiosk roles stack (rebuildable via deploy-base)
-  destroy-iam-admin   Delete the IAM admin roles stack (rebuildable via deploy-base)
-  destroy-iam-member  Delete the IAM member roles stack (rebuildable via deploy-base)"
+	@echo "  destroy-iam-kiosk   Delete the IAM kiosk roles stack (rebuildable via deploy-base)"
+	@echo "  destroy-iam-admin   Delete the IAM admin roles stack (rebuildable via deploy-base)"
+	@echo "  destroy-iam-member  Delete the IAM member roles stack (rebuildable via deploy-base)"
 	@echo ""
 	@echo "Variables:"
 	@echo "  ENV=$(ENV)  AWS_PROFILE=$(AWS_PROFILE)  REGION=$(REGION)"
