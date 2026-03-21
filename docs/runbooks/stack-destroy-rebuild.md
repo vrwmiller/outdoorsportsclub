@@ -20,7 +20,7 @@ Only stacks without stateful resources are eligible. The three supported targets
 |---|---|---|
 | `make destroy-lambda` | `osc-lambda-<env>` (Lambda functions + API Gateway) | `make deploy-lambda ENV=<env>` |
 | `make destroy-sns` | `osc-sns-<env>` (SNS topic) | `make deploy-base ENV=<env>` |
-| `make destroy-iam` | `osc-iam-kiosk-<env>` (IAM roles + policies) | `make deploy-base ENV=<env>` |
+| `make destroy-iam-kiosk` | `osc-iam-kiosk-<env>` (IAM roles + policies) | `make deploy-base ENV=<env>` |
 
 **Do not attempt to destroy** the following — they carry `DeletionPolicy: Retain`
 and cannot be cleanly cycled without manual cleanup:
@@ -70,7 +70,7 @@ make destroy-lambda ENV=dev
 
 **IAM only** (only safe after Lambda is already deleted or if Lambda stack does not exist):
 ```bash
-make destroy-iam ENV=dev
+make destroy-iam-kiosk ENV=dev
 ```
 
 **SNS only:**
@@ -81,11 +81,11 @@ make destroy-sns ENV=dev
 **All three** (in dependency order):
 ```bash
 make destroy-lambda ENV=dev
-make destroy-iam ENV=dev
+make destroy-iam-kiosk ENV=dev
 make destroy-sns ENV=dev
 ```
 
-> If `destroy-iam` fails with a `DELETE_FAILED` error and CloudFormation reports that
+> If `destroy-iam-kiosk` fails with a `DELETE_FAILED` error and CloudFormation reports that
 > `osc-lambda-<env>` still references the role, destroy Lambda first.
 
 ---
@@ -131,7 +131,7 @@ Cognito Authorizer is not configured correctly.
 CloudFormation sometimes fails to delete API Gateway stages or Lambda ENIs
 immediately. Wait 2–3 minutes and retry `make destroy-lambda ENV=dev`.
 
-**`make destroy-iam` fails with export reference error**
+**`make destroy-iam-kiosk` fails with export reference error**
 `osc-lambda-<env>` imports `osc-iam-kiosk-<env>` exports. Destroy Lambda first.
 
 **`make deploy-lambda` fails with "role does not exist"**

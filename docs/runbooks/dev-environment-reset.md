@@ -40,11 +40,11 @@ Run in this order. Each command blocks until the stack is fully deleted.
 
 ```bash
 make destroy-lambda ENV=dev
-make destroy-iam ENV=dev
+make destroy-iam-kiosk ENV=dev
 make destroy-sns ENV=dev
 ```
 
-> `destroy-lambda` must run before `destroy-iam` because the Lambda stack imports
+> `destroy-lambda` must run before `destroy-iam-kiosk` because the Lambda stack imports
 > the IAM execution role ARN as a CloudFormation cross-stack export. Reversing the
 > order produces a `DELETE_FAILED` error.
 
@@ -96,7 +96,7 @@ Expected: HTTP 200 with a JSON body.
 ```bash
 # Destroy (most-dependent first)
 make destroy-lambda ENV=dev
-make destroy-iam ENV=dev
+make destroy-iam-kiosk ENV=dev
 make destroy-sns ENV=dev
 
 # Rebuild
@@ -114,7 +114,7 @@ make invoke ENV=dev FUNCTION=osc-kiosk-range-lanes-dev PAYLOAD='{"httpMethod":"G
 
 ## Troubleshooting
 
-**`destroy-iam` fails with export reference error**
+**`destroy-iam-kiosk` fails with export reference error**
 `osc-lambda-dev` still exists. Run `make destroy-lambda ENV=dev` first.
 
 **`deploy-lambda` fails with "role does not exist"**
