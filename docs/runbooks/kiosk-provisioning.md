@@ -21,8 +21,8 @@ See `docs/design.md` Section 2 for the full pairing sequence and `devices` table
 1. Sign in to the **Admin Portal** with a Level 6 account
 2. Navigate to **Devices → Provision new kiosk**
 3. Enter:
-    * **Location tag** — human-readable name for this tablet (e.g., `Skeet-Trap-1`)
-    * **Range** — select the range this kiosk serves from the dropdown
+   * **Location tag** — human-readable name for this tablet (e.g., `Skeet-Trap-1`)
+   * **Range** — select the range this kiosk serves from the dropdown
 4. Click **Generate pairing code**
 5. The portal calls `POST /v1/admin/devices/pairing-code` and displays a short alphanumeric code with a **15-minute expiry**
 

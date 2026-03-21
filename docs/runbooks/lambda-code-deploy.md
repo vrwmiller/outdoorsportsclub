@@ -50,7 +50,7 @@ Copies each ZIP to `s3://osc-lambda-artifacts-dev-<account-id>/`. This overwrite
 
 ## Step 3 — Push new code to Lambda
 
-### If `infra/stacks/lambda.yaml` also changed:
+### If `infra/stacks/lambda.yaml` also changed
 
 ```bash
 make deploy-lambda ENV=dev
@@ -58,7 +58,7 @@ make deploy-lambda ENV=dev
 
 CloudFormation updates the `osc-lambda-<env>` stack. Lambda picks up the new ZIP from S3 as part of the resource update.
 
-### If an IAM template in `infra/stacks/iam/` also changed:
+### If an IAM template in `infra/stacks/iam/` also changed
 
 ```bash
 make deploy-iam-kiosk ENV=dev
@@ -66,7 +66,7 @@ make deploy-iam-kiosk ENV=dev
 
 IAM roles live in a separate stack (`osc-iam-kiosk-<env>`) and are deployed independently. Run this before `deploy-lambda` if the execution role or policies changed.
 
-### If only handler code changed (no template change):
+### If only handler code changed (no template change)
 
 ```bash
 make update-code ENV=dev

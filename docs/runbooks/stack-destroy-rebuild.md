@@ -49,7 +49,7 @@ and cannot be cleanly cycled without manual cleanup:
 If you destroy both, destroy Lambda first, then IAM. Rebuild in the opposite order:
 IAM first, then Lambda.
 
-```
+```text
 Destroy order:   lambda → iam → sns   (most-dependent first)
 Rebuild order:   sns/iam (via deploy-base) → lambda
 ```
@@ -64,21 +64,25 @@ independently at any point.
 Each target blocks until CloudFormation confirms the stack is fully deleted before returning.
 
 **Lambda only:**
+
 ```bash
 make destroy-lambda ENV=dev
 ```
 
 **IAM only** (only safe after Lambda is already deleted or if Lambda stack does not exist):
+
 ```bash
 make destroy-iam-kiosk ENV=dev
 ```
 
 **SNS only:**
+
 ```bash
 make destroy-sns ENV=dev
 ```
 
 **All three** (in dependency order):
+
 ```bash
 make destroy-lambda ENV=dev
 make destroy-iam-kiosk ENV=dev
@@ -93,6 +97,7 @@ make destroy-sns ENV=dev
 ## Step 2 — Rebuild
 
 **Rebuild SNS and IAM** (both are part of `deploy-base`):
+
 ```bash
 make deploy-base ENV=dev
 ```
@@ -101,6 +106,7 @@ make deploy-base ENV=dev
 destroyed — it will skip stacks that are already up to date.
 
 **Rebuild Lambda:**
+
 ```bash
 make deploy-lambda ENV=dev
 ```
