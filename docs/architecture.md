@@ -174,6 +174,65 @@ Every Lambda invocation enforces RBAC independently of the surface routing above
 | 5 | Administrator | Admin nav | Finance, database, and rules oversight |
 | 6 | Webmaster | Admin nav | Full system access; device pairing; account recovery |
 
+## CloudFormation Stack Dependencies
+
+Each arrow means "must be deployed before". The circled numbers match the `make deploy-base` order. Stacks with no incoming arrows have no CloudFormation `ImportValue` dependencies and can be deployed first.
+
+```mermaid
+flowchart TD
+    subgraph BASE["No imports"]
+        kms["① osc-kms\nkms.yaml"]
+        sns["③ osc-sns\nsns.yaml"]
+        art["⑩ osc-artifacts\nartifacts.yaml"]
+    end
+
+    subgraph T2["Import from kms"]
+        sec["② osc-secrets\nsecrets.yaml"]
+        s3["④ osc-s3\ns3.yaml"]
+        aur["⑤ osc-aurora\naurora.yaml"]
+    end
+
+    subgraph T3["Import from tier 2"]
+        bak["⑥ osc-backup\nbackup.yaml"]
+        iak["⑦ osc-iam-kiosk\niam/lambda-kiosk-roles.yaml"]
+        iaa["⑧ osc-iam-admin\niam/lambda-admin-roles.yaml"]
+        iam["⑨ osc-iam-member\niam/lambda-member-roles.yaml"]
+    end
+
+    lam["⑪ osc-lambda\nlambda.yaml"]
+    cog([Cognito\nAmplify-managed])
+
+    kms --> sec
+    kms --> s3
+    kms --> aur
+    kms --> iak
+    kms --> iaa
+    kms --> iam
+
+    sec --> iak
+    sec --> lam
+
+    sns --> iaa
+    sns --> lam
+
+    s3 --> bak
+    s3 --> iak
+    s3 --> lam
+
+    aur --> bak
+    aur --> iak
+    aur --> iaa
+    aur --> iam
+    aur --> lam
+
+    art --> lam
+    iak --> lam
+
+    cog -.->|osc-cognito-user-pool-arn| iaa
+```
+
+`osc-lambda` is the only stack in `make deploy-lambda` — all other stacks are in `make deploy-base`. The Cognito User Pool ARN is exported by the Amplify-managed Cognito stack (not a CloudFormation stack in this repo) and is consumed only by `osc-iam-admin`.
+
 ## Extensibility Notes
 
 ### Adding a new surface
