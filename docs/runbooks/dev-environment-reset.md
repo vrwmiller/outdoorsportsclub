@@ -123,6 +123,7 @@ Wait for `deploy-base` to finish fully before running `deploy-lambda`.
 
 **`make invoke` returns a `FunctionError` or a non-200 `statusCode` in the response body**
 Lambda deployed but the handler is failing at startup. Check CloudWatch Logs:
+
 ```bash
 aws logs tail /aws/lambda/osc-kiosk-range-lanes-dev --since 5m --profile outdoorsportsclub
 ```

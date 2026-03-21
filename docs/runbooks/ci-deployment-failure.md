@@ -36,7 +36,7 @@ This runbook covers diagnosing and recovering from a failed GitHub Actions deplo
 <!-- - Lambda version rollback procedure -->
 <!-- - GitHub Actions re-run vs. git revert guidance -->
 
-*(Procedure to be written when deployment workflow files are authored)*
+> Procedure to be written when deployment workflow files are authored.
 
 ---
 

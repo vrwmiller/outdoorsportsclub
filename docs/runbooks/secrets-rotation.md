@@ -26,8 +26,8 @@ See `docs/design.md` Section 8 (multi-region replication) for the replication or
 ### 1. Generate a new key in Stripe
 
 1. Sign in to the [Stripe Dashboard](https://dashboard.stripe.com)
-    * For **prod**: use the **Live mode** toggle (top-left)
-    * For **dev**: use **Test mode**
+   * For **prod**: use the **Live mode** toggle (top-left)
+   * For **dev**: use **Test mode**
 2. Navigate to **Developers → API keys**
 3. Click **Create secret key** (or **Roll key** on the existing restricted key)
 4. Copy the new secret key — it is shown only once

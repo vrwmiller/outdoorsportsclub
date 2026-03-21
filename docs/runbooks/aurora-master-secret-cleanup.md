@@ -8,8 +8,8 @@ Because the resource carries `DeletionPolicy: Retain`, simply removing it from t
 
 ## Pre-requisites
 
-- AWS CLI configured with the `outdoorsportsclub` profile and sufficient IAM permissions (`cloudformation:*`, `secretsmanager:DeleteSecret`)
-- No CloudFormation stack currently imports `osc-aurora-master-secret-arn-<env>`
+* AWS CLI configured with the `outdoorsportsclub` profile and sufficient IAM permissions (`cloudformation:*`, `secretsmanager:DeleteSecret`)
+* No CloudFormation stack currently imports `osc-aurora-master-secret-arn-<env>`
 
 ## Steps
 
@@ -25,8 +25,8 @@ Expected result: no output. If any matches appear, do not proceed — investigat
 
 In `infra/stacks/secrets.yaml`, delete:
 
-- The `AuroraMasterSecret` resource block
-- The `AuroraMasterSecretArn` output block (which exports `osc-aurora-master-secret-arn-<env>`)
+* The `AuroraMasterSecret` resource block
+* The `AuroraMasterSecretArn` output block (which exports `osc-aurora-master-secret-arn-<env>`)
 
 ### 3. Deploy the updated stack
 
@@ -70,5 +70,5 @@ Expected result: `ResourceNotFoundException`. Repeat for `prod`.
 
 ## Notes
 
-- The stale secret contains the former Aurora master password. Aurora rotates the managed-password secret on its own schedule (within 7 days of the PR #55 deploy), so by the time this runbook is executed the old password will no longer be active.
-- This runbook is safe to run at any time after the PR #55 deploy, but is classified Post-launch because no active system component depends on the orphaned secret.
+* The stale secret contains the former Aurora master password. Aurora rotates the managed-password secret on its own schedule (within 7 days of the PR #55 deploy), so by the time this runbook is executed the old password will no longer be active.
+* This runbook is safe to run at any time after the PR #55 deploy, but is classified Post-launch because no active system component depends on the orphaned secret.
