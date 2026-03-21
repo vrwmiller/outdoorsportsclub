@@ -127,6 +127,19 @@ pytest tests/ --tb=short -q
 - If the PR adds or modifies a handler, also confirm the corresponding `tests/unit/test_<handler>.py` file exists and covers the changed behavior — add or update tests before opening.
 - If the PR touches no handler or test files (e.g., docs-only, infra-only, schema-only), running pytest is not required. Omit the test summary from the PR description rather than filling in "N/A".
 
+## cfn-lint gate before opening
+
+Before opening any PR that touches `infra/**/*.yaml` or `infra/**/*.json`, run cfn-lint on all changed CloudFormation templates and verify there are no errors:
+
+```bash
+cfn-lint infra/**/*.yaml
+```
+
+**Rules:**
+- If any error is reported, fix it before opening the PR. Do not open a PR with a known cfn-lint error.
+- Warnings (`W` prefix) may be noted in the PR description and addressed in a follow-up if they are not actionable.
+- If the PR touches no infra files (e.g., handler-only, docs-only, schema-only), running cfn-lint is not required.
+
 ## Checklist before opening
 
 - [ ] Branch is not `main`
@@ -138,6 +151,7 @@ pytest tests/ --tb=short -q
 - [ ] CORS headers are returned on all Lambda responses (including errors)
 - [ ] `training_level` is re-queried from Aurora — not read from the JWT claim
 - [ ] If the PR touches `functions/**/*.py` or `tests/**/*.py`: pytest passes; summary line included in PR description
+- [ ] If the PR touches `infra/**/*.yaml` or `infra/**/*.json`: cfn-lint reports no errors
 - [ ] If a new file type or directory was introduced: verify `.gitignore` does not block it (`grep -r '<extension>' .gitignore`) before committing — this project has aggressive catch-all rules (`*.sql`, `*.csv`, `*.dump`) that silently swallow new file types
 
 ## GitHub tooling
