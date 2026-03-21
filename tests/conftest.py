@@ -1,9 +1,9 @@
 """Shared pytest fixtures for Lambda handler unit tests.
 
 All handlers (and _auth.py) call boto3.client("secretsmanager") at module level
-to fetch the DEVICE_TOKEN_SALT during the Lambda cold-start.  The ``patch_boto``
-fixture patches boto3.client *before* any handler module is imported, preventing
-real AWS calls from being made during the test collection phase.
+to fetch the DEVICE_TOKEN_SALT during the Lambda cold-start.  To avoid real AWS
+calls, tests import handler modules via helper loaders (for example,
+``load_kiosk_handler()``) that patch boto3.client *before* the module is imported.
 """
 import hashlib
 import hmac
