@@ -137,7 +137,7 @@ Resources:
                 Resource: "*"
                 Condition:
                   StringEquals:
-                    sns:DestinationType: DirectPublish
+                    sns:DestinationType: PhoneNumber
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
