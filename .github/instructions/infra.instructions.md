@@ -102,7 +102,7 @@ CheckInLambdaRole:
   Resource: "*"
   Condition:
     StringEquals:
-      sns:DestinationType: DirectPublish
+      sns:DestinationType: PhoneNumber
 ```
 
 * Always include `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents` scoped to the function's log group
