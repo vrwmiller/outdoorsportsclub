@@ -10,9 +10,9 @@ for KMS key deletion.
 
 ## Prerequisites
 
-- AWS CLI configured with profile `outdoorsportsclub`
-- `gh` CLI authenticated
-- Venv activated: `source .venv/bin/activate`
+* AWS CLI configured with profile `outdoorsportsclub`
+* `gh` CLI authenticated
+* Venv activated: `source .venv/bin/activate`
 
 ---
 
@@ -22,21 +22,72 @@ for KMS key deletion.
 `DeletionPolicy: Retain`, so the buckets will not be deleted by the stack teardown at all.
 You must empty them manually.
 
+First, resolve the account ID used in the bucket names:
+
 ```bash
-aws s3 rm s3://osc-waivers-dev-920835814440 --recursive --profile outdoorsportsclub
-aws s3 rm s3://osc-lambda-artifacts-dev-920835814440 --recursive --profile outdoorsportsclub
+ACCOUNT_ID=$(aws sts get-caller-identity \
+  --query Account --output text --profile outdoorsportsclub)
 ```
 
-If S3 Object Lock is enabled on `osc-waivers-dev-*` (it will be once waivers are in use),
-objects under a Compliance-mode lock cannot be deleted until the retention period expires
-(7 years). You would need to contact AWS Support to override this, or simply accept that
-the bucket will persist until the lock expires.
-
-Then delete the buckets:
+**Artifacts bucket** — no Object Lock, a simple recursive delete is sufficient:
 
 ```bash
-aws s3 rb s3://osc-waivers-dev-920835814440 --profile outdoorsportsclub
-aws s3 rb s3://osc-lambda-artifacts-dev-920835814440 --profile outdoorsportsclub
+aws s3 rm "s3://osc-lambda-artifacts-dev-${ACCOUNT_ID}" \
+  --recursive --profile outdoorsportsclub
+```
+
+**Waivers bucket** — has S3 Object Lock with versioning enabled. A simple
+`s3 rm --recursive` only inserts delete markers; noncurrent versions remain and will
+prevent `s3 rb` from succeeding. You must explicitly delete all versions and delete
+markers.
+
+The dev bucket uses **Governance mode** with a **7-day** retention window. Governance
+locks can be bypassed by any caller with `s3:BypassGovernanceRetention` — pass
+`--bypass-governance-retention` to override objects still within the window.
+
+```bash
+export WAIVERS_BUCKET="osc-waivers-dev-${ACCOUNT_ID}"
+
+python3 << 'PYEOF'
+import json, subprocess, os
+
+bucket  = os.environ["WAIVERS_BUCKET"]
+profile = "outdoorsportsclub"
+
+for query, bypass in [
+    ("Versions[].{Key:Key,VersionId:VersionId}", True),
+    ("DeleteMarkers[].{Key:Key,VersionId:VersionId}", False),
+]:
+    result = subprocess.run(
+        ["aws", "s3api", "list-object-versions",
+         "--bucket", bucket,
+         "--query", query,
+         "--output", "json",
+         "--profile", profile],
+        capture_output=True, text=True, check=True,
+    )
+    objs = json.loads(result.stdout) or []
+    if not objs:
+        print(f"No items matched: {query}")
+        continue
+    cmd = [
+        "aws", "s3api", "delete-objects",
+        "--bucket", bucket,
+        "--delete", json.dumps({"Objects": objs}),
+        "--profile", profile,
+    ]
+    if bypass:
+        cmd.append("--bypass-governance-retention")
+    subprocess.run(cmd, check=True)
+    print(f"Deleted {len(objs)} item(s)")
+PYEOF
+```
+
+Then delete both buckets:
+
+```bash
+aws s3 rb "s3://osc-waivers-dev-${ACCOUNT_ID}" --profile outdoorsportsclub
+aws s3 rb "s3://osc-lambda-artifacts-dev-${ACCOUNT_ID}" --profile outdoorsportsclub
 ```
 
 ---
@@ -87,46 +138,54 @@ aws backup delete-backup-vault \
 
 ## Step 3 — Delete Aurora cluster (retained resource)
 
-The Aurora cluster has `DeletionPolicy: Retain` and will not be removed by the stack
-deletion. Delete it manually. Skip the final snapshot if you do not need the data.
+The Aurora cluster has `DeletionPolicy: Retain` and will not be removed by stack
+deletion. This runbook always deletes without a final snapshot. If you need to preserve
+data, take a manual snapshot via the AWS console before running these commands.
 
 ```bash
-# Delete the cluster instances first
-aws rds describe-db-clusters \
-  --profile outdoorsportsclub --region us-east-1 \
-  --query 'DBClusters[?contains(DBClusterIdentifier, `osc`)].DBClusterMembers[*].DBInstanceIdentifier' \
-  --output text \
-| tr '\t' '\n' \
-| while read INSTANCE; do
-    aws rds delete-db-instance \
-      --db-instance-identifier "$INSTANCE" \
-      --skip-final-snapshot \
-      --profile outdoorsportsclub --region us-east-1
-  done
+# Delete the cluster instance first
+aws rds delete-db-instance \
+  --db-instance-identifier osc-aurora-dev-instance \
+  --skip-final-snapshot \
+  --profile outdoorsportsclub --region us-east-1
 
-# Then delete the cluster (wait for instances to finish deleting first)
+# Wait for the instance to finish deleting, then delete the cluster
+aws rds wait db-instance-deleted \
+  --db-instance-identifier osc-aurora-dev-instance \
+  --profile outdoorsportsclub --region us-east-1
+
+aws rds delete-db-cluster \
+  --db-cluster-identifier osc-aurora-dev \
+  --skip-final-snapshot \
+  --profile outdoorsportsclub --region us-east-1
+```
+
+If the instance identifier differs, look it up first:
+
+```bash
 aws rds describe-db-clusters \
+  --db-cluster-identifier osc-aurora-dev \
   --profile outdoorsportsclub --region us-east-1 \
-  --query 'DBClusters[?contains(DBClusterIdentifier, `osc`)].DBClusterIdentifier' \
-  --output text \
-| tr '\t' '\n' \
-| while read CLUSTER; do
-    aws rds delete-db-cluster \
-      --db-cluster-identifier "$CLUSTER" \
-      --skip-final-snapshot \
-      --profile outdoorsportsclub --region us-east-1
-  done
+  --query 'DBClusters[0].DBClusterMembers[*].DBInstanceIdentifier' \
+  --output text
 ```
 
 ---
 
 ## Step 4 — Delete Cognito user pool (retained resource)
 
-The Cognito user pool has `DeletionPolicy: Retain`. Delete it manually.
+The Cognito user pool has `DeletionPolicy: Retain`. Delete it manually using a dynamic
+lookup to avoid hardcoding the pool ID across recreations.
 
 ```bash
+USER_POOL_ID=$(aws cognito-idp list-user-pools \
+  --max-results 60 \
+  --profile outdoorsportsclub --region us-east-1 \
+  --query "UserPools[?Name=='osc-users-dev'].Id" \
+  --output text)
+
 aws cognito-idp delete-user-pool \
-  --user-pool-id us-east-1_XaJgi6tid \
+  --user-pool-id "$USER_POOL_ID" \
   --profile outdoorsportsclub --region us-east-1
 ```
 
@@ -157,8 +216,10 @@ continue to accrue the $1/month/key charge until deletion completes.
 
 ## Step 6 — Delete CloudFormation stacks
 
-Delete in reverse-dependency order. Wait for each to reach `DELETE_COMPLETE` before
-proceeding.
+Delete in reverse-dependency order. IAM stacks must be deleted before Cognito because
+the admin IAM stack imports the Cognito user pool ARN as a CloudFormation export —
+deleting Cognito first causes `DELETE_FAILED` on the IAM stacks. Wait for each stack
+to reach `DELETE_COMPLETE` before proceeding.
 
 ```bash
 ENV=dev
@@ -166,27 +227,27 @@ PROFILE=outdoorsportsclub
 REGION=us-east-1
 
 for STACK in \
-  osc-lambda-dev \
-  osc-api-dev \
-  osc-backup-dev \
-  osc-aurora-dev \
-  osc-s3-dev \
-  osc-cognito-dev \
-  osc-sns-dev \
-  osc-secrets-dev \
-  osc-iam-member-dev \
-  osc-iam-admin-dev \
-  osc-iam-kiosk-dev \
-  osc-artifacts-dev \
-  osc-kms-dev; do
-    echo "Deleting $STACK..."
+  osc-lambda \
+  osc-api \
+  osc-iam-member \
+  osc-iam-admin \
+  osc-iam-kiosk \
+  osc-backup \
+  osc-cognito \
+  osc-sns \
+  osc-aurora \
+  osc-s3 \
+  osc-secrets \
+  osc-artifacts \
+  osc-kms; do
+    echo "Deleting ${STACK}-${ENV}..."
     aws cloudformation delete-stack \
-      --stack-name "$STACK" \
+      --stack-name "${STACK}-${ENV}" \
       --profile "$PROFILE" --region "$REGION"
     aws cloudformation wait stack-delete-complete \
-      --stack-name "$STACK" \
+      --stack-name "${STACK}-${ENV}" \
       --profile "$PROFILE" --region "$REGION"
-    echo "$STACK deleted."
+    echo "${STACK}-${ENV} deleted."
   done
 ```
 
@@ -199,8 +260,13 @@ after the resource finishes deleting.
 ## Step 7 — Delete Amplify app
 
 ```bash
+AMPLIFY_APP_ID=$(aws amplify list-apps \
+  --profile outdoorsportsclub --region us-east-1 \
+  --query "apps[?name=='outdoorsportsclub'].appId" \
+  --output text)
+
 aws amplify delete-app \
-  --app-id d2rljf3gefhatr \
+  --app-id "$AMPLIFY_APP_ID" \
   --profile outdoorsportsclub --region us-east-1
 ```
 
@@ -211,20 +277,6 @@ aws amplify delete-app \
 1. Go to [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials
 2. Find the OAuth 2.0 client for Outdoor Sports Club
 3. Delete it
-
----
-
-## Step 9 — Delete GitHub repository
-
-```bash
-gh repo delete vrwmiller/outdoorsportsclub --yes
-```
-
-This is irreversible. Make a local archive first if you want to keep the code:
-
-```bash
-git clone --mirror https://github.com/vrwmiller/outdoorsportsclub.git outdoorsportsclub-archive.git
-```
 
 ---
 
@@ -240,12 +292,31 @@ aws s3 ls --profile outdoorsportsclub | grep osc
 
 aws rds describe-db-clusters \
   --profile outdoorsportsclub --region us-east-1 \
-  --query 'DBClusters[?contains(DBClusterIdentifier, `osc`)].DBClusterIdentifier'
+  --query 'DBClusters[?DBClusterIdentifier==`osc-aurora-dev`].DBClusterIdentifier'
 
 aws cognito-idp list-user-pools \
   --max-results 20 \
   --profile outdoorsportsclub --region us-east-1 \
   --query 'UserPools[?contains(Name, `osc`)].Name'
+```
+
+---
+
+## Optional — Delete GitHub repository
+
+This step is separate from the main teardown because it is irreversible and independent
+of the AWS resources above. Do this only if you intend to fully decommission the project.
+
+Make a local archive first if you want to keep the code:
+
+```bash
+git clone --mirror https://github.com/vrwmiller/outdoorsportsclub.git outdoorsportsclub-archive.git
+```
+
+Then delete the repository:
+
+```bash
+gh repo delete vrwmiller/outdoorsportsclub --yes
 ```
 
 All four commands should return empty results.
