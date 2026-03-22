@@ -1,7 +1,12 @@
 repos:
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.5.0
+  - repo: local
     hooks:
       - id: detect-secrets
-        args: ["--baseline", ".secrets.baseline"]
+        name: Detect secrets
+        language: system
+        # Exit code 3 means only line numbers changed in the baseline (no new
+        # secrets). Auto-stage the updated baseline and exit 0 so the commit
+        # is not blocked. Exit code 1 (new unaudited secret) still fails.
+        entry: bash -c 'detect-secrets-hook --baseline .secrets.baseline "$@"; code=$?; if [ $code -eq 3 ]; then git add .secrets.baseline; exit 0; fi; exit $code'
         exclude: (\.secrets\.baseline|\.env\.example)$
+        pass_filenames: true
