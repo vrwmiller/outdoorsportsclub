@@ -11,6 +11,52 @@ applyTo: "**"
 - `<topic>` uses only lowercase letters, numbers, and hyphens — never a username, org name, or repo name prefix
 - Open a PR to merge into `main`
 
+## Commit discipline
+
+**One logical change per commit. Multiple commits per PR are expected and encouraged.**
+
+Commit history is the project's record of thought process. A reviewer reading the log should be able to infer *why* each step was taken without needing to read the PR description.
+
+### Rules
+
+- Never squash all work into a single large commit — this destroys the story
+- Each commit must be independently understandable: a new CloudFormation stack, a Makefile target, a type definition update, and a UI wiring change are four separate commits — not one
+- Commit as soon as a logical unit is complete, not at the end of a session
+- The commit message subject line states *what changed and why*, not just *what files changed*
+
+### Commit message format
+
+```
+<type>(<scope>): short imperative summary
+
+Optional body: one or two sentences expanding on motivation or
+non-obvious constraints. Omit when the subject line is self-sufficient.
+```
+
+Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`
+
+Scope is the layer or module: `infra`, `build`, `types`, `dashboard`, `handler`, `schema`, `iam`, `docs`, etc.
+
+### Examples of correctly scoped commits
+
+| Commit | What it captures |
+| :--- | :--- |
+| `feat(infra): add API Gateway REST API stack for member routes` | New CloudFormation file |
+| `chore(build): add deploy-api target and STACK_API variable` | Makefile tooling change |
+| `feat(types): align MemberProfile with GET /v1/members/me contract` | Type definition update |
+| `feat(dashboard): wire GET /v1/members/me to member portal` | Frontend wiring |
+| `fix(infra): add UpdateReplacePolicy: Retain to AccessLogGroup` | cfn-lint correction |
+
+### Anti-pattern to avoid
+
+Do **not** do this:
+
+```
+feat: implement Phase 2 API Gateway and dashboard  ← one giant commit with 5 files changed
+```
+
+This makes `git bisect`, `git revert`, and code review harder, and erases the story of how the solution was reached.
+
 ## Undoing mistakes — avoid destructive operations
 
 `git reset --hard` rewrites history and discards uncommitted work permanently. In a shared project it can discard in-progress commits others depend on. Prefer reversible alternatives:
