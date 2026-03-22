@@ -20,7 +20,8 @@ deleted manually when needed:
 
 | Target | Stack deleted | Rebuild command |
 | :--- | :--- | :--- |
-| `make destroy-lambda` | `osc-lambda-<env>` (Lambda functions + API Gateway) | `make deploy-lambda ENV=<env>` |
+| `make destroy-api` | `osc-api-<env>` (API Gateway REST API) | `make deploy-api ENV=<env>` |
+| `make destroy-lambda` | `osc-lambda-<env>` (Lambda functions) | `make deploy-lambda ENV=<env>` |
 | `make destroy-iam-kiosk` | `osc-iam-kiosk-<env>` (Kiosk IAM roles + policies) | `make deploy-base ENV=<env>` |
 | *(manual)* | `osc-iam-admin-<env>` (Admin IAM roles + policies) | `make deploy-base ENV=<env>` |
 | *(manual)* | `osc-iam-member-<env>` (Member IAM roles + policies) | `make deploy-base ENV=<env>` |
@@ -70,6 +71,7 @@ osc-iam-kiosk-<env>  ──exports──▶  osc-lambda-<env>
 osc-sns-<env>        ──exports──▶  osc-lambda-<env>
                      ──exports──▶  osc-iam-admin-<env>
                      ──exports──▶  osc-iam-member-<env>
+osc-api-<env>        (no cross-stack imports — independently destroyable leaf)
 ```
 
 If you are doing a full teardown (lambda, iam, and sns), the correct order is:
@@ -83,6 +85,8 @@ If you only need to destroy Lambda or IAM-kiosk, SNS does not need to be touched
 If you need to destroy SNS, **all** stacks that import its exports must be deleted
 first (`osc-lambda-<env>`, `osc-iam-admin-<env>`, and `osc-iam-member-<env>`),
 even if those stacks are not themselves being rebuilt from scratch.
+
+The API stack has no downstream dependants; `destroy-api` can be run independently without affecting Lambda or IAM.
 
 If you need to destroy **Aurora** (e.g. to recreate the cluster with a new KMS key),
 five stacks must be deleted first in this order before `osc-aurora-<env>` can be deleted:
