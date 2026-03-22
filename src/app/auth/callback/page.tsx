@@ -18,7 +18,7 @@ export default function AuthCallbackPage() {
       if (payload.event === "signedIn") {
         unsubscribe();
         router.replace("/portal/dashboard");
-      } else if (payload.event === "signIn_failure") {
+      } else if (payload.event === "signInWithRedirect_failure") {
         unsubscribe();
         console.error("OAuth sign-in failed", payload.data);
         setError("Sign-in failed. Please try again.");
