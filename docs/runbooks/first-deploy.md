@@ -165,7 +165,7 @@ make deploy-api ENV=dev
 
 Deploys `osc-api-dev` from `infra/stacks/api-gateway.yaml`, which creates the API Gateway REST API, Cognito Authorizer, CloudWatch Logs IAM role, and stage. The stack requires IAM capabilities (`--capabilities CAPABILITY_NAMED_IAM`) — the Makefile handles this automatically.
 
-The stack exposes one output: `ApiBaseUrl` (`osc-api-base-url-dev`) — the base URL used by the Next.js frontend (`NEXT_PUBLIC_API_BASE_URL`).
+The stack exposes two outputs: `ApiBaseUrl` (`osc-api-base-url-dev`) — the base URL used by the Next.js frontend (`NEXT_PUBLIC_API_BASE_URL`) — and `RestApiId` (`osc-api-rest-api-id-dev`), the REST API ID available for cross-stack references or tooling.
 
 **Verify:** confirm `osc-api-dev` shows `UPDATE_COMPLETE` or `CREATE_COMPLETE`.
 
