@@ -130,10 +130,11 @@ package:
 	@(cd functions/devices/pair && zip -qr ../../../$(BUILD_DIR)/devices-pair.zip .)
 	@echo "  packaged devices-pair.zip"
 	@echo "Installing shared Lambda Python dependencies..."
-	@pip install -q -r functions/requirements.txt -t $(BUILD_DIR)/deps --upgrade
+	@docker run --rm -v "$$(pwd)":/var/task -w /var/task public.ecr.aws/sam/build-python3.12 \
+		pip install -q -r functions/requirements.txt -t $(BUILD_DIR)/deps --upgrade
 	@echo "Packaging member handlers..."
 	@for handler in me me-badge me-update; do \
-		cp functions/members/_auth.py functions/members/$$handler/_auth.py; \
+		cp functions/shared/_auth.py functions/members/$$handler/_auth.py; \
 		(cd functions/members/$$handler && zip -qr ../../../$(BUILD_DIR)/member-$$handler.zip .); \
 		(cd $(BUILD_DIR)/deps && zip -qgr ../member-$$handler.zip .); \
 		rm functions/members/$$handler/_auth.py; \
@@ -141,7 +142,7 @@ package:
 	done
 	@echo "Packaging admin handlers..."
 	@for handler in ranges-occupancy settings-get lanes-update members-reset-auth members-level members-service-hours ranges-status settings-update devices-pairing-code lanes-create lanes-checkout; do \
-		cp functions/admin/_auth.py functions/admin/$$handler/_auth.py; \
+		cp functions/shared/_auth.py functions/admin/$$handler/_auth.py; \
 		(cd functions/admin/$$handler && zip -qr ../../../$(BUILD_DIR)/admin-$$handler.zip .); \
 		(cd $(BUILD_DIR)/deps && zip -qgr ../admin-$$handler.zip .); \
 		rm functions/admin/$$handler/_auth.py; \

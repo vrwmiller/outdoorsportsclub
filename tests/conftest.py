@@ -189,6 +189,7 @@ def load_member_handler(subpath: str):
     Returns the imported module.
     """
     members_dir = os.path.join(os.path.dirname(__file__), "../functions/members")
+    shared_dir = os.path.join(os.path.dirname(__file__), "../functions/shared")
     handler_path = os.path.join(members_dir, subpath, "handler.py")
     mod_name = f"member_{subpath.replace('-', '_')}_handler"
 
@@ -201,7 +202,7 @@ def load_member_handler(subpath: str):
 
     with patch("boto3.client", side_effect=_member_auth_boto_factory):
         auth_spec = importlib.util.spec_from_file_location(
-            "_auth", os.path.join(members_dir, "_auth.py")
+            "_auth", os.path.join(shared_dir, "_auth.py")
         )
         auth_mod = importlib.util.module_from_spec(auth_spec)
         sys.modules["_auth"] = auth_mod
@@ -222,6 +223,7 @@ def load_admin_handler(subpath: str):
     Returns the imported module.
     """
     admin_dir = os.path.join(os.path.dirname(__file__), "../functions/admin")
+    shared_dir = os.path.join(os.path.dirname(__file__), "../functions/shared")
     handler_path = os.path.join(admin_dir, subpath, "handler.py")
     mod_name = f"admin_{subpath.replace('-', '_')}_handler"
 
@@ -234,7 +236,7 @@ def load_admin_handler(subpath: str):
 
     with patch("boto3.client", side_effect=_member_auth_boto_factory):
         auth_spec = importlib.util.spec_from_file_location(
-            "_auth", os.path.join(admin_dir, "_auth.py")
+            "_auth", os.path.join(shared_dir, "_auth.py")
         )
         auth_mod = importlib.util.module_from_spec(auth_spec)
         sys.modules["_auth"] = auth_mod
