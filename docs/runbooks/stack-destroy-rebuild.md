@@ -30,6 +30,11 @@ deleted manually when needed:
 > **Note:** There are no `destroy-iam-admin` or `destroy-iam-member` Makefile targets.
 > To remove those stacks manually, use `aws cloudformation delete-stack` +
 > `aws cloudformation wait stack-delete-complete` (see [Troubleshooting](#troubleshooting)).
+>
+> **Note (destroy-api):** `osc-api-<env>` contains an `AccessLogGroup` with `DeletionPolicy: Retain` and a fixed
+> log group name (`/aws/apigateway/osc-api-<env>`). After `make destroy-api`, this log group persists;
+> a subsequent `make deploy-api` will fail with "already exists". Delete the log group before redeploying:
+> `aws logs delete-log-group --log-group-name /aws/apigateway/osc-api-dev --profile outdoorsportsclub`.
 
 **Do not attempt to destroy** the following without reading the notes below — they carry
 `DeletionPolicy: Retain` and cannot be cleanly cycled without manual cleanup:
@@ -71,7 +76,7 @@ osc-iam-kiosk-<env>  ──exports──▶  osc-lambda-<env>
 osc-sns-<env>        ──exports──▶  osc-lambda-<env>
                      ──exports──▶  osc-iam-admin-<env>
                      ──exports──▶  osc-iam-member-<env>
-osc-api-<env>        (no cross-stack imports — independently destroyable leaf)
+osc-api-<env>        ──imports──▶  osc-cognito-<env>   (no stacks import from osc-api; independently destroyable)
 ```
 
 If you are doing a full teardown (lambda, iam, and sns), the correct order is:
@@ -86,7 +91,7 @@ If you need to destroy SNS, **all** stacks that import its exports must be delet
 first (`osc-lambda-<env>`, `osc-iam-admin-<env>`, and `osc-iam-member-<env>`),
 even if those stacks are not themselves being rebuilt from scratch.
 
-The API stack has no downstream dependants; `destroy-api` can be run independently without affecting Lambda or IAM.
+The API stack imports `osc-cognito-<env>` (for the Cognito Authorizer) but has no downstream dependants; `destroy-api` can be run independently without affecting Lambda or IAM.
 
 If you need to destroy **Aurora** (e.g. to recreate the cluster with a new KMS key),
 five stacks must be deleted first in this order before `osc-aurora-<env>` can be deleted:
