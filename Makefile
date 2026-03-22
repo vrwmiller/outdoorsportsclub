@@ -70,8 +70,8 @@ GOOGLE_CLIENT_ID       ?=
 GOOGLE_CLIENT_SECRET   ?=
 FACEBOOK_APP_ID        ?=
 FACEBOOK_APP_SECRET    ?=
-CALLBACK_URL           ?= http://localhost:3000/auth/callback
-LOGOUT_URL             ?= http://localhost:3000
+CALLBACK_URL           ?= http://localhost:3000/auth/callback,https://main.d2rljf3gefhatr.amplifyapp.com/auth/callback
+LOGOUT_URL             ?= http://localhost:3000,https://main.d2rljf3gefhatr.amplifyapp.com
 USER_POOL_DOMAIN_PREFIX ?=
 
 .PHONY: help gen-salt package upload \
@@ -263,6 +263,12 @@ deploy-artifacts:
 		--profile $(AWS_PROFILE) --region $(REGION)
 
 deploy-cognito:
+	@if [ "$(ENV)" = "prod" ] && echo "$(CALLBACK_URL)" | grep -q "localhost"; then \
+		echo "ERROR: CALLBACK_URL contains localhost — set CALLBACK_URL explicitly for ENV=prod" && exit 1; \
+	fi
+	@if [ "$(ENV)" = "prod" ] && echo "$(LOGOUT_URL)" | grep -q "localhost"; then \
+		echo "ERROR: LOGOUT_URL contains localhost — set LOGOUT_URL explicitly for ENV=prod" && exit 1; \
+	fi
 	@aws cloudformation deploy \
 		--stack-name  $(STACK_COGNITO) \
 		--template-file infra/stacks/cognito.yaml \
