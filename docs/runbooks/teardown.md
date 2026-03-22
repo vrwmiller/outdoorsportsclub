@@ -1,5 +1,9 @@
 # Teardown Runbook — Outdoor Sports Club (dev)
 
+**Environment:** `dev`
+**Audience:** **Developers** and **Webmaster** — coordinate with the **Webmaster** before
+running a full teardown.
+
 Complete shutdown procedure for the `dev` environment. This permanently destroys all
 data and infrastructure. There is no undo.
 
@@ -11,8 +15,8 @@ for KMS key deletion.
 ## Prerequisites
 
 * AWS CLI configured with profile `outdoorsportsclub`
-* `gh` CLI authenticated
-* Venv activated: `source .venv/bin/activate`
+* Python 3 available on `PATH` (used in S3 cleanup scripts — standard library only)
+* (Optional — needed only for the [Optional GitHub repo deletion](#optional--delete-github-repository) step) `gh` CLI authenticated
 
 ---
 
@@ -29,11 +33,45 @@ ACCOUNT_ID=$(aws sts get-caller-identity \
   --query Account --output text --profile outdoorsportsclub)
 ```
 
-**Artifacts bucket** — no Object Lock, a simple recursive delete is sufficient:
+**Artifacts bucket** — versioned (no Object Lock). A simple `s3 rm --recursive` only
+inserts delete markers and will leave noncurrent versions behind, causing `s3 rb` to
+fail. Explicitly delete all versions and delete markers:
 
 ```bash
-aws s3 rm "s3://osc-lambda-artifacts-dev-${ACCOUNT_ID}" \
-  --recursive --profile outdoorsportsclub
+export ARTIFACTS_BUCKET="osc-lambda-artifacts-dev-${ACCOUNT_ID}"
+
+python3 << 'PYEOF'
+import json, subprocess, os
+
+bucket  = os.environ["ARTIFACTS_BUCKET"]
+profile = "outdoorsportsclub"
+
+for query in [
+    "Versions[].{Key:Key,VersionId:VersionId}",
+    "DeleteMarkers[].{Key:Key,VersionId:VersionId}",
+]:
+    while True:
+        result = subprocess.run(
+            ["aws", "s3api", "list-object-versions",
+             "--bucket", bucket,
+             "--query", query,
+             "--output", "json",
+             "--profile", profile],
+            capture_output=True, text=True, check=True,
+        )
+        objs = json.loads(result.stdout) or []
+        if not objs:
+            print(f"No more items for: {query}")
+            break
+        subprocess.run(
+            ["aws", "s3api", "delete-objects",
+             "--bucket", bucket,
+             "--delete", json.dumps({"Objects": objs}),
+             "--profile", profile],
+            check=True,
+        )
+        print(f"Deleted {len(objs)} item(s)")
+PYEOF
 ```
 
 **Waivers bucket** — has S3 Object Lock with versioning enabled. A simple
@@ -54,32 +92,34 @@ import json, subprocess, os
 bucket  = os.environ["WAIVERS_BUCKET"]
 profile = "outdoorsportsclub"
 
-for query, bypass in [
-    ("Versions[].{Key:Key,VersionId:VersionId}", True),
-    ("DeleteMarkers[].{Key:Key,VersionId:VersionId}", False),
+# Both Versions and DeleteMarkers may be protected by Governance retention;
+# pass --bypass-governance-retention for both.
+for query in [
+    "Versions[].{Key:Key,VersionId:VersionId}",
+    "DeleteMarkers[].{Key:Key,VersionId:VersionId}",
 ]:
-    result = subprocess.run(
-        ["aws", "s3api", "list-object-versions",
-         "--bucket", bucket,
-         "--query", query,
-         "--output", "json",
-         "--profile", profile],
-        capture_output=True, text=True, check=True,
-    )
-    objs = json.loads(result.stdout) or []
-    if not objs:
-        print(f"No items matched: {query}")
-        continue
-    cmd = [
-        "aws", "s3api", "delete-objects",
-        "--bucket", bucket,
-        "--delete", json.dumps({"Objects": objs}),
-        "--profile", profile,
-    ]
-    if bypass:
-        cmd.append("--bypass-governance-retention")
-    subprocess.run(cmd, check=True)
-    print(f"Deleted {len(objs)} item(s)")
+    while True:
+        result = subprocess.run(
+            ["aws", "s3api", "list-object-versions",
+             "--bucket", bucket,
+             "--query", query,
+             "--output", "json",
+             "--profile", profile],
+            capture_output=True, text=True, check=True,
+        )
+        objs = json.loads(result.stdout) or []
+        if not objs:
+            print(f"No more items for: {query}")
+            break
+        subprocess.run(
+            ["aws", "s3api", "delete-objects",
+             "--bucket", bucket,
+             "--delete", json.dumps({"Objects": objs}),
+             "--profile", profile,
+             "--bypass-governance-retention"],
+            check=True,
+        )
+        print(f"Deleted {len(objs)} item(s)")
 PYEOF
 ```
 
@@ -145,13 +185,13 @@ data, take a manual snapshot via the AWS console before running these commands.
 ```bash
 # Delete the cluster instance first
 aws rds delete-db-instance \
-  --db-instance-identifier osc-aurora-dev-instance \
+  --db-instance-identifier osc-aurora-writer-dev \
   --skip-final-snapshot \
   --profile outdoorsportsclub --region us-east-1
 
 # Wait for the instance to finish deleting, then delete the cluster
 aws rds wait db-instance-deleted \
-  --db-instance-identifier osc-aurora-dev-instance \
+  --db-instance-identifier osc-aurora-writer-dev \
   --profile outdoorsportsclub --region us-east-1
 
 aws rds delete-db-cluster \
@@ -216,10 +256,12 @@ continue to accrue the $1/month/key charge until deletion completes.
 
 ## Step 6 — Delete CloudFormation stacks
 
-Delete in reverse-dependency order. IAM stacks must be deleted before Cognito because
-the admin IAM stack imports the Cognito user pool ARN as a CloudFormation export —
-deleting Cognito first causes `DELETE_FAILED` on the IAM stacks. Wait for each stack
-to reach `DELETE_COMPLETE` before proceeding.
+Delete in reverse-dependency order. CloudFormation blocks deletion of any stack whose
+exports are still in use by other stacks. `osc-cognito-${ENV}` exports the Cognito user
+pool details — both `osc-api-${ENV}` and the IAM stacks import those exports. Attempting
+to delete the Cognito stack while importers still exist causes `DELETE_FAILED`. IAM stacks
+must be deleted before Cognito. Wait for each stack to reach `DELETE_COMPLETE` before
+proceeding.
 
 ```bash
 ENV=dev
@@ -300,6 +342,8 @@ aws cognito-idp list-user-pools \
   --query 'UserPools[?contains(Name, `osc`)].Name'
 ```
 
+All four commands should return empty results.
+
 ---
 
 ## Optional — Delete GitHub repository
@@ -318,8 +362,6 @@ Then delete the repository:
 ```bash
 gh repo delete vrwmiller/outdoorsportsclub --yes
 ```
-
-All four commands should return empty results.
 
 ---
 
