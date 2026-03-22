@@ -57,7 +57,7 @@ feat: implement Phase 2 API Gateway and dashboard  ← one giant commit with 5 f
 
 This makes `git bisect`, `git revert`, and code review harder, and erases the story of how the solution was reached.
 
-
+## Undoing mistakes — avoid destructive operations
 
 `git reset --hard` rewrites history and discards uncommitted work permanently. In a shared project it can discard in-progress commits others depend on. Prefer reversible alternatives:
 
