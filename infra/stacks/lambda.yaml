@@ -366,7 +366,609 @@ Resources:
         - Key: ManagedBy
           Value: cloudformation
 
+  # ---------------------------------------------------------------------------
+  # Member — GET /v1/members/me
+  # ---------------------------------------------------------------------------
+  MemberMeGetFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-member-me-get-${Environment}"
+      Description: Returns the authenticated member's profile and current annual dues amount.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-member-me-get-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: member-me.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Member — GET /v1/members/me/badge
+  # ---------------------------------------------------------------------------
+  MemberBadgeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-member-badge-${Environment}"
+      Description: Returns the authenticated member's QR badge number for kiosk scan.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-member-badge-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: member-me-badge.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Member — PATCH /v1/members/me
+  # ---------------------------------------------------------------------------
+  MemberMePatchFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-member-me-patch-${Environment}"
+      Description: Updates the authenticated member's editable profile fields (home_phone, mobile_phone).
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-member-me-patch-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: member-me-update.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Admin — GET /v1/admin/ranges/occupancy  (Level 4+)
+  # ---------------------------------------------------------------------------
+  AdminRangesOccupancyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-admin-ranges-occupancy-${Environment}"
+      Description: Returns current lane occupancy for all ranges; polled by the Admin Portal.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-admin-ranges-occupancy-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: admin-ranges-occupancy.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Admin — GET /v1/admin/settings  (Level 5+)
+  # ---------------------------------------------------------------------------
+  AdminSettingsGetFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-admin-settings-get-${Environment}"
+      Description: Returns the current club_settings row (annual dues, updated_at).
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-admin-settings-get-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: admin-settings-get.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Admin — PATCH /v1/admin/lanes/{lane_id}  (Level 4+)
+  # ---------------------------------------------------------------------------
+  AdminLanesUpdateFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-admin-lanes-update-${Environment}"
+      Description: Updates a lane's configuration or status (Available / Closed). Rejects close of an occupied lane.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-admin-lanes-patch-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: admin-lanes-update.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Admin — PATCH /v1/admin/members/reset-auth  (Level 6)
+  # ---------------------------------------------------------------------------
+  AdminMembersResetAuthFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-admin-members-reset-auth-${Environment}"
+      Description: Unlinks the social identity provider from a member's Cognito account and clears social_provider_id.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-admin-members-reset-auth-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: admin-members-reset-auth.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Admin — PATCH /v1/admin/members/{member_id}/level  (Level 5+)
+  # ---------------------------------------------------------------------------
+  AdminMembersLevelFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-admin-members-level-${Environment}"
+      Description: Updates training_level for the specified member; writes a Level-Change activity_log entry.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-admin-members-level-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: admin-members-level.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Admin — PATCH /v1/admin/members/{member_id}/service-hours  (Level 5+)
+  # ---------------------------------------------------------------------------
+  AdminMembersServiceHoursFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-admin-members-service-hours-${Environment}"
+      Description: Sets service_hours for a member; writes a Service-Hours-Update activity_log entry.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-admin-members-service-hours-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: admin-members-service-hours.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Admin — PATCH /v1/admin/ranges/{range_id}/status  (Level 4+)
+  # ---------------------------------------------------------------------------
+  AdminRangesStatusFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-admin-ranges-status-${Environment}"
+      Description: Sets ranges.is_open to true or false; soft close preserves lane occupancy.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-admin-ranges-status-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: admin-ranges-status.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Admin — PATCH /v1/admin/settings  (Level 5+)
+  # ---------------------------------------------------------------------------
+  AdminSettingsUpdateFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-admin-settings-update-${Environment}"
+      Description: Updates annual_dues_cents in club_settings; sets updated_at and updated_by_member_id.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-admin-settings-patch-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: admin-settings-update.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Admin — POST /v1/admin/devices/pairing-code  (Level 6)
+  # ---------------------------------------------------------------------------
+  AdminDevicesPairingCodeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-admin-devices-pairing-code-${Environment}"
+      Description: Creates a Pending-Pairing device row with a random code and 15-minute expiry.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-admin-pairing-code-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: admin-devices-pairing-code.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Admin — POST /v1/admin/lanes  (Level 4+)
+  # ---------------------------------------------------------------------------
+  AdminLanesCreateFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-admin-lanes-create-${Environment}"
+      Description: Creates a new lane for a range. Rejects duplicate lane_number.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-admin-lanes-create-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: admin-lanes-create.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Admin — POST /v1/admin/lanes/{lane_id}/checkout  (Level 4+)
+  # ---------------------------------------------------------------------------
+  AdminLanesCheckoutFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "osc-admin-lanes-checkout-${Environment}"
+      Description: Force-checks out an occupied lane, logs the action, and advances the wait list.
+      Runtime: python3.12
+      Handler: handler.handler
+      Role: !ImportValue
+        Fn::Sub: "osc-role-admin-lanes-checkout-arn-${Environment}"
+      Code:
+        S3Bucket: !ImportValue
+          Fn::Sub: "osc-artifacts-bucket-name-${Environment}"
+        S3Key: admin-lanes-checkout.zip
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          DB_CLUSTER_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-cluster-arn-${Environment}"
+          DB_SECRET_ARN: !ImportValue
+            Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+          DB_NAME: osc
+          COGNITO_USER_POOL_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
+          COGNITO_REGION: !Ref AWS::Region
+          CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
+          SNS_ALERTS_TOPIC_ARN: !ImportValue
+            Fn::Sub: "osc-sns-admin-alerts-arn-${Environment}"
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
 Outputs:
+
+  # ---------------------------------------------------------------------------
+  # Member functions
+  # ---------------------------------------------------------------------------
+
+  MemberMeGetFunctionArn:
+    Value: !GetAtt MemberMeGetFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-member-me-get-arn-${Environment}"
+
+  MemberBadgeFunctionArn:
+    Value: !GetAtt MemberBadgeFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-member-badge-arn-${Environment}"
+
+  MemberMePatchFunctionArn:
+    Value: !GetAtt MemberMePatchFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-member-me-patch-arn-${Environment}"
+
+  # ---------------------------------------------------------------------------
+  # Admin functions
+  # ---------------------------------------------------------------------------
+
+  AdminRangesOccupancyFunctionArn:
+    Value: !GetAtt AdminRangesOccupancyFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-admin-ranges-occupancy-arn-${Environment}"
+
+  AdminSettingsGetFunctionArn:
+    Value: !GetAtt AdminSettingsGetFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-admin-settings-get-arn-${Environment}"
+
+  AdminLanesUpdateFunctionArn:
+    Value: !GetAtt AdminLanesUpdateFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-admin-lanes-update-arn-${Environment}"
+
+  AdminMembersResetAuthFunctionArn:
+    Value: !GetAtt AdminMembersResetAuthFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-admin-members-reset-auth-arn-${Environment}"
+
+  AdminMembersLevelFunctionArn:
+    Value: !GetAtt AdminMembersLevelFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-admin-members-level-arn-${Environment}"
+
+  AdminMembersServiceHoursFunctionArn:
+    Value: !GetAtt AdminMembersServiceHoursFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-admin-members-service-hours-arn-${Environment}"
+
+  AdminRangesStatusFunctionArn:
+    Value: !GetAtt AdminRangesStatusFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-admin-ranges-status-arn-${Environment}"
+
+  AdminSettingsUpdateFunctionArn:
+    Value: !GetAtt AdminSettingsUpdateFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-admin-settings-update-arn-${Environment}"
+
+  AdminDevicesPairingCodeFunctionArn:
+    Value: !GetAtt AdminDevicesPairingCodeFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-admin-devices-pairing-code-arn-${Environment}"
+
+  AdminLanesCreateFunctionArn:
+    Value: !GetAtt AdminLanesCreateFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-admin-lanes-create-arn-${Environment}"
+
+  AdminLanesCheckoutFunctionArn:
+    Value: !GetAtt AdminLanesCheckoutFunction.Arn
+    Export:
+      Name: !Sub "osc-fn-admin-lanes-checkout-arn-${Environment}"
+
+  # ---------------------------------------------------------------------------
+  # Kiosk functions
+  # ---------------------------------------------------------------------------
 
   KioskCheckInFunctionArn:
     Value: !GetAtt KioskCheckInFunction.Arn
