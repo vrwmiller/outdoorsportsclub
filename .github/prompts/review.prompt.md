@@ -61,6 +61,13 @@ Follow these steps exactly. Do not skip any step.
    ```
    Use a descriptive message if the batch covers a single topic (e.g., `fix: wrap all DB queries in transactions`).
 
+   If the commit fails with exit code 3 and the message "The baseline file was updated", the `detect-secrets` pre-commit hook auto-updated `.secrets.baseline` to reflect line number shifts. Run:
+   ```
+   git add .secrets.baseline
+   git commit -m "<same message as above>"
+   ```
+   This is expected and safe — the hook only updates line-number metadata, never suppresses new secrets.
+
    **c. Reply to each comment in the batch** — for each reply, write the body to `/tmp/reply.json` using the file-creation tool (never shell redirection or echo), then post it:
    ```json
    {"body": "Your reply text here."}
