@@ -1,7 +1,16 @@
 repos:
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.5.0
+  - repo: local
     hooks:
       - id: detect-secrets
-        args: ["--baseline", ".secrets.baseline"]
+        name: Detect secrets
+        language: python
+        additional_dependencies: ['detect-secrets>=1.5']
+        # Exit code 3 means only line numbers changed in the baseline (no new
+        # secrets). Auto-stage the updated baseline and exit 0 so the commit
+        # is not blocked. Exit code 1 (new unaudited secret) still fails.
+        # "bash" at the end of entry is the $0 placeholder required by bash -c
+        # so that staged filenames land in $1..$N and $@ expands to all of them.
+        # Without it the first staged file goes to $0 and is silently skipped.
+        entry: bash -c 'detect-secrets-hook --baseline .secrets.baseline -- "$@"; code=$?; if [ $code -eq 3 ]; then git add .secrets.baseline; exit 0; fi; exit $code' bash
         exclude: (\.secrets\.baseline|\.env\.example)$
+        pass_filenames: true
