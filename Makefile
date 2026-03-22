@@ -70,8 +70,8 @@ GOOGLE_CLIENT_ID       ?=
 GOOGLE_CLIENT_SECRET   ?=
 FACEBOOK_APP_ID        ?=
 FACEBOOK_APP_SECRET    ?=
-CALLBACK_URL           ?= http://localhost:3000/auth/callback
-LOGOUT_URL             ?= http://localhost:3000
+CALLBACK_URL           ?= http://localhost:3000/auth/callback,https://main.d2rljf3gefhatr.amplifyapp.com/auth/callback
+LOGOUT_URL             ?= http://localhost:3000,https://main.d2rljf3gefhatr.amplifyapp.com
 USER_POOL_DOMAIN_PREFIX ?=
 
 .PHONY: help gen-salt package upload \
