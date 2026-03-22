@@ -1,0 +1,3 @@
+# Python dependencies bundled into member and admin Lambda ZIPs.
+# Installed at build time via:  pip install -r functions/requirements.txt -t <deps_dir>
+PyJWT[cryptography]>=2.9
