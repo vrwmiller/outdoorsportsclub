@@ -60,6 +60,7 @@ STACK_IAM_MEMBER= osc-iam-member-$(ENV)
 STACK_COGNITO   = osc-cognito-$(ENV)
 STACK_ARTIFACTS = osc-artifacts-$(ENV)
 STACK_LAMBDA    = osc-lambda-$(ENV)
+STACK_API       = osc-api-$(ENV)
 
 # Social login is disabled by default. Set SOCIAL_LOGIN_ENABLED=true and supply
 # GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, FACEBOOK_APP_ID, FACEBOOK_APP_SECRET
@@ -76,8 +77,8 @@ USER_POOL_DOMAIN_PREFIX ?=
 .PHONY: help gen-salt package upload \
         deploy-kms deploy-secrets deploy-sns deploy-s3 deploy-aurora \
         deploy-backup deploy-iam-kiosk deploy-iam-admin deploy-iam-member deploy-artifacts deploy-lambda \
-        deploy-cognito deploy-base deploy-all update-code migrate invoke \
-        _guard-nonprod destroy-lambda destroy-sns destroy-iam-kiosk destroy-iam-admin destroy-iam-member
+        deploy-api deploy-cognito deploy-base deploy-all update-code migrate invoke \
+        _guard-nonprod destroy-api destroy-lambda destroy-sns destroy-iam-kiosk destroy-iam-admin destroy-iam-member
 
 # =============================================================================
 help:
@@ -91,13 +92,15 @@ help:
 	@echo "  deploy-cognito    Deploy the Cognito User Pool stack (prerequisite for deploy-base)"
 	@echo "  deploy-base       Deploy supporting stacks (kms→secrets→sns→s3→aurora→backup→iam-kiosk→iam-admin→iam-member→artifacts)"
 	@echo "  deploy-lambda     Deploy the Lambda function stack"
-	@echo "  deploy-all        Full first-time deploy: deploy-base + package + upload + deploy-lambda"
+	@echo "  deploy-api        Deploy the API Gateway stack (depends on deploy-lambda)"
+	@echo "  deploy-all        Full first-time deploy: deploy-base + package + upload + deploy-lambda + deploy-api"
 	@echo "  update-code       Push newly uploaded ZIPs to Lambda (use after 'make upload' on code-only changes)"
 	@echo "  migrate           Run all database migrations against the deployed Aurora cluster"
 	@echo "  invoke            Invoke a Lambda directly (FUNCTION=name PAYLOAD='{...}')"
 	@echo ""
 	@echo "Destroy targets (dev only — blocked on ENV=prod):"
-	@echo "  destroy-lambda    Delete the Lambda + API Gateway stack (rebuildable via deploy-lambda)"
+	@echo "  destroy-api       Delete the API Gateway stack (rebuildable via deploy-api)"
+	@echo "  destroy-lambda    Delete the Lambda function stack (rebuildable via deploy-lambda)"
 	@echo "  destroy-sns       Delete the SNS topic stack (rebuildable via deploy-base)"
 	@echo "  destroy-iam-kiosk   Delete the IAM kiosk roles stack (rebuildable via deploy-base)"
 	@echo "  destroy-iam-admin   Delete the IAM admin roles stack (rebuildable via deploy-base)"
@@ -277,6 +280,14 @@ deploy-lambda:
 		--no-fail-on-empty-changeset \
 		--profile $(AWS_PROFILE) --region $(REGION)
 
+deploy-api:
+	aws cloudformation deploy \
+		--stack-name  $(STACK_API) \
+		--template-file infra/stacks/api-gateway.yaml \
+		--parameter-overrides Environment=$(ENV) CorsAllowOrigin=$(CORS_ALLOW_ORIGIN) \
+		--no-fail-on-empty-changeset \
+		--profile $(AWS_PROFILE) --region $(REGION)
+
 # =============================================================================
 # Composite targets
 # =============================================================================
@@ -287,7 +298,7 @@ deploy-base: deploy-kms deploy-secrets deploy-sns deploy-s3 \
              deploy-aurora deploy-backup deploy-iam-kiosk deploy-iam-admin deploy-iam-member deploy-artifacts
 
 # Full first-time deploy.
-deploy-all: deploy-base package upload deploy-lambda
+deploy-all: deploy-base package upload deploy-lambda deploy-api
 
 # =============================================================================
 # Code update — force Lambda to pick up a newly uploaded ZIP.
