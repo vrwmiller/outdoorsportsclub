@@ -22,7 +22,11 @@ flowchart TD
     H --> I{Stack\nUPDATE_COMPLETE?}
     I -- No --> J[Fix lambda.yaml\nor IAM issue, retry]
     J --> H
-    I -- Yes --> K["make migrate ENV=dev"]
+    I -- Yes --> K2["make deploy-api ENV=dev"]
+    K2 --> K3{Stack\nUPDATE_COMPLETE?}
+    K3 -- No --> K4[Fix api-gateway.yaml\nor IAM issue, retry]
+    K4 --> K2
+    K3 -- Yes --> K["make migrate ENV=dev"]
     K --> L{Migrations\nsucceeded?}
     L -- No --> M[Review migrate.py output\nfix SQL, retry]
     M --> K
@@ -153,7 +157,21 @@ Deploys `osc-lambda-dev` from `infra/stacks/lambda.yaml`, which creates all Lamb
 
 ---
 
-## Step 7 — Run database migrations
+## Step 7 — Deploy API Gateway stack
+
+```bash
+make deploy-api ENV=dev
+```
+
+Deploys `osc-api-dev` from `infra/stacks/api-gateway.yaml`, which creates the API Gateway REST API, Cognito Authorizer, CloudWatch Logs IAM role, and stage. The stack requires IAM capabilities (`--capabilities CAPABILITY_NAMED_IAM`) — the Makefile handles this automatically.
+
+The stack exposes two outputs: `ApiBaseUrl` (`osc-api-base-url-dev`) — the base URL used by the Next.js frontend (`NEXT_PUBLIC_API_BASE_URL`) — and `RestApiId` (`osc-api-rest-api-id-dev`), the REST API ID available for cross-stack references or tooling.
+
+**Verify:** confirm `osc-api-dev` shows `UPDATE_COMPLETE` or `CREATE_COMPLETE`.
+
+---
+
+## Step 8 — Run database migrations
 
 ```bash
 make migrate ENV=dev
@@ -167,7 +185,7 @@ Queries `osc-aurora-<env>` for the cluster ARN (`AuroraClusterArn`) and the Auro
 
 ---
 
-## Step 8 — Smoke test
+## Step 9 — Smoke test
 
 Invoke a handler directly to confirm the end-to-end path (Lambda → Aurora) is functional:
 
@@ -190,4 +208,4 @@ make deploy-all ENV=dev DEVICE_TOKEN_SALT=<salt>
 make migrate ENV=dev
 ```
 
-`deploy-all` runs `deploy-base → package → upload → deploy-lambda` in sequence. Use this only on a clean first deploy; it does not handle partial failures gracefully.
+`deploy-all` runs `deploy-base → package → upload → deploy-lambda → deploy-api` in sequence. Use this only on a clean first deploy; it does not handle partial failures gracefully.

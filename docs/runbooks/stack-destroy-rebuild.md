@@ -20,7 +20,8 @@ deleted manually when needed:
 
 | Target | Stack deleted | Rebuild command |
 | :--- | :--- | :--- |
-| `make destroy-lambda` | `osc-lambda-<env>` (Lambda functions + API Gateway) | `make deploy-lambda ENV=<env>` |
+| `make destroy-api` | `osc-api-<env>` (API Gateway REST API) | `make deploy-api ENV=<env>` |
+| `make destroy-lambda` | `osc-lambda-<env>` (Lambda functions) | `make deploy-lambda ENV=<env>` |
 | `make destroy-iam-kiosk` | `osc-iam-kiosk-<env>` (Kiosk IAM roles + policies) | `make deploy-base ENV=<env>` |
 | *(manual)* | `osc-iam-admin-<env>` (Admin IAM roles + policies) | `make deploy-base ENV=<env>` |
 | *(manual)* | `osc-iam-member-<env>` (Member IAM roles + policies) | `make deploy-base ENV=<env>` |
@@ -29,6 +30,11 @@ deleted manually when needed:
 > **Note:** There are no `destroy-iam-admin` or `destroy-iam-member` Makefile targets.
 > To remove those stacks manually, use `aws cloudformation delete-stack` +
 > `aws cloudformation wait stack-delete-complete` (see [Troubleshooting](#troubleshooting)).
+>
+> **Note (destroy-api):** `osc-api-<env>` contains an `AccessLogGroup` with `DeletionPolicy: Retain` and a fixed
+> log group name (`/aws/apigateway/osc-api-<env>`). After `make destroy-api`, this log group persists;
+> a subsequent `make deploy-api` will fail with "already exists". Delete the log group before redeploying:
+> `aws logs delete-log-group --log-group-name /aws/apigateway/osc-api-dev --profile outdoorsportsclub`.
 
 **Do not attempt to destroy** the following without reading the notes below — they carry
 `DeletionPolicy: Retain` and cannot be cleanly cycled without manual cleanup:
@@ -70,6 +76,7 @@ osc-iam-kiosk-<env>  ──exports──▶  osc-lambda-<env>
 osc-sns-<env>        ──exports──▶  osc-lambda-<env>
                      ──exports──▶  osc-iam-admin-<env>
                      ──exports──▶  osc-iam-member-<env>
+osc-api-<env>        ──imports──▶  osc-cognito-<env>   (no stacks import from osc-api; independently destroyable)
 ```
 
 If you are doing a full teardown (lambda, iam, and sns), the correct order is:
@@ -83,6 +90,8 @@ If you only need to destroy Lambda or IAM-kiosk, SNS does not need to be touched
 If you need to destroy SNS, **all** stacks that import its exports must be deleted
 first (`osc-lambda-<env>`, `osc-iam-admin-<env>`, and `osc-iam-member-<env>`),
 even if those stacks are not themselves being rebuilt from scratch.
+
+The API stack imports `osc-cognito-<env>` (for the Cognito Authorizer) but has no downstream dependants; `destroy-api` can be run independently without affecting Lambda or IAM.
 
 If you need to destroy **Aurora** (e.g. to recreate the cluster with a new KMS key),
 five stacks must be deleted first in this order before `osc-aurora-<env>` can be deleted:
