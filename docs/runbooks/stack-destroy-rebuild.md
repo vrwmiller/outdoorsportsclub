@@ -32,9 +32,16 @@ deleted manually when needed:
 > `aws cloudformation wait stack-delete-complete` (see [Troubleshooting](#troubleshooting)).
 >
 > **Note (destroy-api):** `osc-api-<env>` contains an `AccessLogGroup` with `DeletionPolicy: Retain` and a fixed
-> log group name (`/aws/apigateway/osc-api-<env>`). After `make destroy-api`, this log group persists;
-> a subsequent `make deploy-api` will fail with "already exists". Delete the log group before redeploying:
-> `aws logs delete-log-group --log-group-name /aws/apigateway/osc-api-dev --profile outdoorsportsclub`.
+> log group name (`/aws/apigateway/osc-api-<env>`). This log group persists in two situations: after
+> `make destroy-api`, and after a failed `make deploy-api` that rolls back (CloudFormation creates the log
+> group early, then rolls back but retains it). In either case a subsequent `make deploy-api` will fail with
+> an `EarlyValidation::ResourceExistenceCheck` error. Delete the log group before redeploying:
+>
+> ```bash
+> aws logs delete-log-group \
+>   --log-group-name "/aws/apigateway/osc-api-dev" \
+>   --profile outdoorsportsclub --region us-east-1
+> ```
 
 **Do not attempt to destroy** the following without reading the notes below — they carry
 `DeletionPolicy: Retain` and cannot be cleanly cycled without manual cleanup:
