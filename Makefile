@@ -285,6 +285,7 @@ deploy-api:
 		--stack-name  $(STACK_API) \
 		--template-file infra/stacks/api-gateway.yaml \
 		--parameter-overrides Environment=$(ENV) CorsAllowOrigin=$(CORS_ALLOW_ORIGIN) \
+		--capabilities CAPABILITY_NAMED_IAM \
 		--no-fail-on-empty-changeset \
 		--profile $(AWS_PROFILE) --region $(REGION)
 
@@ -370,6 +371,15 @@ invoke:
 _guard-nonprod:
 	@test "$(ENV)" != "prod" || \
 		(echo "ERROR: destroy targets are blocked on ENV=prod" && exit 1)
+
+destroy-api: _guard-nonprod
+	aws cloudformation delete-stack \
+		--stack-name $(STACK_API) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	aws cloudformation wait stack-delete-complete \
+		--stack-name $(STACK_API) \
+		--profile $(AWS_PROFILE) --region $(REGION)
+	@echo "$(STACK_API) deleted. Rebuild with: make deploy-api ENV=$(ENV)"
 
 destroy-lambda: _guard-nonprod
 	aws cloudformation delete-stack \
