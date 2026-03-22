@@ -61,6 +61,7 @@ Resources:
   AccessLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: !Sub "/aws/apigateway/osc-api-${Environment}"
       RetentionInDays: 30
