@@ -1,0 +1,239 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  API Gateway REST API for the Outdoor Sports Club member website.
+  Exposes /v1/members/me with a Cognito Authorizer for authenticated member
+  requests. Add routes here as member portal and admin portal handlers are
+  completed.
+
+Parameters:
+
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Description: Deployment environment (dev or prod).
+
+  CorsAllowOrigin:
+    Type: String
+    Default: "http://localhost:3000"
+    Description: >-
+      Value for the Access-Control-Allow-Origin response header on all preflight
+      responses. Set to the Amplify domain for deployed environments.
+      Example: https://outdoorsportsclub.com
+
+  DeploymentVersion:
+    Type: String
+    Default: "1"
+    Description: >-
+      Increment this value to force a new API Gateway deployment when method or
+      integration changes would not otherwise cause CloudFormation to replace
+      the ApiDeployment resource.
+
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # API Gateway account — enables CloudWatch Logs for API Gateway in this region
+  # ---------------------------------------------------------------------------
+  ApiGatewayLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-apigateway-logs-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+
+  ApiGatewayAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayLogsRole.Arn
+
+  # ---------------------------------------------------------------------------
+  # REST API
+  # ---------------------------------------------------------------------------
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "osc-api-${Environment}"
+      Description: Outdoor Sports Club member and admin REST API
+      EndpointConfiguration:
+        Types: [REGIONAL]
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Cognito Authorizer — validates Bearer tokens on /v1/portal/* and /v1/admin/*
+  # ---------------------------------------------------------------------------
+  CognitoAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: cognito
+      RestApiId: !Ref RestApi
+      Type: COGNITO_USER_POOLS
+      IdentitySource: method.request.header.Authorization
+      ProviderARNs:
+        - !ImportValue
+          Fn::Sub: "osc-cognito-user-pool-arn-${Environment}"
+      AuthorizerResultTtlInSeconds: 300
+
+  # ---------------------------------------------------------------------------
+  # CloudWatch access log group
+  # ---------------------------------------------------------------------------
+  AccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/apigateway/osc-api-${Environment}"
+      RetentionInDays: 30
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Resources — /v1
+  # ---------------------------------------------------------------------------
+  V1Resource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: v1
+
+  MembersResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref V1Resource
+      PathPart: members
+
+  MembersMeResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref MembersResource
+      PathPart: me
+
+  # ---------------------------------------------------------------------------
+  # GET /v1/members/me — Cognito auth, Lambda proxy
+  # ---------------------------------------------------------------------------
+  MemberMeGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref MembersMeResource
+      HttpMethod: GET
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:osc-member-me-get-${Environment}/invocations"
+          - {}
+
+  # ---------------------------------------------------------------------------
+  # OPTIONS /v1/members/me — CORS preflight, no auth
+  # ---------------------------------------------------------------------------
+  MemberMeOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref MembersMeResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
+            ResponseTemplates:
+              application/json: "{}"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # ---------------------------------------------------------------------------
+  # Lambda permission — allow API Gateway to invoke the member/me function
+  # ---------------------------------------------------------------------------
+  MemberMeGetPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-member-me-get-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/GET/v1/members/me"
+
+  # ---------------------------------------------------------------------------
+  # Deployment + Stage
+  # ---------------------------------------------------------------------------
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - MemberMeGetMethod
+      - MemberMeOptionsMethod
+    Properties:
+      RestApiId: !Ref RestApi
+      Description: !Sub "v${DeploymentVersion} — GET /v1/members/me (${Environment})"
+
+  ApiStage:
+    Type: AWS::ApiGateway::Stage
+    DependsOn: ApiGatewayAccount
+    Properties:
+      RestApiId: !Ref RestApi
+      DeploymentId: !Ref ApiDeployment
+      StageName: !Ref Environment
+      Description: !Sub "osc-api (${Environment})"
+      AccessLogSetting:
+        DestinationArn: !GetAtt AccessLogGroup.Arn
+        Format: >-
+          {"requestId":"$context.requestId",
+           "ip":"$context.identity.sourceIp",
+           "method":"$context.httpMethod",
+           "path":"$context.path",
+           "status":"$context.status",
+           "responseLength":"$context.responseLength",
+           "duration":"$context.responseLatency",
+           "user":"$context.authorizer.claims.sub"}
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+Outputs:
+
+  ApiBaseUrl:
+    Description: Base URL of the API Gateway stage (no trailing slash)
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+    Export:
+      Name: !Sub "osc-api-base-url-${Environment}"
+
+  RestApiId:
+    Description: API Gateway REST API logical ID
+    Value: !Ref RestApi
+    Export:
+      Name: !Sub "osc-api-rest-api-id-${Environment}"
