@@ -41,7 +41,7 @@ _E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
 def _validate_e164(value: str) -> str:
     """Return the value if it is a valid E.164 number, else raise ValueError."""
     if not _E164_RE.match(value):
-        raise ValueError(f"Invalid phone number format; expected E.164 (e.g. +15551234567): {value!r}")
+        raise ValueError("Invalid phone number format; expected E.164 (e.g. +15551234567)")
     return value
 
 

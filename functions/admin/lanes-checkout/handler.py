@@ -16,7 +16,6 @@ Returns:
 """
 import json
 import logging
-import os
 import time
 from typing import Any
 
@@ -34,8 +33,6 @@ from _auth import (
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-_SNS_TOPIC_ARN = os.environ.get("SNS_ALERTS_TOPIC_ARN", "")
 
 
 def handler(event: dict, context: Any) -> dict:
@@ -200,12 +197,12 @@ def handler(event: dict, context: Any) -> dict:
             )
             raise
 
-        # Send SNS SMS after the transaction commits.
-        if called_member_phone and _SNS_TOPIC_ARN:
+        # Send SNS SMS directly to the called member's phone after the transaction commits.
+        if called_member_phone:
             try:
                 sns = boto3.client("sns")
                 sns.publish(
-                    TopicArn=_SNS_TOPIC_ARN,
+                    PhoneNumber=called_member_phone,
                     Message="A lane is now available at the range. Please check in at the kiosk.",
                     MessageAttributes={
                         "AWS.SNS.SMS.SMSType": {

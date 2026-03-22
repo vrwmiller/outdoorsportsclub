@@ -105,7 +105,10 @@ def handler(event: dict, context: Any) -> dict:
         body = {
             "member_num": row[0]["stringValue"],
             "training_level": int(row[1]["longValue"]),
-            "service_hours": str(row[2]["stringValue"]) if "stringValue" in row[2] else str(row[2].get("doubleValue", "0")),
+            "service_hours": (
+                str(row[2]["stringValue"]) if "stringValue" in row[2]
+                else str(row[2].get("doubleValue", "0"))
+            ),
             "dues_paid_until": row[3].get("stringValue") if not row[3].get("isNull") else None,
             "waiver_signed_at": row[4].get("stringValue") if not row[4].get("isNull") else None,
             "mobile_phone": row[5].get("stringValue") if not row[5].get("isNull") else None,
@@ -129,11 +132,9 @@ def handler(event: dict, context: Any) -> dict:
 
     except PermissionError as exc:
         error_name = type(exc).__name__
-        logger.warning("Auth failure [%s]: %s", context.aws_request_id, exc)
         return error_response(403, "Forbidden")
     except Exception as exc:
         error_name = type(exc).__name__
-        logger.exception("Unhandled error [%s]: %s", context.aws_request_id, exc)
         return error_response(500, "Internal server error")
     finally:
         if error_name:

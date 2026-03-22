@@ -99,6 +99,7 @@ def handler(event: dict, context: Any) -> dict:
                         secretArn=DB_SECRET_ARN,
                         transactionId=tx["transactionId"],
                     )
+                    error_name = "ConflictError"
                     return {
                         "statusCode": 409,
                         "headers": CORS_HEADERS,

@@ -1,9 +1,11 @@
 """PATCH /v1/admin/members/reset-auth  — Level 6 Webmaster
 
-Unlinks the social identity provider from the specified member's Cognito
-account by calling AdminDisableProviderForUser, then clears social_provider_id
-in the members table. The member's Cognito account remains active; they will
-need to re-link or sign in via email/password on next login.
+Resets the specified member's authentication state without modifying any
+Cognito identity-provider links. The handler clears social_provider_id in
+the members table and calls AdminUserGlobalSignOut so that any active
+Cognito sessions are revoked. The member's Cognito account and any linked
+social identity providers remain intact; they can sign in again using any
+existing authentication method on next login.
 
 Body: { member_id }
 
