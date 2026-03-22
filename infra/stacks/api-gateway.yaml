@@ -20,7 +20,37 @@ Parameters:
       responses. Set to the Amplify domain for deployed environments.
       Example: https://outdoorsportsclub.com
 
+  DeploymentVersion:
+    Type: String
+    Default: "1"
+    Description: >-
+      Increment this value to force a new API Gateway deployment when method or
+      integration changes would not otherwise cause CloudFormation to replace
+      the ApiDeployment resource.
+
 Resources:
+
+  # ---------------------------------------------------------------------------
+  # API Gateway account — enables CloudWatch Logs for API Gateway in this region
+  # ---------------------------------------------------------------------------
+  ApiGatewayLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "osc-apigateway-logs-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+
+  ApiGatewayAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayLogsRole.Arn
 
   # ---------------------------------------------------------------------------
   # REST API
@@ -165,17 +195,16 @@ Resources:
       - MemberMeOptionsMethod
     Properties:
       RestApiId: !Ref RestApi
-      Description: !Sub "Phase 2 — GET /v1/members/me (${Environment})"
+      Description: !Sub "v${DeploymentVersion} — GET /v1/members/me (${Environment})"
 
   ApiStage:
     Type: AWS::ApiGateway::Stage
+    DependsOn: ApiGatewayAccount
     Properties:
       RestApiId: !Ref RestApi
       DeploymentId: !Ref ApiDeployment
-      StageName: v1
-      Description: !Sub "osc-api v1 (${Environment})"
-      Variables:
-        corsAllowOrigin: !Ref CorsAllowOrigin
+      StageName: !Ref Environment
+      Description: !Sub "osc-api (${Environment})"
       AccessLogSetting:
         DestinationArn: !GetAtt AccessLogGroup.Arn
         Format: >-
@@ -199,7 +228,7 @@ Outputs:
 
   ApiBaseUrl:
     Description: Base URL of the API Gateway stage (no trailing slash)
-    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/v1"
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
     Export:
       Name: !Sub "osc-api-base-url-${Environment}"
 
