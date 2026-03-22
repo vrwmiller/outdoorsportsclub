@@ -1,23 +1,52 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getCurrentUser, signOut } from "aws-amplify/auth";
+import { getCurrentUser, fetchAuthSession, signOut } from "aws-amplify/auth";
 import { useRouter } from "next/navigation";
+import type { MemberProfile } from "@/types/api";
 
 export default function DashboardPage() {
-  const [email, setEmail] = useState<string | null>(null);
+  const [profile, setProfile] = useState<MemberProfile | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    getCurrentUser()
-      .then((user) => {
-        setEmail(user.signInDetails?.loginId ?? user.userId);
-      })
-      .catch(() => {
+    async function loadProfile() {
+      try {
+        await getCurrentUser();
+      } catch {
         router.replace("/");
-      });
+        return;
+      }
+
+      try {
+        const session = await fetchAuthSession();
+        const idToken = session.tokens?.idToken?.toString();
+        if (!idToken) {
+          setLoadError("Session expired. Please sign in again.");
+          return;
+        }
+
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL}/v1/members/me`,
+          { headers: { Authorization: `Bearer ${idToken}` } }
+        );
+
+        if (!res.ok) {
+          setLoadError(`Failed to load profile (${res.status}). Please try again.`);
+          return;
+        }
+
+        setProfile(await res.json());
+      } catch (err) {
+        console.error("Failed to load member profile", err);
+        setLoadError("Could not load your profile. Please try again.");
+      }
+    }
+
+    loadProfile();
   }, [router]);
 
   async function handleSignOut() {
@@ -34,7 +63,7 @@ export default function DashboardPage() {
     }
   }
 
-  if (!email) {
+  if (!profile && !loadError) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-50">
         <p className="text-gray-500 text-sm">Loading…</p>
@@ -45,11 +74,38 @@ export default function DashboardPage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
       <div className="bg-white rounded-2xl shadow-md p-8 max-w-md w-full">
-        <h1 className="text-2xl font-bold text-gray-800 mb-1">Dashboard</h1>
-        <p className="text-gray-500 text-sm mb-6">Coming soon.</p>
-        <p className="text-gray-800 text-base mb-6">
-          Signed in as <span className="font-medium">{email}</span>
-        </p>
+        <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
+
+        {loadError ? (
+          <p className="text-red-600 text-sm mb-6" role="alert">
+            {loadError}
+          </p>
+        ) : profile ? (
+          <dl className="mb-6 space-y-3">
+            <div>
+              <dt className="text-gray-500 text-sm">Member number</dt>
+              <dd className="text-gray-800 text-base font-medium">{profile.member_num}</dd>
+            </div>
+            <div>
+              <dt className="text-gray-500 text-sm">Training level</dt>
+              <dd className="text-gray-800 text-base font-medium">{profile.training_level}</dd>
+            </div>
+            <div>
+              <dt className="text-gray-500 text-sm">Dues paid until</dt>
+              <dd className="text-gray-800 text-base font-medium">
+                {profile.dues_paid_until ?? "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-gray-500 text-sm">Annual dues</dt>
+              <dd className="text-gray-800 text-base font-medium">
+                {profile.annual_dues_cents != null
+                  ? `$${(profile.annual_dues_cents / 100).toFixed(2)}`
+                  : "—"}
+              </dd>
+            </div>
+          </dl>
+        ) : null}
         <button
           onClick={handleSignOut}
           disabled={isSigningOut}
