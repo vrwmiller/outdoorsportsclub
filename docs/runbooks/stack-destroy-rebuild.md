@@ -228,11 +228,11 @@ is missing — if their initial deploy attempt fails before the Cognito stack ex
 they land in `ROLLBACK_COMPLETE` and must be deleted before `deploy-base` can succeed.
 Ensure `make deploy-cognito ENV=dev` has been run before retrying.
 
-**`delete-stack` fails with `UPDATE_ROLLBACK_COMPLETE` — export still in use**
+**`delete-stack` fails with `DELETE_FAILED` — export still in use**
 If a stack delete attempt is rejected because another stack imports one of its exports,
-CloudFormation rolls back to `UPDATE_ROLLBACK_COMPLETE` rather than proceeding. Delete
-all importer stacks first, then retry. Use `aws cloudformation list-imports` to identify
-all importers of a given export:
+CloudFormation leaves the stack in `DELETE_FAILED` rather than proceeding. Delete
+all importer stacks first, then retry the delete. Use `aws cloudformation list-imports`
+to identify all importers of a given export:
 
 ```bash
 aws cloudformation list-imports \
