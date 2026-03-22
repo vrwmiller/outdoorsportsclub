@@ -149,7 +149,15 @@ Resources:
 
       AdminCreateUserConfig:
         # Members are provisioned by club administrators only. Self-registration
-        # is disabled — attempting to sign up returns NotAuthorizedException.
+        # is disabled — attempting to sign up via email/password returns
+        # NotAuthorizedException.
+        #
+        # NOTE: AllowAdminCreateUserOnly only blocks native Cognito sign-up. If
+        # SocialLoginEnabled is later set to true, federated IdP flows (Google,
+        # Facebook) bypass this check and can create new Cognito identities without
+        # admin provisioning. Mitigation: add a PreSignUp Lambda trigger that
+        # rejects users whose cognito_sub is not already present in the members
+        # table before enabling social login in any environment.
         AllowAdminCreateUserOnly: true
 
       # Hides whether an account exists on sign-in failure, reducing enumeration
