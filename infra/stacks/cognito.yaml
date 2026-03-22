@@ -61,14 +61,18 @@ Parameters:
   CallbackUrl:
     Type: CommaDelimitedList
     Description: >-
-      One or more OAuth callback URLs (comma-separated) registered with Google and Facebook.
+      One or more application redirect URLs (comma-separated, no spaces after commas) for the
+      Cognito User Pool app client. These are the redirect_uri values the browser is sent to
+      after Cognito Hosted UI sign-in and must be configured on the app client in Cognito.
+      For Google/Facebook IdPs, the redirect URI you register in their consoles should instead
+      be the Cognito Hosted UI /oauth2/idpresponse endpoint.
       prod:  https://outdoorsportsclub.com/auth/callback
       dev:   http://localhost:3000/auth/callback,https://main.d2rljf3gefhatr.amplifyapp.com/auth/callback
 
   LogoutUrl:
     Type: CommaDelimitedList
     Description: >-
-      One or more post-logout redirect URLs (comma-separated).
+      One or more post-logout redirect URLs (comma-separated, no spaces after commas).
       prod:  https://outdoorsportsclub.com
       dev:   http://localhost:3000,https://main.d2rljf3gefhatr.amplifyapp.com
 

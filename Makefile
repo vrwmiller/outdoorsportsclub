@@ -263,6 +263,12 @@ deploy-artifacts:
 		--profile $(AWS_PROFILE) --region $(REGION)
 
 deploy-cognito:
+	@if [ "$(ENV)" = "prod" ] && echo "$(CALLBACK_URL)" | grep -q "localhost"; then \
+		echo "ERROR: CALLBACK_URL contains localhost — set CALLBACK_URL explicitly for ENV=prod" && exit 1; \
+	fi
+	@if [ "$(ENV)" = "prod" ] && echo "$(LOGOUT_URL)" | grep -q "localhost"; then \
+		echo "ERROR: LOGOUT_URL contains localhost — set LOGOUT_URL explicitly for ENV=prod" && exit 1; \
+	fi
 	@aws cloudformation deploy \
 		--stack-name  $(STACK_COGNITO) \
 		--template-file infra/stacks/cognito.yaml \
