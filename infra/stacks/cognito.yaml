@@ -59,20 +59,18 @@ Parameters:
       Required when SocialLoginEnabled is true.
 
   CallbackUrl:
-    Type: String
+    Type: CommaDelimitedList
     Description: >-
-      OAuth callback URL registered with Google and Facebook.
+      One or more OAuth callback URLs (comma-separated) registered with Google and Facebook.
       prod:  https://outdoorsportsclub.com/auth/callback
-      dev:   https://dev.outdoorsportsclub.com/auth/callback
-             (or http://localhost:3000/auth/callback for local dev)
+      dev:   http://localhost:3000/auth/callback,https://main.d2rljf3gefhatr.amplifyapp.com/auth/callback
 
   LogoutUrl:
-    Type: String
+    Type: CommaDelimitedList
     Description: >-
-      Post-logout redirect URL.
+      One or more post-logout redirect URLs (comma-separated).
       prod:  https://outdoorsportsclub.com
-      dev:   https://dev.outdoorsportsclub.com
-             (or http://localhost:3000 for local dev)
+      dev:   http://localhost:3000,https://main.d2rljf3gefhatr.amplifyapp.com
 
   UserPoolDomainPrefix:
     Type: String
@@ -234,11 +232,9 @@ Resources:
         - openid
         - profile
 
-      CallbackURLs:
-        - !Ref CallbackUrl
+      CallbackURLs: !Ref CallbackUrl
 
-      LogoutURLs:
-        - !Ref LogoutUrl
+      LogoutURLs: !Ref LogoutUrl
 
       ExplicitAuthFlows:
         - ALLOW_REFRESH_TOKEN_AUTH
