@@ -148,8 +148,9 @@ Resources:
             Priority: 1
 
       AdminCreateUserConfig:
-        # Allow self-registration through the Member Portal.
-        AllowAdminCreateUserOnly: false
+        # Members are provisioned by club administrators only. Self-registration
+        # is disabled — attempting to sign up returns NotAuthorizedException.
+        AllowAdminCreateUserOnly: true
 
       # Hides whether an account exists on sign-in failure, reducing enumeration
       # risk against the member roster.
