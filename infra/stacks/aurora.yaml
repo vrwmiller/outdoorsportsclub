@@ -243,14 +243,16 @@ Resources:
       # secret, stores the password there, and rotates it automatically. The managed
       # secret ARN is exported as osc-aurora-managed-secret-arn-<env> for use by
       # Lambda execution roles and the lambda.yaml stack.
-      # Note: When ManageMasterUserPassword is enabled and MasterUserSecret.KmsKeyId
-      # is omitted, Aurora creates the managed secret encrypted with the default
-      # AWS-managed Secrets Manager KMS key for NEW clusters. If a cluster was
-      # originally created with a customer-managed KMS key via MasterUserSecret.KmsKeyId,
-      # that key choice is immutable — ModifyDBCluster cannot change the KMS key on
-      # the existing managed secret. CMK encryption for the managed secret remains a
-      # future consideration for any fresh cluster provisioning.
+      # MasterUserSecret.KmsKeyId can only be applied at cluster CREATION time.
+      # ModifyDBCluster cannot change the KMS key on an existing managed secret.
+      # Any cluster deployed from this template will have its managed secret
+      # encrypted with the project CMK from the start. An existing cluster whose
+      # managed secret was created without this property must be deleted and
+      # recreated — CloudFormation will reject an in-place update attempt.
       ManageMasterUserPassword: true
+      MasterUserSecret:
+        KmsKeyId: !ImportValue
+          Fn::Sub: "osc-kms-aurora-arn-${Environment}"
       StorageEncrypted: true
       KmsKeyId: !ImportValue
         Fn::Sub: "osc-kms-aurora-arn-${Environment}"
