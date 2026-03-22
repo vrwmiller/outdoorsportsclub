@@ -207,15 +207,7 @@ Resources:
       Description: !Sub "osc-api (${Environment})"
       AccessLogSetting:
         DestinationArn: !GetAtt AccessLogGroup.Arn
-        Format: >-
-          {"requestId":"$context.requestId",
-           "ip":"$context.identity.sourceIp",
-           "method":"$context.httpMethod",
-           "path":"$context.path",
-           "status":"$context.status",
-           "responseLength":"$context.responseLength",
-           "duration":"$context.responseLatency",
-           "user":"$context.authorizer.claims.sub"}
+        Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","method":"$context.httpMethod","path":"$context.path","status":"$context.status","responseLength":"$context.responseLength","duration":"$context.responseLatency","user":"$context.authorizer.claims.sub"}'
       Tags:
         - Key: Project
           Value: outdoor-sports-club
