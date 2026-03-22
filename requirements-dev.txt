@@ -8,6 +8,8 @@
 
 boto3
 PyJWT[cryptography]>=2.9
+detect-secrets>=1.5
+pre-commit>=3.7
 cfn-lint
 moto[s3,secretsmanager,sns]>=5.0
 pytest>=8.0

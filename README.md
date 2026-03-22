@@ -85,6 +85,17 @@ In a new shell where the venv is already set up, activate it directly:
 source .venv/bin/activate
 ```
 
+### Secret scanning (pre-commit hook)
+
+After cloning, install the pre-commit hook once:
+
+```bash
+source .venv/bin/activate
+pre-commit install
+```
+
+This installs `detect-secrets` as a pre-commit hook. It will block any commit that introduces a new secret pattern not already recorded in `.secrets.baseline`. Run once per clone — it does not need to be repeated when pulling new changes.
+
 ## Repeatable workflows
 
 ### Lint CloudFormation templates
