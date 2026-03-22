@@ -1,4 +1,3 @@
-import Link from "next/link";
 import LoginButton from "@/components/LoginButton";
 
 export default function HomePage() {
@@ -12,14 +11,6 @@ export default function HomePage() {
           Members — sign in to access the portal.
         </p>
         <LoginButton />
-        <div className="mt-4">
-          <Link
-            href="/admin/dashboard"
-            className="text-gray-500 text-sm hover:text-gray-700 underline"
-          >
-            Admin Portal
-          </Link>
-        </div>
       </div>
     </main>
   );

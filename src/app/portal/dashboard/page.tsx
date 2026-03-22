@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
   const [email, setEmail] = useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -17,6 +19,20 @@ export default function DashboardPage() {
         router.replace("/");
       });
   }, [router]);
+
+  async function handleSignOut() {
+    if (isSigningOut) return;
+    setSignOutError(null);
+    setIsSigningOut(true);
+    try {
+      await signOut();
+      router.replace("/");
+    } catch (err) {
+      console.error("Sign-out failed", err);
+      setSignOutError("Sign-out failed. Please try again.");
+      setIsSigningOut(false);
+    }
+  }
 
   if (!email) {
     return (
@@ -35,11 +51,19 @@ export default function DashboardPage() {
           Signed in as <span className="font-medium">{email}</span>
         </p>
         <button
-          onClick={() => signOut().then(() => router.replace("/"))}
-          className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors"
+          onClick={handleSignOut}
+          disabled={isSigningOut}
+          aria-disabled={isSigningOut}
+          aria-busy={isSigningOut}
+          className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          Sign out
+          {isSigningOut ? "Signing out…" : "Sign out"}
         </button>
+        {signOutError && (
+          <p className="mt-2 text-red-600 text-sm" role="alert">
+            {signOutError}
+          </p>
+        )}
       </div>
     </main>
   );
