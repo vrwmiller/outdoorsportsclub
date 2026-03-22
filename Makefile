@@ -133,6 +133,7 @@ package:
 	@(cd functions/devices/pair && zip -qr ../../../$(BUILD_DIR)/devices-pair.zip .)
 	@echo "  packaged devices-pair.zip"
 	@echo "Installing shared Lambda Python dependencies..."
+	@rm -rf $(BUILD_DIR)/deps
 	@pip install -q \
 		--platform manylinux2014_x86_64 \
 		--python-version 312 \

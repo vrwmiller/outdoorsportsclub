@@ -39,8 +39,8 @@ deleted manually when needed:
 >
 > ```bash
 > aws logs delete-log-group \
->   --log-group-name "/aws/apigateway/osc-api-dev" \
->   --profile outdoorsportsclub --region us-east-1
+>   --log-group-name "/aws/apigateway/osc-api-<env>" \
+>   --profile outdoorsportsclub --region <region>
 > ```
 
 **Do not attempt to destroy** the following without reading the notes below — they carry
