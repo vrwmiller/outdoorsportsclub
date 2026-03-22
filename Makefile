@@ -133,8 +133,13 @@ package:
 	@(cd functions/devices/pair && zip -qr ../../../$(BUILD_DIR)/devices-pair.zip .)
 	@echo "  packaged devices-pair.zip"
 	@echo "Installing shared Lambda Python dependencies..."
-	@docker run --rm -v "$$(pwd)":/var/task -w /var/task public.ecr.aws/sam/build-python3.12 \
-		pip install -q -r functions/requirements.txt -t $(BUILD_DIR)/deps --upgrade
+	@pip install -q \
+		--platform manylinux2014_x86_64 \
+		--python-version 312 \
+		--only-binary :all: \
+		--upgrade \
+		-r functions/requirements.txt \
+		-t $(BUILD_DIR)/deps
 	@echo "Packaging member handlers..."
 	@for handler in me me-badge me-update; do \
 		cp functions/shared/_auth.py functions/members/$$handler/_auth.py; \
