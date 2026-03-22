@@ -155,9 +155,15 @@ Resources:
         # NOTE: AllowAdminCreateUserOnly only blocks native Cognito sign-up. If
         # SocialLoginEnabled is later set to true, federated IdP flows (Google,
         # Facebook) bypass this check and can create new Cognito identities without
-        # admin provisioning. Mitigation: add a PreSignUp Lambda trigger that
-        # rejects users whose cognito_sub is not already present in the members
-        # table before enabling social login in any environment.
+        # admin provisioning. Mitigation before enabling social login:
+        #   1. PreSignUp trigger — check the email attribute (or the external
+        #      provider subject in event.userName) against the Aurora members
+        #      table; reject any sign-up where no matching member record exists.
+        #      (cognito_sub is not available at PreSignUp time — the Cognito user
+        #      does not yet exist.)
+        #   2. PostConfirmation or PostAuthentication trigger — once the Cognito
+        #      user is created and its sub is known, populate members.cognito_sub
+        #      for the matched member record.
         AllowAdminCreateUserOnly: true
 
       # Hides whether an account exists on sign-in failure, reducing enumeration
