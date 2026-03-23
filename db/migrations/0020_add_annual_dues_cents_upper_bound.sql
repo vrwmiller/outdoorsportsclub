@@ -5,4 +5,7 @@
 --              is a defense-in-depth measure at the DB layer.
 
 ALTER TABLE club_settings
+    DROP CONSTRAINT IF EXISTS chk_annual_dues_cents_max;
+
+ALTER TABLE club_settings
     ADD CONSTRAINT chk_annual_dues_cents_max CHECK (annual_dues_cents <= 99999);
