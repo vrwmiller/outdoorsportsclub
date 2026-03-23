@@ -590,6 +590,7 @@ A single-row configuration table. Stores club-wide scalars that Administrators m
 
 * `CHECK (singleton = TRUE)` — enforces single-row invariant.
 * `CHECK (annual_dues_cents > 0)` — dues must be a positive amount.
+* `CHECK (annual_dues_cents <= 99999)` — dues capped at $999.99 to prevent fat-finger or malicious overcharging.
 * `CHECK (guest_fee_cents > 0)` — guest fee must be a positive amount.
 
 ## 6. Infrastructure & Security (AWS)
@@ -874,7 +875,7 @@ PATCH /v1/admin/settings
 
 Updates one or more fields in the `club_settings` row. Accepted fields: `annual_dues_cents`. Sets `updated_at = NOW()` and `updated_by_member_id` to the Administrator's `members.id` (resolved from JWT `sub`). Does not affect in-flight Stripe Payment Intents — any Payment Intent already created retains the amount from when it was initiated.
 
-**Returns:** `200 OK` with `{ annual_dues_cents, updated_at }`, or `400 Bad Request` (negative or zero amount).
+**Returns:** `200 OK` with `{ annual_dues_cents, updated_at }`, `400 Bad Request` (negative, zero, or above maximum $999.99 amount), or `403 Forbidden`.
 
 ---
 
