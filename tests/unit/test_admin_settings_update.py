@@ -119,6 +119,25 @@ class TestAdminSettingsUpdate:
 
         assert resp["statusCode"] == 200
 
+    def test_boolean_true_returns_400(self, mod):
+        # bool is a subclass of int; True must be rejected, not treated as 1 cent
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(
+                member_jwt_event({"annual_dues_cents": True}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+
+    def test_boolean_false_returns_400(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(
+                member_jwt_event({"annual_dues_cents": False}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+
     def test_cors_headers_present(self, mod):
         rds = make_member_rds({
             "UPDATE club_settings": {"records": _SETTINGS_RETURN},

@@ -51,7 +51,7 @@ def handler(event: dict, context: Any) -> dict:
         annual_dues_cents = body.get("annual_dues_cents")
         if annual_dues_cents is None:
             raise ValueError("annual_dues_cents is required")
-        if not isinstance(annual_dues_cents, int) or annual_dues_cents <= 0:
+        if type(annual_dues_cents) is not int or annual_dues_cents <= 0:
             raise ValueError("annual_dues_cents must be a positive integer")
         if annual_dues_cents > _MAX_DUES_CENTS:
             raise ValueError(f"annual_dues_cents exceeds maximum ({_MAX_DUES_CENTS})")
