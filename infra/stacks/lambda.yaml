@@ -394,6 +394,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -431,6 +433,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -468,6 +472,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -505,6 +511,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -542,6 +550,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -579,6 +589,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -616,6 +628,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -653,6 +667,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -690,6 +706,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -727,6 +745,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -764,6 +784,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -801,6 +823,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -838,6 +862,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project
@@ -875,6 +901,8 @@ Resources:
           COGNITO_USER_POOL_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-id-${Environment}"
           COGNITO_REGION: !Ref AWS::Region
+          COGNITO_APP_CLIENT_ID: !ImportValue
+            Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
           SNS_ALERTS_TOPIC_ARN: !ImportValue
             Fn::Sub: "osc-sns-admin-alerts-arn-${Environment}"
