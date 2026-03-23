@@ -189,3 +189,32 @@ class TestGetJwks:
             result = auth._get_jwks(force_refresh=True)
         mock_open.assert_called_once()
         assert result == new_jwks
+
+    def test_ttl_refresh_failure_falls_back_to_cache(self, auth):
+        """Network error during TTL refresh → fall back to cached keys (don't raise)."""
+        stale_jwks = {"keys": [{"kid": "stale-key"}]}
+        auth._jwks_cache = stale_jwks
+        auth._jwks_fetched_at = time.time() - 4000  # TTL expired
+        mock_open = MagicMock(side_effect=OSError("connection refused"))
+        with patch("urllib.request.urlopen", mock_open):
+            result = auth._get_jwks()
+        # Should return stale cache without raising
+        assert result is stale_jwks
+
+    def test_initial_fetch_failure_raises(self, auth):
+        """Network error on first fetch (no cache) → fail closed."""
+        auth._jwks_cache = None
+        auth._jwks_fetched_at = 0.0
+        mock_open = MagicMock(side_effect=OSError("connection refused"))
+        with patch("urllib.request.urlopen", mock_open):
+            with pytest.raises(OSError):
+                auth._get_jwks()
+
+    def test_force_refresh_failure_raises(self, auth):
+        """Network error on explicit force_refresh → fail closed even with cached keys."""
+        auth._jwks_cache = {"keys": [{"kid": "old-key"}]}
+        auth._jwks_fetched_at = time.time() - 100  # within TTL — force_refresh overrides
+        mock_open = MagicMock(side_effect=OSError("connection refused"))
+        with patch("urllib.request.urlopen", mock_open):
+            with pytest.raises(OSError):
+                auth._get_jwks(force_refresh=True)

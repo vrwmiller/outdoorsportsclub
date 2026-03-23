@@ -69,14 +69,33 @@ _JWKS_TTL_SECONDS: int = 3600  # 1 hour
 def _get_jwks(*, force_refresh: bool = False) -> dict:
     global _jwks_cache, _jwks_fetched_at
     now = time.time()
-    if force_refresh or _jwks_cache is None or (now - _jwks_fetched_at) > _JWKS_TTL_SECONDS:
+    cache_expired = (now - _jwks_fetched_at) > _JWKS_TTL_SECONDS
+    if force_refresh or _jwks_cache is None or cache_expired:
         url = (
             f"https://cognito-idp.{_REGION}.amazonaws.com"
             f"/{_POOL_ID}/.well-known/jwks.json"
         )
-        with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
-            _jwks_cache = json.loads(resp.read())
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
+                jwks = json.loads(resp.read())
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            # Fail closed when there is no cached JWKS or an explicit refresh
+            # was requested — there is nothing safe to fall back to.
+            if force_refresh or _jwks_cache is None:
+                logger.error("Failed to fetch JWKS from %s: %s", url, exc)
+                raise
+            # For TTL-based refresh failures, fall back to last known-good
+            # keys and log so the failure is observable in CloudWatch.
+            logger.warning(
+                "Failed to refresh JWKS from %s; continuing with cached keys: %s",
+                url,
+                exc,
+            )
+        else:
+            _jwks_cache = jwks
             _jwks_fetched_at = now
+    if _jwks_cache is None:
+        raise RuntimeError("JWKS cache is empty after fetch attempt")
     return _jwks_cache
 
 
