@@ -6,11 +6,11 @@ Accepted fields: annual_dues_cents.
 Sets updated_at = NOW() and updated_by_member_id to the Administrator's
 members.id. Does not affect in-flight Stripe Payment Intents.
 
-Body: { annual_dues_cents: positive integer }
+Body: { annual_dues_cents: positive integer, max 99999 ($999.99) }
 
 Returns:
     200 OK  { annual_dues_cents, updated_at }
-    400 Bad Request (negative or zero amount)
+    400 Bad Request (missing, negative, zero, or above maximum amount)
     403 Forbidden
     500 Internal Server Error
 """
