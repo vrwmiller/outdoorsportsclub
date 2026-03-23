@@ -825,6 +825,8 @@ Resources:
           COGNITO_REGION: !Ref AWS::Region
           COGNITO_APP_CLIENT_ID: !ImportValue
             Fn::Sub: "osc-cognito-user-pool-client-id-${Environment}"
+          DEVICE_TOKEN_SALT_ARN: !ImportValue
+            Fn::Sub: "osc-device-token-salt-arn-${Environment}"
           CORS_ALLOW_ORIGIN: !Ref CorsAllowOrigin
       Tags:
         - Key: Project

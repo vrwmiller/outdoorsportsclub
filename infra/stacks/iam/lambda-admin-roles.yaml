@@ -620,8 +620,11 @@ Resources:
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
-                Resource: !ImportValue
-                  Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+                Resource:
+                  - !ImportValue
+                    Fn::Sub: "osc-aurora-managed-secret-arn-${Environment}"
+                  - !ImportValue
+                    Fn::Sub: "osc-device-token-salt-arn-${Environment}"
               - Effect: Allow
                 Action:
                   - kms:Decrypt
