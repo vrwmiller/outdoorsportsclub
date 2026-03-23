@@ -47,21 +47,55 @@ DB_NAME: str = os.environ["DB_NAME"]
 CORS_ALLOW_ORIGIN: str = os.environ["CORS_ALLOW_ORIGIN"]
 
 _sm = boto3.client("secretsmanager")
-_raw_salt: str = _sm.get_secret_value(
-    SecretId=os.environ["DEVICE_TOKEN_SALT_ARN"]
-)["SecretString"]
-try:
-    _DEVICE_TOKEN_SALT: str = json.loads(_raw_salt)["salt"]
-except (json.JSONDecodeError, KeyError) as _exc:
-    raise RuntimeError(
-        "DEVICE_TOKEN_SALT secret must be JSON with a 'salt' field"
-    ) from _exc
+_DEVICE_TOKEN_SALT: str | None = None
+_device_salt_loaded_at: float = 0.0
+_DEVICE_TOKEN_SALT_TTL_SECONDS: int = 60
+
+
+def _load_device_token_salt(*, force: bool = False) -> str:
+    """Return the HMAC salt, refreshing from Secrets Manager every 60 seconds.
+
+    Using a short TTL means both handlers converge on a new salt within
+    60 seconds of rotation, keeping pairing-code hashing consistent.
+    """
+    global _DEVICE_TOKEN_SALT, _device_salt_loaded_at
+    now = time.time()
+    if (
+        not force
+        and _DEVICE_TOKEN_SALT is not None
+        and (now - _device_salt_loaded_at) < _DEVICE_TOKEN_SALT_TTL_SECONDS
+    ):
+        return _DEVICE_TOKEN_SALT
+    raw = _sm.get_secret_value(SecretId=os.environ["DEVICE_TOKEN_SALT_ARN"])["SecretString"]
+    try:
+        salt = json.loads(raw)["salt"]
+    except (json.JSONDecodeError, KeyError) as exc:
+        raise RuntimeError(
+            "DEVICE_TOKEN_SALT secret must be JSON with a 'salt' field"
+        ) from exc
+    _DEVICE_TOKEN_SALT = salt
+    _device_salt_loaded_at = now
+    return salt
+
+
+# Fail fast at cold start if the secret is missing or malformed.
+_load_device_token_salt(force=True)
 
 CORS_HEADERS: dict[str, str] = {
     "Access-Control-Allow-Origin": CORS_ALLOW_ORIGIN,
     "Access-Control-Allow-Headers": "Content-Type,Authorization,x-device-token",
     "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PATCH,DELETE",
 }
+
+
+def _hash_pairing_code(code: str) -> str:
+    """Return HMAC-SHA256 hex digest of the pairing code.
+
+    Pairing codes are stored as this hash rather than plaintext so that a DB
+    read-only breach cannot be used to register rogue kiosk devices.
+    """
+    salt = _load_device_token_salt()
+    return hmac.new(salt.encode(), code.encode(), hashlib.sha256).hexdigest()
 
 
 def _error(status: int, message: str) -> dict[str, Any]:
@@ -97,8 +131,9 @@ def handler(event: dict, context: Any) -> dict[str, Any]:
         # race. The single UPDATE below validates code, status, and expiry
         # atomically — no separate SELECT is needed.
         raw_token: str = secrets.token_hex(32)
+        salt = _load_device_token_salt()
         hashed_token: str = hmac.new(
-            _DEVICE_TOKEN_SALT.encode(), raw_token.encode(), hashlib.sha256
+            salt.encode(), raw_token.encode(), hashlib.sha256
         ).hexdigest()
 
         update = rds.execute_statement(
@@ -118,7 +153,7 @@ def handler(event: dict, context: Any) -> dict[str, Any]:
             """,
             parameters=[
                 {"name": "token_hash", "value": {"stringValue": hashed_token}},
-                {"name": "code",       "value": {"stringValue": pairing_code}},
+                {"name": "code",       "value": {"stringValue": _hash_pairing_code(pairing_code)}},
             ],
         )
 
