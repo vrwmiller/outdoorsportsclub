@@ -175,9 +175,12 @@ def _member_auth_boto_factory(svc, **_):
     """Return mocked AWS clients for member/admin _auth cold-start imports.
 
     _auth.py reads env vars at module level (no boto3 cold-start call), so
-    this factory only needs to provide the rds-data client used during
-    authenticate_member().
+    most handlers only need a MagicMock rds-data client.  Handlers that call
+    boto3.client("secretsmanager") at cold start (e.g. admin-devices-pairing-code)
+    get the pre-configured SM mock so secret loading succeeds.
     """
+    if svc == "secretsmanager":
+        return make_sm_client()
     return MagicMock()
 
 

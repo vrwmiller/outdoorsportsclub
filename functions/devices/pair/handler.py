@@ -64,6 +64,15 @@ CORS_HEADERS: dict[str, str] = {
 }
 
 
+def _hash_pairing_code(code: str) -> str:
+    """Return HMAC-SHA256 hex digest of the pairing code.
+
+    Pairing codes are stored as this hash rather than plaintext so that a DB
+    read-only breach cannot be used to register rogue kiosk devices.
+    """
+    return hmac.new(_DEVICE_TOKEN_SALT.encode(), code.encode(), hashlib.sha256).hexdigest()
+
+
 def _error(status: int, message: str) -> dict[str, Any]:
     return {
         "statusCode": status,
@@ -118,7 +127,7 @@ def handler(event: dict, context: Any) -> dict[str, Any]:
             """,
             parameters=[
                 {"name": "token_hash", "value": {"stringValue": hashed_token}},
-                {"name": "code",       "value": {"stringValue": pairing_code}},
+                {"name": "code",       "value": {"stringValue": _hash_pairing_code(pairing_code)}},
             ],
         )
 

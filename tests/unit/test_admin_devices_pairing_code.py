@@ -104,3 +104,24 @@ class TestAdminDevicesPairingCode:
             resp = mod.handler(member_jwt_event(_GOOD_BODY, method="POST"), FakeContext())
 
         assert "Access-Control-Allow-Origin" in resp["headers"]
+
+    def test_pairing_code_stored_as_hmac_not_plaintext(self, mod):
+        """The code written to devices.pairing_code must be an HMAC hash, not the raw code."""
+        rds = make_member_rds({
+            "pairing_code IS NOT NULL": {"records": []},
+            "INSERT INTO devices": {"records": [[{"stringValue": _DEVICE_ID}]]},
+        })
+        with patch.object(mod, "authenticate_member", return_value=_WEBMASTER), \
+             patch("boto3.client", return_value=rds):
+            resp = mod.handler(member_jwt_event(_GOOD_BODY, method="POST"), FakeContext())
+
+        assert resp["statusCode"] == 201
+        plaintext_code = json.loads(resp["body"])["pairing_code"]
+
+        insert_call = next(
+            c for c in rds.execute_statement.call_args_list
+            if "INSERT INTO devices" in c.kwargs.get("sql", "")
+        )
+        params = {p["name"]: p["value"]["stringValue"] for p in insert_call.kwargs["parameters"]}
+        assert params["code"] != plaintext_code, "pairing code must not be stored as plaintext"
+        assert len(params["code"]) == 64, "expected HMAC-SHA256 hex digest (64 chars)"

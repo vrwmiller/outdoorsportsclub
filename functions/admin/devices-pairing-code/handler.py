@@ -15,8 +15,11 @@ Returns:
     409 Conflict (unexpired code already exists for location_tag)
     500 Internal Server Error
 """
+import hashlib
+import hmac
 import json
 import logging
+import os
 import secrets
 import string
 import time
@@ -37,6 +40,30 @@ from _auth import (
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+# ---------------------------------------------------------------------------
+# Cold-start: load HMAC salt for pairing-code hashing.
+# ---------------------------------------------------------------------------
+
+if not os.environ.get("DEVICE_TOKEN_SALT_ARN"):
+    raise RuntimeError("Missing required environment variable: DEVICE_TOKEN_SALT_ARN")
+
+_sm = boto3.client("secretsmanager")
+_raw_salt: str = _sm.get_secret_value(
+    SecretId=os.environ["DEVICE_TOKEN_SALT_ARN"]
+)["SecretString"]
+try:
+    _DEVICE_TOKEN_SALT: str = json.loads(_raw_salt)["salt"]
+except (json.JSONDecodeError, KeyError) as _exc:
+    raise RuntimeError(
+        "DEVICE_TOKEN_SALT secret must be JSON with a 'salt' field"
+    ) from _exc
+
+
+def _hash_pairing_code(code: str) -> str:
+    """Return HMAC-SHA256 hex digest of the pairing code."""
+    return hmac.new(_DEVICE_TOKEN_SALT.encode(), code.encode(), hashlib.sha256).hexdigest()
+
 
 _CODE_ALPHABET = string.ascii_uppercase + string.digits
 _CODE_LENGTH = 8
@@ -136,7 +163,7 @@ def handler(event: dict, context: Any) -> dict:
                 parameters=[
                     {"name": "tag", "value": {"stringValue": location_tag}},
                     {"name": "rid", "value": {"stringValue": range_id}},
-                    {"name": "code", "value": {"stringValue": pairing_code}},
+                    {"name": "code", "value": {"stringValue": _hash_pairing_code(pairing_code)}},
                     {"name": "expires_at", "value": {"stringValue": expires_at_str}},
                 ],
             )

@@ -124,3 +124,20 @@ class TestPairHandler:
                 _event({"pairing_code": "VALIDCODE123"}), FakeContext()
             )
         assert "Access-Control-Allow-Origin" in resp["headers"]
+
+    def test_pairing_code_hashed_before_db_lookup(self, handler_mod):
+        """The submitted pairing code must be hashed before the WHERE clause — not compared as plaintext."""
+        rds = _make_rds(updated=1)
+        plaintext_code = "VALIDCODE123"
+        with patch("boto3.client", return_value=rds):
+            resp = handler_mod.handler(_event({"pairing_code": plaintext_code}), FakeContext())
+
+        assert resp["statusCode"] == 200
+
+        update_call = next(
+            c for c in rds.execute_statement.call_args_list
+            if "UPDATE devices" in c.kwargs.get("sql", "")
+        )
+        params = {p["name"]: p["value"]["stringValue"] for p in update_call.kwargs["parameters"]}
+        assert params["code"] != plaintext_code, "plaintext code must not reach the DB"
+        assert len(params["code"]) == 64, "expected HMAC-SHA256 hex digest (64 chars)"
