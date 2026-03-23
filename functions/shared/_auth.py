@@ -63,7 +63,8 @@ CORS_HEADERS: dict[str, str] = {
 
 _jwks_cache: dict | None = None
 _jwks_fetched_at: float = 0.0
-_JWKS_TTL_SECONDS: int = 3600  # 1 hour
+_JWKS_TTL_SECONDS: int = 3600        # 1 hour — normal refresh interval
+_JWKS_RETRY_SECONDS: int = 60        # back-off after a refresh failure
 
 
 def _get_jwks(*, force_refresh: bool = False) -> dict:
@@ -86,11 +87,15 @@ def _get_jwks(*, force_refresh: bool = False) -> dict:
                 raise
             # For TTL-based refresh failures, fall back to last known-good
             # keys and log so the failure is observable in CloudWatch.
+            # Advance _jwks_fetched_at by _JWKS_RETRY_SECONDS so subsequent
+            # requests reuse the cached JWKS instead of re-attempting urlopen
+            # on every invocation during a JWKS endpoint outage.
             logger.warning(
                 "Failed to refresh JWKS from %s; continuing with cached keys: %s",
                 url,
                 exc,
             )
+            _jwks_fetched_at = now - _JWKS_TTL_SECONDS + _JWKS_RETRY_SECONDS
         else:
             _jwks_cache = jwks
             _jwks_fetched_at = now

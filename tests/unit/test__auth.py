@@ -191,7 +191,7 @@ class TestGetJwks:
         assert result == new_jwks
 
     def test_ttl_refresh_failure_falls_back_to_cache(self, auth):
-        """Network error during TTL refresh → fall back to cached keys (don't raise)."""
+        """Network error during TTL refresh → fall back to cached keys and set retry backoff."""
         stale_jwks = {"keys": [{"kid": "stale-key"}]}
         auth._jwks_cache = stale_jwks
         auth._jwks_fetched_at = time.time() - 4000  # TTL expired
@@ -200,6 +200,10 @@ class TestGetJwks:
             result = auth._get_jwks()
         # Should return stale cache without raising
         assert result is stale_jwks
+        # _jwks_fetched_at should be set to a retry backoff window so the next
+        # N requests reuse the cache rather than re-attempting urlopen immediately.
+        remaining_ttl = auth._jwks_fetched_at - (time.time() - auth._JWKS_TTL_SECONDS)
+        assert 0 < remaining_ttl <= auth._JWKS_RETRY_SECONDS
 
     def test_initial_fetch_failure_raises(self, auth):
         """Network error on first fetch (no cache) → fail closed."""
