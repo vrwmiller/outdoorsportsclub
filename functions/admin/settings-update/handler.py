@@ -45,12 +45,16 @@ def handler(event: dict, context: Any) -> dict:
         member_id = member["member_id"]
         require_level(member, 5)
 
+        _MAX_DUES_CENTS = 99_999  # $999.99
+
         body = json.loads(event.get("body") or "{}")
         annual_dues_cents = body.get("annual_dues_cents")
         if annual_dues_cents is None:
             raise ValueError("annual_dues_cents is required")
         if not isinstance(annual_dues_cents, int) or annual_dues_cents <= 0:
             raise ValueError("annual_dues_cents must be a positive integer")
+        if annual_dues_cents > _MAX_DUES_CENTS:
+            raise ValueError(f"annual_dues_cents exceeds maximum ({_MAX_DUES_CENTS})")
 
         rds = boto3.client("rds-data")
         tx = rds.begin_transaction(
