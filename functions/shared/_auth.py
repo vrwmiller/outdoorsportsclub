@@ -15,6 +15,7 @@ Usage (in a handler):
 import json
 import logging
 import os
+import time
 import urllib.request
 from typing import Any
 
@@ -34,6 +35,7 @@ _REQUIRED_ENV = (
     "DB_NAME",
     "COGNITO_USER_POOL_ID",
     "COGNITO_REGION",
+    "COGNITO_APP_CLIENT_ID",
     "CORS_ALLOW_ORIGIN",
 )
 
@@ -46,6 +48,7 @@ DB_SECRET_ARN: str = os.environ["DB_SECRET_ARN"]
 DB_NAME: str = os.environ["DB_NAME"]
 _POOL_ID: str = os.environ["COGNITO_USER_POOL_ID"]
 _REGION: str = os.environ["COGNITO_REGION"]
+_APP_CLIENT_ID: str = os.environ["COGNITO_APP_CLIENT_ID"]
 CORS_ALLOW_ORIGIN: str = os.environ["CORS_ALLOW_ORIGIN"]
 
 CORS_HEADERS: dict[str, str] = {
@@ -55,21 +58,25 @@ CORS_HEADERS: dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
-# JWKS cache (fetched once per cold start)
+# JWKS cache — refreshed every hour so rotated or retired keys take effect
 # ---------------------------------------------------------------------------
 
 _jwks_cache: dict | None = None
+_jwks_fetched_at: float = 0.0
+_JWKS_TTL_SECONDS: int = 3600  # 1 hour
 
 
-def _get_jwks() -> dict:
-    global _jwks_cache
-    if _jwks_cache is None:
+def _get_jwks(*, force_refresh: bool = False) -> dict:
+    global _jwks_cache, _jwks_fetched_at
+    now = time.time()
+    if force_refresh or _jwks_cache is None or (now - _jwks_fetched_at) > _JWKS_TTL_SECONDS:
         url = (
             f"https://cognito-idp.{_REGION}.amazonaws.com"
             f"/{_POOL_ID}/.well-known/jwks.json"
         )
         with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
             _jwks_cache = json.loads(resp.read())
+            _jwks_fetched_at = now
     return _jwks_cache
 
 
@@ -95,11 +102,19 @@ def validate_cognito_jwt(token: str) -> dict:
     jwks = _get_jwks()
     key_data = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
     if key_data is None:
+        # kid not in cached JWKS — Cognito may have added a new key since last
+        # fetch. Force a refresh and retry once before failing.
+        jwks = _get_jwks(force_refresh=True)
+        key_data = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
+    if key_data is None:
         raise PermissionError("JWT key ID not found in JWKS")
 
     public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
 
     try:
+        # Cognito access tokens do not carry an aud claim; the client is
+        # identified by the client_id claim instead. aud verification is
+        # handled explicitly below via client_id.
         claims = jwt.decode(
             token,
             public_key,
@@ -110,6 +125,19 @@ def validate_cognito_jwt(token: str) -> dict:
         raise PermissionError("JWT has expired") from exc
     except jwt.InvalidTokenError as exc:
         raise PermissionError(f"Invalid JWT: {exc}") from exc
+
+    # Validate issuer — prevents tokens from other User Pools or environments.
+    expected_iss = f"https://cognito-idp.{_REGION}.amazonaws.com/{_POOL_ID}"
+    if claims.get("iss") != expected_iss:
+        raise PermissionError("JWT issuer mismatch")
+
+    # Only access tokens are accepted; ID tokens are rejected.
+    if claims.get("token_use") != "access":
+        raise PermissionError("JWT token_use must be 'access'")
+
+    # Validate client binding — prevents cross-client token reuse within the pool.
+    if claims.get("client_id") != _APP_CLIENT_ID:
+        raise PermissionError("JWT client_id mismatch")
 
     return claims
 

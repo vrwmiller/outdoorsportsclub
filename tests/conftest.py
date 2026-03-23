@@ -87,6 +87,7 @@ def lambda_env(monkeypatch):
     monkeypatch.setenv("SNS_ALERTS_TOPIC_ARN", "arn:aws:sns:us-east-1:123456789012:test-alerts")
     monkeypatch.setenv("COGNITO_USER_POOL_ID", "us-east-1_TestPool")
     monkeypatch.setenv("COGNITO_REGION", "us-east-1")
+    monkeypatch.setenv("COGNITO_APP_CLIENT_ID", "test-app-client-id")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
