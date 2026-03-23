@@ -6,11 +6,11 @@ Accepted fields: annual_dues_cents.
 Sets updated_at = NOW() and updated_by_member_id to the Administrator's
 members.id. Does not affect in-flight Stripe Payment Intents.
 
-Body: { annual_dues_cents: positive integer }
+Body: { annual_dues_cents: positive integer, max 99999 ($999.99) }
 
 Returns:
     200 OK  { annual_dues_cents, updated_at }
-    400 Bad Request (negative or zero amount)
+    400 Bad Request (missing, negative, zero, or above maximum amount)
     403 Forbidden
     500 Internal Server Error
 """
@@ -45,12 +45,16 @@ def handler(event: dict, context: Any) -> dict:
         member_id = member["member_id"]
         require_level(member, 5)
 
+        _MAX_DUES_CENTS = 99_999  # $999.99
+
         body = json.loads(event.get("body") or "{}")
         annual_dues_cents = body.get("annual_dues_cents")
         if annual_dues_cents is None:
             raise ValueError("annual_dues_cents is required")
-        if not isinstance(annual_dues_cents, int) or annual_dues_cents <= 0:
+        if type(annual_dues_cents) is not int or annual_dues_cents <= 0:
             raise ValueError("annual_dues_cents must be a positive integer")
+        if annual_dues_cents > _MAX_DUES_CENTS:
+            raise ValueError(f"annual_dues_cents exceeds maximum ({_MAX_DUES_CENTS})")
 
         rds = boto3.client("rds-data")
         tx = rds.begin_transaction(

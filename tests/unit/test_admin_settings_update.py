@@ -96,6 +96,48 @@ class TestAdminSettingsUpdate:
 
         assert resp["statusCode"] == 403
 
+    def test_dues_above_max_returns_400(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(
+                member_jwt_event({"annual_dues_cents": 100_000}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+        assert "exceeds maximum" in json.loads(resp["body"])["error"]
+
+    def test_dues_at_max_succeeds(self, mod):
+        rds = make_member_rds({
+            "UPDATE club_settings": {"records": [[{"longValue": 99999}, {"stringValue": "2025-01-01T00:00:00Z"}]]},
+        })
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
+             patch("boto3.client", return_value=rds):
+            resp = mod.handler(
+                member_jwt_event({"annual_dues_cents": 99_999}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 200
+
+    def test_boolean_true_returns_400(self, mod):
+        # bool is a subclass of int; True must be rejected, not treated as 1 cent
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(
+                member_jwt_event({"annual_dues_cents": True}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+
+    def test_boolean_false_returns_400(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(
+                member_jwt_event({"annual_dues_cents": False}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+
     def test_cors_headers_present(self, mod):
         rds = make_member_rds({
             "UPDATE club_settings": {"records": _SETTINGS_RETURN},
