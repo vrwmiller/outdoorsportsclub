@@ -20,7 +20,7 @@ Follow these steps exactly. Do not skip any step.
    * Top-level PR comments: `gh pr view <number> --comments`
    * Inline code comments: `gh api --paginate repos/<nameWithOwner>/pulls/<number>/comments`
 
-   Also fetch thread node IDs now — you will need them for step 7. Paginate until `hasNextPage` is false:
+   Also fetch thread node IDs now — you will need them for step 8. Paginate until `hasNextPage` is false:
    ```bash
    gh api graphql -f query='
      query($owner: String!, $name: String!, $pr: Int!, $after: String) {
@@ -82,9 +82,9 @@ Follow these steps exactly. Do not skip any step.
 
    Repeat until all Valid comments are processed.
 
-6. **Push** — run `git push` once after all batches are committed.
+6. **Update docs if needed** — review the full set of fixes applied. If any fix changed an API contract, request/response shape, error code, auth level, schema column, or AWS service behavior, invoke the docs agent: *"Update docs/design.md to reflect [list of specific changes from this PR]"*. The docs agent must commit its changes before you proceed. Do not push until the docs agent confirms the update is complete or confirms no update is needed.
 
-7. **Update docs if needed** — review the full set of fixes applied. If any fix changed an API contract, request/response shape, error code, auth level, schema column, or AWS service behavior, invoke the docs agent: *"Update docs/design.md to reflect [list of specific changes from this PR]"*. Do not resolve threads until the docs agent confirms the update is complete or confirms no update is needed.
+7. **Push** — run `git push` once after all batches (including any docs update) are committed.
 
 8. **Resolve threads** — for every comment that was either fixed or rejected, resolve its review thread using the node ID map built in step 3:
    ```
