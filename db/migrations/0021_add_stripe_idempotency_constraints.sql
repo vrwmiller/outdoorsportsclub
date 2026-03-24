@@ -5,10 +5,10 @@
 --              replayed. Partial (WHERE IS NOT NULL) because Cash rows have no
 --              payment intent and must not be constrained against each other.
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_consumable_purchases_stripe_intent
+CREATE UNIQUE INDEX IF NOT EXISTS idx_consumable_purchases_stripe_payment_intent_id
     ON consumable_purchases (stripe_payment_intent_id)
     WHERE stripe_payment_intent_id IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_guest_visits_stripe_intent
+CREATE UNIQUE INDEX IF NOT EXISTS idx_guest_visits_stripe_payment_intent_id
     ON guest_visits (stripe_payment_intent_id)
     WHERE stripe_payment_intent_id IS NOT NULL;
