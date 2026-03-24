@@ -35,6 +35,13 @@ logger.setLevel(logging.INFO)
 
 _ALLOWED_STATUS = {"Available", "Closed"}
 
+# Static map from accepted field name to its parameterised SQL fragment.
+# This prevents any client-controlled string from reaching the SQL text.
+_COLUMN_CLAUSES: dict[str, str] = {
+    "lane_number": "lane_number = :lane_number",
+    "status": "status = :status",
+}
+
 
 def handler(event: dict, context: Any) -> dict:
     start = time.monotonic()
@@ -127,7 +134,7 @@ def handler(event: dict, context: Any) -> dict:
             set_clauses = []
             params = [{"name": "lid", "value": {"stringValue": lane_id}}]
             for col, val in updates.items():
-                set_clauses.append(f"{col} = :{col}")
+                set_clauses.append(_COLUMN_CLAUSES[col])
                 if isinstance(val, int):
                     params.append({"name": col, "value": {"longValue": val}})
                 else:
