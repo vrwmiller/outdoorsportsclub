@@ -117,6 +117,8 @@ def handler(event: dict, context: Any) -> dict:
             raise ValueError("location_tag is required")
         if not range_id:
             raise ValueError("range_id is required")
+        if not isinstance(range_id, str):
+            raise ValueError("range_id must be a valid UUID")
         try:
             uuid.UUID(range_id)
         except ValueError:

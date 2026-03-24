@@ -92,6 +92,16 @@ class TestAdminDevicesPairingCode:
 
         assert resp["statusCode"] == 400
 
+    def test_numeric_range_id_returns_400(self, mod):
+        """range_id supplied as a JSON number (not a string) must return 400, not 500."""
+        with patch.object(mod, "authenticate_member", return_value=_WEBMASTER):
+            resp = mod.handler(
+                member_jwt_event({"location_tag": "kiosk-main", "range_id": 12345}, method="POST"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+
     def test_level_5_returns_403(self, mod):
         low = {"member_id": FAKE_MEMBER_ID, "sub": FAKE_SUB, "training_level": 5}
         with patch.object(mod, "authenticate_member", return_value=low):

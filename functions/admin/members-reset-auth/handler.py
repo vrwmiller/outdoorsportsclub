@@ -133,15 +133,15 @@ def handler(event: dict, context: Any) -> dict:
                     UserPoolId=_POOL_ID,
                     Username=social_provider_id,
                 )
-            except Exception as exc:
+            except Exception:
                 # Cognito sign-out failed after the DB change was committed.
                 # Log at ERROR so this is visible in CloudWatch, but still
                 # return 200 — the DB state is correct and the caller cannot
                 # retry meaningfully (the social_provider_id is already NULL).
-                logger.error(
-                    "Cognito sign-out failed during reset-auth [%s]: %s",
+                logger.exception(
+                    "Cognito sign-out failed during reset-auth [%s]: target_member_id=%s",
                     context.aws_request_id,
-                    exc,
+                    target_member_id,
                 )
 
         logger.info(json.dumps({
