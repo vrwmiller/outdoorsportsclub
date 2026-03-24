@@ -246,7 +246,8 @@ def handler(event: dict, context: Any) -> dict:
                 "action": "consumable_purchase",
                 "stripe_payment_intent_id": stripe_intent_id,
                 "duration_ms": duration_ms,
-                "error": "duplicate_payment_intent",
+                "error": error_name,
+                "error_code": "duplicate_payment_intent",
             }))
             return error_response(409, "Payment intent already processed")
         logger.exception(json.dumps({

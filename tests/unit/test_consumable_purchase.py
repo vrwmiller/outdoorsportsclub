@@ -214,9 +214,18 @@ class TestConsumablePurchase:
         rds.begin_transaction.return_value = {"transactionId": "tx-1"}
         rds.rollback_transaction.return_value = {}
 
-        with patch("boto3.client", side_effect=_client_factory(rds)):
+        sm = _sm_mock()
+        good_intent = {"status": "succeeded", "amount": UNIT_PRICE_CENTS}
+
+        with patch("boto3.client", side_effect=_client_factory(rds, sm)), \
+                patch("stripe.PaymentIntent.retrieve", return_value=good_intent):
             resp = mod.handler(
-                device_event({"item_id": FAKE_ITEM_ID, "quantity": 1, "payment_method": "Cash"}),
+                device_event({
+                    "item_id": FAKE_ITEM_ID,
+                    "quantity": 1,
+                    "payment_method": "Card",
+                    "stripe_payment_intent_id": "pi_dup",
+                }),
                 FakeContext(),
             )
 

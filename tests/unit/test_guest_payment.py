@@ -215,9 +215,16 @@ class TestGuestPayment:
         rds.execute_statement.side_effect = _side_effect
         rds.begin_transaction.return_value = {"transactionId": "tx-1"}
         rds.rollback_transaction.return_value = {}
+        sm = _sm_mock()
 
-        with patch("boto3.client", side_effect=_client_factory(rds)):
-            resp = mod.handler(device_event(_base_body()), FakeContext())
+        with patch("boto3.client", side_effect=_client_factory(rds, sm)), patch(
+            "stripe.PaymentIntent.retrieve",
+            return_value={"id": "pi_dup", "status": "succeeded", "amount": GUEST_FEE_CENTS, "currency": "usd", "metadata": {}},
+        ):
+            resp = mod.handler(
+                device_event(_base_body(payment_method="NFC", stripe_payment_intent_id="pi_dup")),
+                FakeContext(),
+            )
 
         assert resp["statusCode"] == 409
         assert json.loads(resp["body"]) == {"error": "Payment intent already processed"}
