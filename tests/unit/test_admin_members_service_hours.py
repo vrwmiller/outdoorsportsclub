@@ -81,9 +81,16 @@ class TestAdminMembersServiceHours:
         assert resp["statusCode"] == 400
 
     def test_hours_above_limit_returns_400(self, mod):
-        """service_hours above 10000 must be rejected."""
+        """service_hours above 999.99 (DECIMAL(5,2) max) must be rejected."""
         with patch.object(mod, "authenticate_member", return_value=_ADMIN):
-            resp = mod.handler(_event({"service_hours": 10001}), FakeContext())
+            resp = mod.handler(_event({"service_hours": 1000}), FakeContext())
+
+        assert resp["statusCode"] == 400
+
+    def test_boolean_hours_returns_400(self, mod):
+        """Boolean JSON values must be rejected (bool is subclass of int in Python)."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"service_hours": True}), FakeContext())
 
         assert resp["statusCode"] == 400
 

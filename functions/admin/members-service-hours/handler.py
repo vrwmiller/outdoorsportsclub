@@ -52,8 +52,13 @@ def handler(event: dict, context: Any) -> dict:
         service_hours = body.get("service_hours")
         if service_hours is None:
             raise ValueError("service_hours is required")
-        if not isinstance(service_hours, (int, float)) or service_hours < 0 or service_hours > 10000:
-            raise ValueError("service_hours must be a non-negative number no greater than 10000")
+        if (
+            isinstance(service_hours, bool)
+            or not isinstance(service_hours, (int, float))
+            or service_hours < 0
+            or service_hours > 999.99
+        ):
+            raise ValueError("service_hours must be a non-negative number no greater than 999.99")
 
         rds = boto3.client("rds-data")
         tx = rds.begin_transaction(
