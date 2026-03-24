@@ -84,6 +84,15 @@ def handler(event: dict, context: Any) -> dict:
             database=DB_NAME,
         )
         try:
+            # Set serializable isolation first — must precede any DML or query.
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+            )
+
             # Set RLS session variable — kiosk acts with training_level 4 (admin).
             rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
@@ -176,14 +185,7 @@ def handler(event: dict, context: Any) -> dict:
                 raise RuntimeError("club_settings row missing")
             guest_fee_cents: int = int(settings_result["records"][0][0]["longValue"])
 
-            # Annual visit limit check — serializable to prevent race conditions
-            rds.execute_statement(
-                resourceArn=DB_CLUSTER_ARN,
-                secretArn=DB_SECRET_ARN,
-                database=DB_NAME,
-                transactionId=tx["transactionId"],
-                sql="SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
-            )
+            # Annual visit limit check — transaction is serializable (set above).
             count_result = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
