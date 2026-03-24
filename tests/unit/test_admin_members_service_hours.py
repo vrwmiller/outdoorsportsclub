@@ -94,6 +94,20 @@ class TestAdminMembersServiceHours:
 
         assert resp["statusCode"] == 400
 
+    def test_nan_hours_returns_400(self, mod):
+        """NaN must be rejected — float('nan') comparisons are always False."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"service_hours": float("nan")}), FakeContext())
+
+        assert resp["statusCode"] == 400
+
+    def test_infinity_hours_returns_400(self, mod):
+        """Infinity must be rejected."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"service_hours": float("inf")}), FakeContext())
+
+        assert resp["statusCode"] == 400
+
     def test_missing_field_returns_400(self, mod):
         with patch.object(mod, "authenticate_member", return_value=_ADMIN):
             resp = mod.handler(_event({}), FakeContext())
