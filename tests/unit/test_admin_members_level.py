@@ -40,7 +40,10 @@ def mod():
 class TestAdminMembersLevel:
     def test_success_updates_level(self, mod):
         rds = make_member_rds({
-            "FROM members WHERE id = :tid": {"records": [[{"stringValue": _TARGET_ID}, {"longValue": 3}]]},  # target is Level 3, actor is Level 5
+            # target is Level 3, actor is Level 5
+            "FROM members WHERE id = :tid": {
+                "records": [[{"stringValue": _TARGET_ID}, {"longValue": 3}]],
+            },
             "training_level = :new_level": {"numberOfRecordsUpdated": 1},
             "Level-Change": {"numberOfRecordsUpdated": 1},
         })
@@ -56,7 +59,10 @@ class TestAdminMembersLevel:
     def test_cannot_modify_higher_level_member_returns_403(self, mod):
         """Level 5 actor cannot modify a Level 5 or Level 6 member."""
         rds = make_member_rds({
-            "FROM members WHERE id = :tid": {"records": [[{"stringValue": _TARGET_ID}, {"longValue": 5}]]},  # target is Level 5, same as actor
+            # target is Level 5, same as actor
+            "FROM members WHERE id = :tid": {
+                "records": [[{"stringValue": _TARGET_ID}, {"longValue": 5}]],
+            },
         })
         with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
              patch("boto3.client", return_value=rds):

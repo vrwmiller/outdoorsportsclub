@@ -114,7 +114,12 @@ def handler(event: dict, context: Any) -> dict:
                 return {
                     "statusCode": 403,
                     "headers": CORS_HEADERS,
-                    "body": json.dumps({"error": "Cannot modify a member whose training_level is at or above your own"}),
+                    "body": json.dumps({
+                        "error": (
+                            "Cannot modify a member whose training_level"
+                            " is at or above your own"
+                        )
+                    }),
                 }
 
             rds.execute_statement(
