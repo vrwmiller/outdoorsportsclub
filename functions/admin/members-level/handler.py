@@ -98,6 +98,14 @@ def handler(event: dict, context: Any) -> dict:
                     secretArn=DB_SECRET_ARN,
                     transactionId=tx["transactionId"],
                 )
+                logger.info(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": actor_member_id,
+                    "device_id": None,
+                    "action": "admin_members_level",
+                    "duration_ms": round((time.monotonic() - start) * 1000),
+                    "error": "not_found",
+                }))
                 return {
                     "statusCode": 404,
                     "headers": CORS_HEADERS,
@@ -111,6 +119,14 @@ def handler(event: dict, context: Any) -> dict:
                     secretArn=DB_SECRET_ARN,
                     transactionId=tx["transactionId"],
                 )
+                logger.info(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": actor_member_id,
+                    "device_id": None,
+                    "action": "admin_members_level",
+                    "duration_ms": round((time.monotonic() - start) * 1000),
+                    "error": "forbidden_target",
+                }))
                 return {
                     "statusCode": 403,
                     "headers": CORS_HEADERS,
