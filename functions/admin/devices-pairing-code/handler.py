@@ -23,6 +23,7 @@ import os
 import secrets
 import string
 import time
+import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
@@ -116,6 +117,12 @@ def handler(event: dict, context: Any) -> dict:
             raise ValueError("location_tag is required")
         if not range_id:
             raise ValueError("range_id is required")
+        if not isinstance(range_id, str):
+            raise ValueError("range_id must be a valid UUID")
+        try:
+            uuid.UUID(range_id)
+        except ValueError:
+            raise ValueError("range_id must be a valid UUID")
 
         pairing_code = _generate_pairing_code()
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=_EXPIRY_MINUTES)

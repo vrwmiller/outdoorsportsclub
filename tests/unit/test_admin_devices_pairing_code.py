@@ -23,7 +23,8 @@ _MOD_NAME = "admin_devices_pairing_code_handler"
 
 _DEVICE_ID = "dddddddd-eeee-ffff-0000-111111111111"
 
-_GOOD_BODY = {"location_tag": "kiosk-main", "range_id": "range-id-1"}
+_GOOD_RANGE_ID = "11111111-2222-3333-4444-555555555555"
+_GOOD_BODY = {"location_tag": "kiosk-main", "range_id": _GOOD_RANGE_ID}
 
 
 @pytest.fixture()
@@ -76,6 +77,29 @@ class TestAdminDevicesPairingCode:
         with patch.object(mod, "authenticate_member", return_value=_WEBMASTER):
             resp = mod.handler(
                 member_jwt_event({"location_tag": "kiosk-main"}, method="POST"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+
+    def test_invalid_range_id_uuid_returns_400(self, mod):
+        """Non-UUID range_id must be rejected before hitting the DB."""
+        with patch.object(mod, "authenticate_member", return_value=_WEBMASTER):
+            resp = mod.handler(
+                member_jwt_event(
+                    {"location_tag": "kiosk-main", "range_id": "not-a-uuid"},
+                    method="POST",
+                ),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+
+    def test_numeric_range_id_returns_400(self, mod):
+        """range_id supplied as a JSON number (not a string) must return 400, not 500."""
+        with patch.object(mod, "authenticate_member", return_value=_WEBMASTER):
+            resp = mod.handler(
+                member_jwt_event({"location_tag": "kiosk-main", "range_id": 12345}, method="POST"),
                 FakeContext(),
             )
 

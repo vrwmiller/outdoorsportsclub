@@ -83,13 +83,13 @@ def handler(event: dict, context: Any) -> dict:
                 parameters=[{"name": "level", "value": {"stringValue": str(member["training_level"])}}],
             )
 
-            # Verify target member exists.
+            # Verify target member exists and fetch their current level.
             check_result = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
                 database=DB_NAME,
                 transactionId=tx["transactionId"],
-                sql="SELECT id FROM members WHERE id = :tid",
+                sql="SELECT id, training_level FROM members WHERE id = :tid",
                 parameters=[{"name": "tid", "value": {"stringValue": target_member_id}}],
             )
             if not check_result["records"]:
@@ -98,10 +98,44 @@ def handler(event: dict, context: Any) -> dict:
                     secretArn=DB_SECRET_ARN,
                     transactionId=tx["transactionId"],
                 )
+                logger.info(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": actor_member_id,
+                    "device_id": None,
+                    "action": "admin_members_level",
+                    "duration_ms": round((time.monotonic() - start) * 1000),
+                    "error": "not_found",
+                }))
                 return {
                     "statusCode": 404,
                     "headers": CORS_HEADERS,
                     "body": json.dumps({"error": "Member not found"}),
+                }
+
+            target_current_level = check_result["records"][0][1]["longValue"]
+            if target_current_level >= member["training_level"]:
+                rds.commit_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=tx["transactionId"],
+                )
+                logger.info(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": actor_member_id,
+                    "device_id": None,
+                    "action": "admin_members_level",
+                    "duration_ms": round((time.monotonic() - start) * 1000),
+                    "error": "forbidden_target",
+                }))
+                return {
+                    "statusCode": 403,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps({
+                        "error": (
+                            "Cannot modify a member whose training_level"
+                            " is at or above your own"
+                        )
+                    }),
                 }
 
             rds.execute_statement(

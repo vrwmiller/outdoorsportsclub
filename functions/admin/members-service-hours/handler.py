@@ -14,6 +14,7 @@ Returns:
 """
 import json
 import logging
+import math
 import time
 from typing import Any
 
@@ -52,8 +53,16 @@ def handler(event: dict, context: Any) -> dict:
         service_hours = body.get("service_hours")
         if service_hours is None:
             raise ValueError("service_hours is required")
-        if not isinstance(service_hours, (int, float)) or service_hours < 0:
-            raise ValueError("service_hours must be a non-negative number")
+        if (
+            isinstance(service_hours, bool)
+            or not isinstance(service_hours, (int, float))
+            or service_hours < 0
+            or service_hours > 999.99
+            or not math.isfinite(float(service_hours))
+        ):
+            raise ValueError(
+                "service_hours must be a non-negative finite number no greater than 999.99"
+            )
 
         rds = boto3.client("rds-data")
         tx = rds.begin_transaction(

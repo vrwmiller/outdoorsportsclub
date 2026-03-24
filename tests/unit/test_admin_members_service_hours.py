@@ -80,6 +80,34 @@ class TestAdminMembersServiceHours:
 
         assert resp["statusCode"] == 400
 
+    def test_hours_above_limit_returns_400(self, mod):
+        """service_hours above 999.99 (DECIMAL(5,2) max) must be rejected."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"service_hours": 1000}), FakeContext())
+
+        assert resp["statusCode"] == 400
+
+    def test_boolean_hours_returns_400(self, mod):
+        """Boolean JSON values must be rejected (bool is subclass of int in Python)."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"service_hours": True}), FakeContext())
+
+        assert resp["statusCode"] == 400
+
+    def test_nan_hours_returns_400(self, mod):
+        """NaN must be rejected — float('nan') comparisons are always False."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"service_hours": float("nan")}), FakeContext())
+
+        assert resp["statusCode"] == 400
+
+    def test_infinity_hours_returns_400(self, mod):
+        """Infinity must be rejected."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"service_hours": float("inf")}), FakeContext())
+
+        assert resp["statusCode"] == 400
+
     def test_missing_field_returns_400(self, mod):
         with patch.object(mod, "authenticate_member", return_value=_ADMIN):
             resp = mod.handler(_event({}), FakeContext())

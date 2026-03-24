@@ -133,12 +133,15 @@ def handler(event: dict, context: Any) -> dict:
                     UserPoolId=_POOL_ID,
                     Username=social_provider_id,
                 )
-            except cognito.exceptions.UserNotFoundException:
-                # Cognito user may already be deleted; the DB change is still valid.
-                logger.warning(
-                    "Cognito user not found during reset-auth [%s]: social_provider_id=%s",
+            except Exception:
+                # Cognito sign-out failed after the DB change was committed.
+                # Log at ERROR so this is visible in CloudWatch, but still
+                # return 200 — the DB state is correct and the caller cannot
+                # retry meaningfully (the social_provider_id is already NULL).
+                logger.exception(
+                    "Cognito sign-out failed during reset-auth [%s]: target_member_id=%s",
                     context.aws_request_id,
-                    social_provider_id,
+                    target_member_id,
                 )
 
         logger.info(json.dumps({
