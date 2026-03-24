@@ -111,6 +111,27 @@ class TestAdminMembersResetAuth:
 
         assert resp["statusCode"] == 403
 
+    def test_cognito_error_still_returns_200(self, mod):
+        """DB is committed before Cognito is called; any Cognito failure must not produce 500."""
+        rds = make_member_rds({
+            "FROM members WHERE id = :tid": {"records": _MEMBER_ROW_WITH_IDP},
+            "social_provider_id = NULL": {"numberOfRecordsUpdated": 1},
+        })
+        cognito_mock = MagicMock()
+        cognito_mock.admin_user_global_sign_out.side_effect = Exception("network error")
+        def _boto(svc, **kw):
+            if svc == "cognito-idp":
+                return cognito_mock
+            return rds
+        with patch.object(mod, "authenticate_member", return_value=_WEBMASTER), \
+             patch("boto3.client", side_effect=_boto):
+            resp = mod.handler(
+                member_jwt_event({"member_id": _TARGET_ID}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 200
+
     def test_auth_failure_returns_403(self, mod):
         with patch.object(mod, "authenticate_member", side_effect=PermissionError("denied")):
             resp = mod.handler(
