@@ -80,6 +80,13 @@ class TestAdminMembersServiceHours:
 
         assert resp["statusCode"] == 400
 
+    def test_hours_above_limit_returns_400(self, mod):
+        """service_hours above 10000 must be rejected."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"service_hours": 10001}), FakeContext())
+
+        assert resp["statusCode"] == 400
+
     def test_missing_field_returns_400(self, mod):
         with patch.object(mod, "authenticate_member", return_value=_ADMIN):
             resp = mod.handler(_event({}), FakeContext())
