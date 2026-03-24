@@ -92,10 +92,8 @@ Follow these steps exactly. Do not skip any step.
    ```
    Resolve all threads before ending.
 
-9. **Request a new Copilot review** — after all threads are resolved, trigger a fresh Copilot review pass by posting a comment on the PR:
+9. **Request a new Copilot review** — after all threads are resolved, tell the user:
 
-   ```bash
-   gh pr comment <number> --body "@copilot review"
-   ```
+   > All threads have been resolved. To trigger another Copilot review pass, click the **Re-request review** button (circular arrow icon) next to Copilot in the Reviewers sidebar on the PR page.
 
-   Confirm the comment was posted successfully. This triggers Copilot's PR reviewer regardless of reviewer-request API permissions.
+   Note: `@copilot review` in a comment triggers the Copilot *coding agent* (opens a sub-PR), not the PR reviewer — do not use it here. The reviewer-request API returns HTTP 422 for this repo. The manual button is the only reliable trigger.
