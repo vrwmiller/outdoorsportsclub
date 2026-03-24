@@ -86,7 +86,10 @@ class TestAdminDevicesPairingCode:
         """Non-UUID range_id must be rejected before hitting the DB."""
         with patch.object(mod, "authenticate_member", return_value=_WEBMASTER):
             resp = mod.handler(
-                member_jwt_event({"location_tag": "kiosk-main", "range_id": "not-a-uuid"}, method="POST"),
+                member_jwt_event(
+                    {"location_tag": "kiosk-main", "range_id": "not-a-uuid"},
+                    method="POST",
+                ),
                 FakeContext(),
             )
 

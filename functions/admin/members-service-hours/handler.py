@@ -60,7 +60,9 @@ def handler(event: dict, context: Any) -> dict:
             or service_hours > 999.99
             or not math.isfinite(float(service_hours))
         ):
-            raise ValueError("service_hours must be a non-negative finite number no greater than 999.99")
+            raise ValueError(
+                "service_hours must be a non-negative finite number no greater than 999.99"
+            )
 
         rds = boto3.client("rds-data")
         tx = rds.begin_transaction(
