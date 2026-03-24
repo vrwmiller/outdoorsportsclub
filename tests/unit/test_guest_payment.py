@@ -171,3 +171,54 @@ class TestGuestPayment:
             resp = mod.handler(device_event(_base_body()), FakeContext())
         assert "Access-Control-Allow-Origin" in resp["headers"]
 
+    def test_duplicate_stripe_intent_returns_409(self, mod):
+        dup_msg = (
+            "duplicate key value violates unique constraint "
+            '"idx_guest_visits_stripe_payment_intent_id"'
+        )
+        rds = MagicMock()
+
+        def _side_effect(**kwargs):
+            sql = kwargs.get("sql", "")
+            if "WHERE device_token" in sql:
+                return {
+                    "records": [
+                        [
+                            {"stringValue": "device-id-1"},
+                            {"stringValue": "range-id-1"},
+                            {"stringValue": "Active"},
+                        ]
+                    ]
+                }
+            if "SET TRANSACTION ISOLATION LEVEL" in sql:
+                return {"records": []}
+            if "set_config" in sql:
+                return {"records": []}
+            if "FROM members WHERE member_num" in sql:
+                return {"records": [[{"stringValue": FAKE_MEMBER_ID}]]}
+            if "FROM lanes" in sql:
+                return {"records": [[{"stringValue": FAKE_LANE_ID}]]}
+            if "INSERT INTO guests" in sql:
+                return {
+                    "records": [
+                        [{"stringValue": FAKE_GUEST_ID}, {"stringValue": VALID_WAIVER_DATE}]
+                    ]
+                }
+            if "FROM club_settings" in sql:
+                return {"records": [[{"longValue": GUEST_FEE_CENTS}]]}
+            if "COUNT(*) FROM guest_visits" in sql:
+                return {"records": [[{"longValue": 0}]]}
+            if "INSERT INTO guest_visits" in sql:
+                raise Exception(dup_msg)
+            return {"records": []}
+
+        rds.execute_statement.side_effect = _side_effect
+        rds.begin_transaction.return_value = {"transactionId": "tx-1"}
+        rds.rollback_transaction.return_value = {}
+
+        with patch("boto3.client", side_effect=_client_factory(rds)):
+            resp = mod.handler(device_event(_base_body()), FakeContext())
+
+        assert resp["statusCode"] == 409
+        assert json.loads(resp["body"]) == {"error": "Payment intent already processed"}
+

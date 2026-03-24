@@ -180,3 +180,45 @@ class TestConsumablePurchase:
                 FakeContext(),
             )
         assert "Access-Control-Allow-Origin" in resp["headers"]
+
+    def test_duplicate_stripe_intent_returns_409(self, mod):
+        dup_msg = (
+            "duplicate key value violates unique constraint "
+            '"idx_consumable_purchases_stripe_payment_intent_id"'
+        )
+        rds = MagicMock()
+
+        def _side_effect(**kwargs):
+            sql = kwargs.get("sql", "")
+            if "WHERE device_token" in sql:
+                return {
+                    "records": [
+                        [
+                            {"stringValue": "device-id-1"},
+                            {"stringValue": "range-id-1"},
+                            {"stringValue": "Active"},
+                        ]
+                    ]
+                }
+            if "FROM consumable_items WHERE id" in sql:
+                return {
+                    "records": [[{"stringValue": "Range Targets"}, {"longValue": UNIT_PRICE_CENTS}]]
+                }
+            if "set_config" in sql:
+                return {"records": []}
+            if "INSERT INTO consumable_purchases" in sql:
+                raise Exception(dup_msg)
+            return {"records": []}
+
+        rds.execute_statement.side_effect = _side_effect
+        rds.begin_transaction.return_value = {"transactionId": "tx-1"}
+        rds.rollback_transaction.return_value = {}
+
+        with patch("boto3.client", side_effect=_client_factory(rds)):
+            resp = mod.handler(
+                device_event({"item_id": FAKE_ITEM_ID, "quantity": 1, "payment_method": "Cash"}),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 409
+        assert json.loads(resp["body"]) == {"error": "Payment intent already processed"}
