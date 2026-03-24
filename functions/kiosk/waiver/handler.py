@@ -44,6 +44,7 @@ S3_WAIVER_BUCKET: str = os.environ["S3_WAIVER_BUCKET"]
 def handler(event: dict, context: Any) -> dict:
     start = time.monotonic()
     member_id: str | None = None
+    s3_key: str | None = None
     error_name: str | None = None
 
     try:
@@ -262,6 +263,7 @@ def handler(event: dict, context: Any) -> dict:
             "member_id": member_id,
             "device_id": None,
             "action": "waiver",
+            "s3_key": s3_key,
             "duration_ms": duration_ms,
             "error": error_name,
         }))
@@ -274,6 +276,7 @@ def handler(event: dict, context: Any) -> dict:
             "member_id": member_id,
             "device_id": None,
             "action": "waiver",
+            "s3_key": s3_key,
             "duration_ms": duration_ms,
             "error": error_name,
         }))
@@ -286,6 +289,7 @@ def handler(event: dict, context: Any) -> dict:
             "member_id": member_id,
             "device_id": None,
             "action": "waiver",
+            "s3_key": s3_key,
             "duration_ms": duration_ms,
             "error": error_name,
         }))
