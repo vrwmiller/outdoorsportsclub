@@ -91,3 +91,22 @@ Follow these steps exactly. Do not skip any step.
    gh api graphql -f query='mutation { resolveReviewThread(input: { threadId: "<thread_node_id>" }) { thread { isResolved } } }'
    ```
    Resolve all threads before ending.
+
+9. **Request a new Copilot review** — after all threads are resolved, check whether Copilot already has a pending review request before triggering a new one:
+
+   ```bash
+   # Check if Copilot is already a requested reviewer
+   gh api repos/<nameWithOwner>/pulls/<number>/requested_reviewers \
+     --jq '[.users[].login] | any(. == "Copilot")'
+   ```
+
+   * If the output is `true`, a review is already in progress — **do not request another one**. End here.
+   * If the output is `false`, request a fresh review:
+
+   ```bash
+   gh api repos/<nameWithOwner>/pulls/<number>/requested_reviewers \
+     --method POST \
+     --field 'reviewers[]=copilot-pull-request-reviewer'
+   ```
+
+   Confirm the request succeeded (response contains `"login": "Copilot"`). If it fails with HTTP 422 ("not a collaborator"), the Copilot reviewer must be re-requested manually via the **Re-request review** button on the PR page — note this for the user and end.
