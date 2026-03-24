@@ -44,12 +44,13 @@ S3_WAIVER_BUCKET: str = os.environ["S3_WAIVER_BUCKET"]
 def handler(event: dict, context: Any) -> dict:
     start = time.monotonic()
     member_id: str | None = None
+    device_id: str | None = None
     s3_key: str | None = None
     error_name: str | None = None
 
     try:
         device = authenticate_device(event)
-        device_id: str = device["id"]
+        device_id = device["id"]
 
         body = json.loads(event.get("body") or "{}")
         member_num: str | None = body.get("member_num")
@@ -261,7 +262,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "waiver",
             "s3_key": s3_key,
             "duration_ms": duration_ms,
@@ -274,7 +275,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "waiver",
             "s3_key": s3_key,
             "duration_ms": duration_ms,
@@ -287,7 +288,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.exception(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "waiver",
             "s3_key": s3_key,
             "duration_ms": duration_ms,
