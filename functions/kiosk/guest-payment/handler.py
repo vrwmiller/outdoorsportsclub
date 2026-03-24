@@ -77,7 +77,7 @@ def handler(event: dict, context: Any) -> dict:
 
         rds = boto3.client("rds-data")
 
-        # One outer transaction wrapping all DB work; set_config must be first.
+        # One outer serializable transaction wrapping all DB work.
         tx = rds.begin_transaction(
             resourceArn=DB_CLUSTER_ARN,
             secretArn=DB_SECRET_ARN,
