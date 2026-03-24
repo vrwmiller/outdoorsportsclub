@@ -771,7 +771,7 @@ Handles the full guest add-on flow for a single guest: (1) look up guest by `fir
 POST /v1/kiosk/waiver
 ```
 
-Handles waiver signing for both **members** and **guests**. The request body must include the PDF bytes (base64-encoded), a `member_id`, and optionally a `guest_id`. The presence of `guest_id` determines which path is taken:
+Handles waiver signing for both **members** and **guests**. The request body must include the PDF bytes (base64-encoded), a `member_num` (QR badge value), and optionally a `guest_id`. The Lambda resolves `member_num` to `members.id` server-side — the client never sends a UUID. The presence of `guest_id` determines which path is taken:
 
 * **Member waiver** (`guest_id` absent): PDF stored at `waivers/<member_id>/<timestamp>.pdf`. `members.waiver_signed_at` and `members.waiver_version` are updated in a single RDS transaction alongside a `Waiver-Signed` entry in `activity_logs` (with `guest_id = NULL`).
 * **Guest waiver** (`guest_id` present): PDF stored at `waivers/guests/<guest_id>/<timestamp>.pdf`. `guests.waiver_signed_at` and `guests.waiver_s3_key` are updated. A `Waiver-Signed` entry is written to `activity_logs` with `guest_id` populated. `members.waiver_signed_at` is **not** modified.
