@@ -5,10 +5,13 @@ Handles both member waivers and guest waivers based on presence of guest_id.
 
 Expected request body:
     {
-        "member_id": "<uuid>",
+        "member_num": "<qr_badge_value>",
         "pdf_bytes": "<base64-encoded PDF>",
         "guest_id": "<uuid>"     # optional — omit for member waiver
     }
+
+member_num is resolved server-side to members.id — the client never supplies
+a UUID directly.
 """
 import base64
 import json
@@ -48,21 +51,20 @@ def handler(event: dict, context: Any) -> dict:
         device_id: str = device["id"]
 
         body = json.loads(event.get("body") or "{}")
-        member_id = body.get("member_id")
-        if not member_id:
-            raise ValueError("member_id is required")
+        member_num: str | None = body.get("member_num")
+        if not member_num:
+            raise ValueError("member_num is required")
         pdf_b64: str | None = body.get("pdf_bytes")
         if not pdf_b64:
             raise ValueError("pdf_bytes is required")
         guest_id: str | None = body.get("guest_id")
 
-        # Validate IDs are UUIDs to prevent S3 key path traversal
+        # Validate guest_id is a UUID to prevent S3 key path traversal.
+        # member_num is resolved server-side and never used directly in S3 keys.
         import re as _re
         _UUID_RE = _re.compile(
             r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', _re.I
         )
-        if not _UUID_RE.match(member_id):
-            raise ValueError("member_id must be a valid UUID")
         if guest_id and not _UUID_RE.match(guest_id):
             raise ValueError("guest_id must be a valid UUID")
 
@@ -82,42 +84,65 @@ def handler(event: dict, context: Any) -> dict:
         s3 = boto3.client("s3")
         rds = boto3.client("rds-data")
 
-        if guest_id:
-            # ---- Guest waiver path ----
-            s3_key = f"waivers/guests/{guest_id}/{timestamp_str}.pdf"
-            tx = rds.begin_transaction(
-                resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
+        tx = rds.begin_transaction(
+            resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
+        )
+        try:
+            # Set RLS session variable — kiosk acts with training_level 4 (admin).
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT set_config('app.current_training_level', '4', true)",
             )
-            try:
-                # Set RLS session variable — kiosk acts with training_level 4 (admin).
-                rds.execute_statement(
-                    resourceArn=DB_CLUSTER_ARN,
-                    secretArn=DB_SECRET_ARN,
-                    database=DB_NAME,
-                    transactionId=tx["transactionId"],
-                    sql="SELECT set_config('app.current_training_level', '4', true)",
-                )
-                # Pre-validate guest exists before uploading to avoid orphaned S3 Object Lock objects.
-                # Pre-check runs inside the transaction so RLS session vars are set.
+
+            # Resolve member badge number to internal member ID server-side.
+            # Consistent with every other kiosk handler — the client never
+            # supplies a UUID directly.
+            m_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT id FROM members WHERE member_num = :member_num",
+                parameters=[
+                    {"name": "member_num", "value": {"stringValue": member_num}}
+                ],
+            )
+            if not m_result["records"]:
+                raise PermissionError("Unknown member badge")
+            member_id = m_result["records"][0][0]["stringValue"]
+
+            # Set current_member_id GUC for activity_logs RLS kiosk-insert policy.
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT set_config('app.current_member_id', :mid, true)",
+                parameters=[
+                    {"name": "mid", "value": {"stringValue": member_id}}
+                ],
+            )
+
+            if guest_id:
+                # ---- Guest waiver path ----
+                s3_key = f"waivers/guests/{guest_id}/{timestamp_str}.pdf"
+                # Pre-validate guest exists before uploading to avoid orphaned
+                # S3 Object Lock objects.
                 pre_check = rds.execute_statement(
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,
                     database=DB_NAME,
                     transactionId=tx["transactionId"],
                     sql="SELECT id FROM guests WHERE id = :guest_id",
-                    parameters=[{"name": "guest_id", "value": {"stringValue": guest_id}}],
+                    parameters=[
+                        {"name": "guest_id", "value": {"stringValue": guest_id}}
+                    ],
                 )
                 if not pre_check["records"]:
-                    rds.rollback_transaction(
-                        resourceArn=DB_CLUSTER_ARN,
-                        secretArn=DB_SECRET_ARN,
-                        transactionId=tx["transactionId"],
-                    )
-                    return {
-                        "statusCode": 400,
-                        "headers": CORS_HEADERS,
-                        "body": json.dumps({"error": "guest_id not found"}),
-                    }
+                    raise ValueError("guest_id not found")
                 s3.put_object(
                     Bucket=S3_WAIVER_BUCKET,
                     Key=s3_key,
@@ -131,8 +156,8 @@ def handler(event: dict, context: Any) -> dict:
                     database=DB_NAME,
                     transactionId=tx["transactionId"],
                     sql=(
-                        "UPDATE guests SET waiver_signed_at = now(), waiver_s3_key = :s3_key "
-                        "WHERE id = :guest_id"
+                        "UPDATE guests SET waiver_signed_at = now(), "
+                        "waiver_s3_key = :s3_key WHERE id = :guest_id"
                     ),
                     parameters=[
                         {"name": "s3_key", "value": {"stringValue": s3_key}},
@@ -146,8 +171,10 @@ def handler(event: dict, context: Any) -> dict:
                     transactionId=tx["transactionId"],
                     sql=(
                         "INSERT INTO activity_logs "
-                        "(member_id, device_id, guest_id, activity_type, waiver_s3_key, timestamp) "
-                        "VALUES (:member_id, :device_id, :guest_id, 'Waiver-Signed', :s3_key, now())"
+                        "(member_id, device_id, guest_id, activity_type, "
+                        "waiver_s3_key, timestamp) "
+                        "VALUES (:member_id, :device_id, :guest_id, "
+                        "'Waiver-Signed', :s3_key, now())"
                     ),
                     parameters=[
                         {"name": "member_id", "value": {"stringValue": member_id}},
@@ -156,55 +183,10 @@ def handler(event: dict, context: Any) -> dict:
                         {"name": "s3_key", "value": {"stringValue": s3_key}},
                     ],
                 )
-                rds.commit_transaction(
-                    resourceArn=DB_CLUSTER_ARN,
-                    secretArn=DB_SECRET_ARN,
-                    transactionId=tx["transactionId"],
-                )
-            except Exception:
-                rds.rollback_transaction(
-                    resourceArn=DB_CLUSTER_ARN,
-                    secretArn=DB_SECRET_ARN,
-                    transactionId=tx["transactionId"],
-                )
-                raise
 
-        else:
-            # ---- Member waiver path ----
-            s3_key = f"waivers/{member_id}/{timestamp_str}.pdf"
-            tx = rds.begin_transaction(
-                resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
-            )
-            try:
-                # Set RLS session variable — kiosk acts with training_level 4 (admin).
-                rds.execute_statement(
-                    resourceArn=DB_CLUSTER_ARN,
-                    secretArn=DB_SECRET_ARN,
-                    database=DB_NAME,
-                    transactionId=tx["transactionId"],
-                    sql="SELECT set_config('app.current_training_level', '4', true)",
-                )
-                # Pre-validate member exists before uploading to avoid orphaned S3 Object Lock objects.
-                # Pre-check runs inside the transaction so RLS session vars are set.
-                pre_check = rds.execute_statement(
-                    resourceArn=DB_CLUSTER_ARN,
-                    secretArn=DB_SECRET_ARN,
-                    database=DB_NAME,
-                    transactionId=tx["transactionId"],
-                    sql="SELECT id FROM members WHERE id = :member_id",
-                    parameters=[{"name": "member_id", "value": {"stringValue": member_id}}],
-                )
-                if not pre_check["records"]:
-                    rds.rollback_transaction(
-                        resourceArn=DB_CLUSTER_ARN,
-                        secretArn=DB_SECRET_ARN,
-                        transactionId=tx["transactionId"],
-                    )
-                    return {
-                        "statusCode": 400,
-                        "headers": CORS_HEADERS,
-                        "body": json.dumps({"error": "member_id not found"}),
-                    }
+            else:
+                # ---- Member waiver path ----
+                s3_key = f"waivers/{member_id}/{timestamp_str}.pdf"
                 s3.put_object(
                     Bucket=S3_WAIVER_BUCKET,
                     Key=s3_key,
@@ -219,7 +201,8 @@ def handler(event: dict, context: Any) -> dict:
                     transactionId=tx["transactionId"],
                     sql=(
                         "UPDATE members "
-                        "SET waiver_signed_at = now(), waiver_version = waiver_version + 1 "
+                        "SET waiver_signed_at = now(), "
+                        "waiver_version = waiver_version + 1 "
                         "WHERE id = :member_id"
                     ),
                     parameters=[
@@ -242,18 +225,19 @@ def handler(event: dict, context: Any) -> dict:
                         {"name": "s3_key", "value": {"stringValue": s3_key}},
                     ],
                 )
-                rds.commit_transaction(
-                    resourceArn=DB_CLUSTER_ARN,
-                    secretArn=DB_SECRET_ARN,
-                    transactionId=tx["transactionId"],
-                )
-            except Exception:
-                rds.rollback_transaction(
-                    resourceArn=DB_CLUSTER_ARN,
-                    secretArn=DB_SECRET_ARN,
-                    transactionId=tx["transactionId"],
-                )
-                raise
+
+            rds.commit_transaction(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                transactionId=tx["transactionId"],
+            )
+        except Exception:
+            rds.rollback_transaction(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                transactionId=tx["transactionId"],
+            )
+            raise
 
         duration_ms = int((time.monotonic() - start) * 1000)
         logger.info(json.dumps({

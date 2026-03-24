@@ -13,6 +13,7 @@ from tests.conftest import FakeContext, device_event, load_kiosk_handler
 from tests.helpers import make_rds
 
 FAKE_PDF = base64.b64encode(b"%PDF-1.4 fake pdf content").decode()
+FAKE_MEMBER_NUM = "M-12345"
 FAKE_MEMBER_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 FAKE_GUEST_ID = "11111111-2222-3333-4444-555555555555"
 
@@ -36,7 +37,7 @@ def _make_s3():
 def _rds_member():
     return make_rds({
         "set_config": {"records": []},
-        "FROM members WHERE id": {"records": [[{"stringValue": FAKE_MEMBER_ID}]]},
+        "FROM members WHERE member_num": {"records": [[{"stringValue": FAKE_MEMBER_ID}]]},
         "UPDATE members": {"numberOfRecordsUpdated": 1},
         "INSERT INTO activity_logs": {"numberOfRecordsUpdated": 1},
     })
@@ -45,6 +46,7 @@ def _rds_member():
 def _rds_guest():
     return make_rds({
         "set_config": {"records": []},
+        "FROM members WHERE member_num": {"records": [[{"stringValue": FAKE_MEMBER_ID}]]},
         "FROM guests WHERE id": {"records": [[{"stringValue": FAKE_GUEST_ID}]]},
         "UPDATE guests": {"numberOfRecordsUpdated": 1},
         "INSERT INTO activity_logs": {"numberOfRecordsUpdated": 1},
@@ -64,7 +66,7 @@ class TestWaiver:
         s3, rds = _make_s3(), _rds_member()
         with patch("boto3.client", side_effect=_client_factory(s3, rds)):
             resp = mod.handler(
-                device_event({"member_id": FAKE_MEMBER_ID, "pdf_bytes": FAKE_PDF}),
+                device_event({"member_num": FAKE_MEMBER_NUM, "pdf_bytes": FAKE_PDF}),
                 FakeContext(),
             )
         assert resp["statusCode"] == 200
@@ -75,7 +77,7 @@ class TestWaiver:
         with patch("boto3.client", side_effect=_client_factory(s3, rds)):
             resp = mod.handler(
                 device_event({
-                    "member_id": FAKE_MEMBER_ID,
+                    "member_num": FAKE_MEMBER_NUM,
                     "pdf_bytes": FAKE_PDF,
                     "guest_id": FAKE_GUEST_ID,
                 }),
@@ -88,7 +90,7 @@ class TestWaiver:
         event = {
             "httpMethod": "POST",
             "headers": {},
-            "body": json.dumps({"member_id": FAKE_MEMBER_ID, "pdf_bytes": FAKE_PDF}),
+            "body": json.dumps({"member_num": FAKE_MEMBER_NUM, "pdf_bytes": FAKE_PDF}),
             "pathParameters": {},
         }
         rds = MagicMock()
@@ -97,7 +99,7 @@ class TestWaiver:
             resp = mod.handler(event, FakeContext())
         assert resp["statusCode"] == 403
 
-    def test_missing_member_id_returns_400(self, mod):
+    def test_missing_member_num_returns_400(self, mod):
         rds = _rds_member()
         with patch("boto3.client", side_effect=_client_factory(_make_s3(), rds)):
             resp = mod.handler(device_event({"pdf_bytes": FAKE_PDF}), FakeContext())
@@ -106,26 +108,68 @@ class TestWaiver:
     def test_missing_pdf_bytes_returns_400(self, mod):
         rds = _rds_member()
         with patch("boto3.client", side_effect=_client_factory(_make_s3(), rds)):
-            resp = mod.handler(device_event({"member_id": FAKE_MEMBER_ID}), FakeContext())
+            resp = mod.handler(device_event({"member_num": FAKE_MEMBER_NUM}), FakeContext())
         assert resp["statusCode"] == 400
 
-    def test_invalid_member_id_uuid_returns_400(self, mod):
-        rds = _rds_member()
-        with patch("boto3.client", side_effect=_client_factory(_make_s3(), rds)):
+    def test_unknown_member_num_returns_403(self, mod):
+        """Badge number not found in DB must return 403, not 400."""
+        rds = make_rds({
+            "set_config": {"records": []},
+            # member_num lookup returns empty — unknown badge
+            "FROM members WHERE member_num": {"records": []},
+        })
+        s3 = _make_s3()
+        with patch("boto3.client", side_effect=_client_factory(s3, rds)):
             resp = mod.handler(
-                device_event({"member_id": "not-a-uuid", "pdf_bytes": FAKE_PDF}),
+                device_event({"member_num": "UNKNOWN-BADGE", "pdf_bytes": FAKE_PDF}),
                 FakeContext(),
             )
-        assert resp["statusCode"] == 400
+        assert resp["statusCode"] == 403
+        s3.put_object.assert_not_called()
 
     def test_invalid_base64_pdf_returns_400(self, mod):
         rds = _rds_member()
         with patch("boto3.client", side_effect=_client_factory(_make_s3(), rds)):
             resp = mod.handler(
-                device_event({"member_id": FAKE_MEMBER_ID, "pdf_bytes": "!!!notbase64!!!"}),
+                device_event({"member_num": FAKE_MEMBER_NUM, "pdf_bytes": "!!!notbase64!!!"}),
                 FakeContext(),
             )
         assert resp["statusCode"] == 400
+
+    def test_invalid_guest_id_uuid_returns_400(self, mod):
+        """Non-UUID guest_id must be rejected before hitting the DB."""
+        rds = _rds_member()
+        with patch("boto3.client", side_effect=_client_factory(_make_s3(), rds)):
+            resp = mod.handler(
+                device_event({
+                    "member_num": FAKE_MEMBER_NUM,
+                    "pdf_bytes": FAKE_PDF,
+                    "guest_id": "not-a-uuid",
+                }),
+                FakeContext(),
+            )
+        assert resp["statusCode"] == 400
+
+    def test_guest_id_not_found_returns_400(self, mod):
+        """guest_id not in DB must return 400."""
+        rds = make_rds({
+            "set_config": {"records": []},
+            "FROM members WHERE member_num": {"records": [[{"stringValue": FAKE_MEMBER_ID}]]},
+            # guest lookup returns empty
+            "FROM guests WHERE id": {"records": []},
+        })
+        s3 = _make_s3()
+        with patch("boto3.client", side_effect=_client_factory(s3, rds)):
+            resp = mod.handler(
+                device_event({
+                    "member_num": FAKE_MEMBER_NUM,
+                    "pdf_bytes": FAKE_PDF,
+                    "guest_id": FAKE_GUEST_ID,
+                }),
+                FakeContext(),
+            )
+        assert resp["statusCode"] == 400
+        s3.put_object.assert_not_called()
 
     def test_s3_failure_returns_500(self, mod):
         s3 = MagicMock()
@@ -133,7 +177,7 @@ class TestWaiver:
         rds = _rds_member()
         with patch("boto3.client", side_effect=_client_factory(s3, rds)):
             resp = mod.handler(
-                device_event({"member_id": FAKE_MEMBER_ID, "pdf_bytes": FAKE_PDF}),
+                device_event({"member_num": FAKE_MEMBER_NUM, "pdf_bytes": FAKE_PDF}),
                 FakeContext(),
             )
         assert resp["statusCode"] == 500
@@ -143,7 +187,7 @@ class TestWaiver:
         rds.execute_statement.return_value = {"records": []}
         with patch("boto3.client", return_value=rds):
             resp = mod.handler(
-                device_event({"member_id": FAKE_MEMBER_ID, "pdf_bytes": FAKE_PDF}),
+                device_event({"member_num": FAKE_MEMBER_NUM, "pdf_bytes": FAKE_PDF}),
                 FakeContext(),
             )
         assert "Access-Control-Allow-Origin" in resp["headers"]
