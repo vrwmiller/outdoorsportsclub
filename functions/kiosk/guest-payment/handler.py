@@ -376,6 +376,17 @@ def handler(event: dict, context: Any) -> dict:
     except Exception as exc:  # noqa: BLE001
         error_name = type(exc).__name__
         duration_ms = int((time.monotonic() - start) * 1000)
+        if "duplicate key value violates unique constraint" in str(exc):
+            logger.warning(json.dumps({
+                "request_id": context.aws_request_id,
+                "member_id": member_id,
+                "device_id": None,
+                "action": "guest_payment",
+                "stripe_payment_intent_id": stripe_intent_id,
+                "duration_ms": duration_ms,
+                "error": "duplicate_payment_intent",
+            }))
+            return error_response(409, "Payment intent already processed")
         logger.exception(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
