@@ -47,14 +47,15 @@ def handler(event: dict, context: Any) -> dict:
 
         rds = boto3.client("rds-data")
 
-        # One outer transaction for the entire handler; set_config must be first.
+        # One outer transaction for the entire handler; SERIALIZABLE must be first
+        # (before any reads), then set_config before any RLS-protected reads.
         outer_tx = rds.begin_transaction(
             resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
         try:
             # SERIALIZABLE must precede all reads — prevents the MAX(position)+1 race
             # on the wait-list INSERT path when two concurrent check-ins race for the
-            # same range.  Paired with uq_wait_list_range_position_active as a DB-level
+            # same range.  Paired with idx_wait_list_range_position_active as a DB-level
             # belt-and-suspenders guard (migration 0022).
             rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
@@ -384,7 +385,7 @@ def handler(event: dict, context: Any) -> dict:
         error_name = type(exc).__name__
         duration_ms = int((time.monotonic() - start) * 1000)
         _msg = str(exc)
-        if "40001" in _msg or "could not serialize" in _msg.lower():
+        if "40001" in _msg or "could not serialize" in _msg.lower() or "23505" in _msg:
             logger.error(json.dumps({
                 "request_id": context.aws_request_id,
                 "member_id": member_id,
