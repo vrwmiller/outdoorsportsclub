@@ -42,6 +42,8 @@ def handler(event: dict, context: Any) -> dict:
         member_num: str | None = body.get("member_num")
         if not member_num:
             raise ValueError("member_num is required")
+        if len(member_num) > 64:
+            raise ValueError("member_num exceeds maximum length")
         raw_guest_count = body.get("guest_count", 0)
         if not isinstance(raw_guest_count, int) or raw_guest_count < 0 or raw_guest_count > 2:
             raise ValueError("guest_count must be 0, 1, or 2")
