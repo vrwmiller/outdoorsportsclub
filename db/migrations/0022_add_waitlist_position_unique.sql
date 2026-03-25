@@ -16,6 +16,31 @@
 -- The WHERE clause restricts uniqueness to active rows only; rows with terminal
 -- statuses like Checked-In, Expired, or Cancelled may legitimately share
 -- position numbers with newer entries on subsequent waitlist cycles.
+--
+-- Before adding the unique index, normalise any historical duplicates so the
+-- index creation cannot fail on existing environments.  For each (range_id,
+-- position) pair with multiple active rows (Waiting or Called), we keep the
+-- lowest-id row and mark the others as Cancelled (a terminal status that is
+-- excluded from the partial index).  This statement is idempotent: once there
+-- are no duplicate active positions, it becomes a no-op on subsequent runs.
+
+WITH ranked AS (
+    SELECT
+        id,
+        row_number() OVER (
+            PARTITION BY range_id, position
+            ORDER BY id
+        ) AS rn
+    FROM wait_list
+    WHERE status IN ('Waiting', 'Called')
+)
+UPDATE wait_list w
+SET status = 'Cancelled'
+WHERE w.id IN (
+    SELECT id
+    FROM ranked
+    WHERE rn > 1
+);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_wait_list_range_position_active
     ON wait_list (range_id, position)
