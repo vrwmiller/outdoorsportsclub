@@ -92,6 +92,15 @@ class TestPairHandler:
             )
         assert resp["statusCode"] == 400
 
+    def test_pairing_code_too_short_returns_400(self, handler_mod):
+        rds = _make_rds()
+        with patch("boto3.client", return_value=rds):
+            resp = handler_mod.handler(
+                _event({"pairing_code": "X" * 5}), FakeContext()
+            )
+        assert resp["statusCode"] == 400
+        assert "short" in json.loads(resp["body"])["error"]
+
     def test_invalid_or_expired_code_returns_400(self, handler_mod):
         rds = _make_rds(updated=0)
         with patch("boto3.client", return_value=rds):
