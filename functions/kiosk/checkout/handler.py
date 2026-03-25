@@ -13,6 +13,7 @@ import time
 from typing import Any
 
 import boto3
+from botocore.config import Config
 
 from _auth import (
     DB_CLUSTER_ARN,
@@ -98,7 +99,13 @@ def handler(event: dict, context: Any) -> dict:
             raise ValueError("member_num is required")
 
         rds = boto3.client("rds-data")
-        sns = boto3.client("sns")
+        # Short timeout + 1 retry: SNS is non-critical post-commit; botocore's
+        # default 60s timeout with retries could stall the Lambda past the
+        # API Gateway hard limit even though the checkout is already committed.
+        sns = boto3.client(
+            "sns",
+            config=Config(connect_timeout=2, read_timeout=3, retries={"max_attempts": 2}),
+        )
 
         notify_phone: str | None = None
         tx = rds.begin_transaction(
@@ -235,6 +242,8 @@ def handler(event: dict, context: Any) -> dict:
                     getattr(sns_exc, "response", {}).get("Error", {}).get("Code")
                     or type(sns_exc).__name__
                 )
+                # Recompute to include time spent in the SNS attempt.
+                duration_ms = int((time.monotonic() - start) * 1000)
                 logger.error(json.dumps({
                     "request_id": context.aws_request_id,
                     "member_id": member_id,
