@@ -229,3 +229,30 @@ class TestGuestPayment:
         assert resp["statusCode"] == 409
         assert json.loads(resp["body"]) == {"error": "Payment intent already processed"}
 
+    def test_serialization_failure_retried_and_succeeds(self, mod):
+        """First commit raises SQLSTATE 40001; second attempt succeeds — returns 200."""
+        commit_calls = {"n": 0}
+
+        def _commit(**kwargs):
+            commit_calls["n"] += 1
+            if commit_calls["n"] == 1:
+                raise Exception("ERROR: could not serialize access due to concurrent update SQLSTATE 40001")
+            return {}
+
+        rds = _rds_happy()
+        rds.commit_transaction.side_effect = _commit
+        with patch("boto3.client", side_effect=_client_factory(rds)), patch("time.sleep"):
+            resp = mod.handler(device_event(_base_body()), FakeContext())
+        assert resp["statusCode"] == 200
+
+    def test_serialization_failure_exhausted_returns_503(self, mod):
+        """Three consecutive serialization failures return 503."""
+        rds = _rds_happy()
+        rds.commit_transaction.side_effect = Exception(
+            "ERROR: could not serialize access SQLSTATE 40001"
+        )
+        with patch("boto3.client", side_effect=_client_factory(rds)), patch("time.sleep"):
+            resp = mod.handler(device_event(_base_body()), FakeContext())
+        assert resp["statusCode"] == 503
+        assert json.loads(resp["body"]) == {"error": "Service temporarily unavailable, please retry"}
+
