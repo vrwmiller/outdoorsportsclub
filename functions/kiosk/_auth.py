@@ -36,6 +36,12 @@ _raw_salt_secret: str = _sm.get_secret_value(
     SecretId=os.environ["DEVICE_TOKEN_SALT_ARN"]
 )["SecretString"]
 try:
+    # _DEVICE_TOKEN_SALT is fetched once at cold-start and cached for the
+    # lifetime of the Lambda container.  After rotating this secret in
+    # Secrets Manager, all kiosk Lambda containers must be force-cold-started
+    # so they pick up the new salt — warm containers will continue using the
+    # old value and will reject tokens generated against the new salt.
+    # See docs/runbooks/secrets-rotation.md for the rotation procedure.
     _DEVICE_TOKEN_SALT: str = json.loads(_raw_salt_secret)["salt"]
 except (json.JSONDecodeError, KeyError) as _exc:
     raise RuntimeError("DEVICE_TOKEN_SALT secret must be JSON with a 'salt' field") from _exc
