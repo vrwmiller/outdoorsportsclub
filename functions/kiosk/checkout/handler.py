@@ -86,12 +86,13 @@ def _advance_wait_list(rds: Any, tx_id: str, range_id: str) -> str | None:
 def handler(event: dict, context: Any) -> dict:
     start = time.monotonic()
     member_id: str | None = None
+    device_id: str | None = None
     error_name: str | None = None
 
     try:
         device = authenticate_device(event)
         range_id: str = device["range_id"]
-        device_id: str = device["id"]
+        device_id = device["id"]
 
         body = json.loads(event.get("body") or "{}")
         member_num: str | None = body.get("member_num")
@@ -264,7 +265,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "checkout",
             "duration_ms": duration_ms,
             "error": "LookupError",
@@ -280,7 +281,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "checkout",
             "duration_ms": duration_ms,
             "error": error_name,
@@ -292,7 +293,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "checkout",
             "duration_ms": duration_ms,
             "error": error_name,
@@ -304,7 +305,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.exception(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "checkout",
             "duration_ms": duration_ms,
             "error": error_name,

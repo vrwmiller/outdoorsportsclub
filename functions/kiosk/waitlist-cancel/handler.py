@@ -29,12 +29,13 @@ logger.setLevel(logging.INFO)
 def handler(event: dict, context: Any) -> dict:
     start = time.monotonic()
     member_id: str | None = None
+    device_id: str | None = None
     error_name: str | None = None
 
     try:
         device = authenticate_device(event)
         range_id: str = device["range_id"]
-        device_id: str = device["id"]
+        device_id = device["id"]
 
         path_params = event.get("pathParameters") or {}
         entry_id: str | None = path_params.get("entry_id")
@@ -180,7 +181,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "waitlist_cancel",
             "duration_ms": duration_ms,
             "error": "LookupError",
@@ -196,7 +197,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "waitlist_cancel",
             "duration_ms": duration_ms,
             "error": error_name,
@@ -208,7 +209,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "waitlist_cancel",
             "duration_ms": duration_ms,
             "error": error_name,
@@ -220,7 +221,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.exception(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "waitlist_cancel",
             "duration_ms": duration_ms,
             "error": error_name,
