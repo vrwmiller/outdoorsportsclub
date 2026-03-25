@@ -72,6 +72,8 @@ def handler(event: dict, context: Any) -> dict:
             raise ValueError(
                 "Required fields: member_num, lane_id, first_name, last_name, phone, email, payment_method"
             )
+        if not isinstance(member_num, str):
+            raise ValueError("member_num must be a string")
         if len(member_num) > 64:
             raise ValueError("member_num exceeds maximum length")
         if payment_method not in _VALID_PAYMENT_METHODS:

@@ -56,6 +56,8 @@ def handler(event: dict, context: Any) -> dict:
         member_num: str | None = body.get("member_num")
         if not member_num:
             raise ValueError("member_num is required")
+        if not isinstance(member_num, str):
+            raise ValueError("member_num must be a string")
         if len(member_num) > 64:
             raise ValueError("member_num exceeds maximum length")
         pdf_b64: str | None = body.get("pdf_bytes")

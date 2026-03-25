@@ -133,6 +133,8 @@ def handler(event: dict, context: Any) -> dict:
             # Resolve optional member
             member_num: str | None = body.get("member_num")
             if member_num:
+                if not isinstance(member_num, str):
+                    raise ValueError("member_num must be a string")
                 if len(member_num) > 64:
                     raise ValueError("member_num exceeds maximum length")
                 m_result = rds.execute_statement(
