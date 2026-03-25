@@ -1,5 +1,5 @@
--- 0022_add_waitlist_position_unique.sql
--- Closes the waitlist position race condition in POST /v1/kiosk/check-in.
+-- Migration: 0022_add_waitlist_position_unique
+-- Description: Closes the waitlist position race condition in POST /v1/kiosk/check-in.
 --
 -- When the range is full, the check-in handler computes MAX(position)+1 and
 -- then INSERTs a wait_list row.  Under READ COMMITTED, two concurrent requests
@@ -13,14 +13,10 @@
 --      detected at commit-time and the loser gets SQLSTATE 40001, not a silent
 --      FK or ordering anomaly.
 --
--- The WHERE clause restricts uniqueness to active rows only; Checked-In and
--- Removed rows may legitimately share position numbers with newer entries on
--- subsequent waitlist cycles.
+-- The WHERE clause restricts uniqueness to active rows only; rows with terminal
+-- statuses like Checked-In, Expired, or Cancelled may legitimately share
+-- position numbers with newer entries on subsequent waitlist cycles.
 
-BEGIN;
-
-CREATE UNIQUE INDEX IF NOT EXISTS uq_wait_list_range_position_active
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wait_list_range_position_active
     ON wait_list (range_id, position)
     WHERE status IN ('Waiting', 'Called');
-
-COMMIT;
