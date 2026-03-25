@@ -161,39 +161,32 @@ Verify the updated secret has propagated to all replica regions before force-col
 The device-token salt is fetched once at Lambda cold-start and cached for the lifetime of the container. Warm containers will continue using the old salt after the secret is updated. Force all containers to recycle by updating a dummy environment variable on each kiosk Lambda:
 
 ```bash
+ROTATED_AT=$(date -u +%Y%m%dT%H%M%SZ)
 for FUNC in \
-  osc-prod-kiosk-checkin \
-  osc-prod-kiosk-checkout \
-  osc-prod-kiosk-dues \
-  osc-prod-kiosk-waiver \
-  osc-prod-kiosk-guest-payment \
-  osc-prod-kiosk-consumable-purchase \
-  osc-prod-kiosk-waitlist-cancel \
-  osc-prod-kiosk-range-lanes; do
+  osc-kiosk-checkin-prod \
+  osc-kiosk-checkout-prod \
+  osc-kiosk-dues-prod \
+  osc-kiosk-waiver-prod \
+  osc-kiosk-guest-payment-prod \
+  osc-kiosk-consumable-purchase-prod \
+  osc-kiosk-waitlist-cancel-prod \
+  osc-kiosk-range-lanes-prod; do
+  CURRENT=$(aws lambda get-function-configuration \
+    --function-name "$FUNC" \
+    --profile outdoorsportsclub \
+    --query 'Environment.Variables' --output json)
+  MERGED=$(echo "$CURRENT" | python3 -c \
+    "import json,sys; d=json.load(sys.stdin); d['SALT_ROTATED_AT']='$ROTATED_AT'; print(json.dumps(d))")
   aws lambda update-function-configuration \
     --function-name "$FUNC" \
-    --environment "Variables={SALT_ROTATED_AT=$(date -u +%Y%m%dT%H%M%SZ)}" \
+    --environment "Variables=$MERGED" \
     --profile outdoorsportsclub
+  aws lambda wait function-updated --function-name "$FUNC" --profile outdoorsportsclub
   echo "Updated $FUNC"
 done
 ```
 
-Replace `osc-prod-` with `osc-dev-` for dev. Wait for each update to reach `LastUpdateStatus: Successful` before proceeding to the next, or loop with a `aws lambda wait function-updated` call.
-
-> **Note:** This command replaces the entire `Environment.Variables` map. If any kiosk Lambda already has environment variables set beyond what this command includes (e.g., `S3_WAIVER_BUCKET`, `SNS_ALERTS_TOPIC_ARN`), retrieve the current map first and merge the new key:
->
-> ```bash
-> CURRENT=$(aws lambda get-function-configuration \
->   --function-name osc-prod-kiosk-waiver \
->   --profile outdoorsportsclub \
->   --query 'Environment.Variables' --output json)
-> MERGED=$(echo "$CURRENT" | python3 -c \
->   "import json,sys; d=json.load(sys.stdin); d['SALT_ROTATED_AT']='$(date -u +%Y%m%dT%H%M%SZ)'; print(json.dumps(d))")
-> aws lambda update-function-configuration \
->   --function-name osc-prod-kiosk-waiver \
->   --environment "Variables=$MERGED" \
->   --profile outdoorsportsclub
-> ```
+Replace `-prod` with `-dev` for dev. The loop reads the current `Environment.Variables` map for each function before writing, so no existing environment variables are overwritten.
 
 ### 5. Re-provision kiosk devices
 
@@ -202,4 +195,4 @@ All device tokens were signed with the old salt. After the cold start, the new s
 ### 6. Verify
 
 1. Attempt a check-in scan at each kiosk — a `200` confirms the new token is accepted.
-2. Monitor **Amazon CloudWatch Logs** for `403` responses with `error: PermissionError` in the kiosk Lambda log groups for the 10 minutes following rotation. Any `403` after re-provisioning indicates a container that did not cold-start — re-run Step 4 for that specific function.
+2. For 10 minutes after rotation, monitor the kiosk Lambda **Amazon CloudWatch Logs** for `403` responses where the structured log field `error` is `PermissionError` and the response body `message` is `"Device not found"`. This specific combination means the container HMAC-hashed the token with the old salt and found no matching row — the container did not cold-start. Re-run Step 4 for that specific function. Do not treat other `403` / `PermissionError` log entries (e.g., `"Unknown member badge"`, `"Dues are not current"`, `"Range is closed"`) as rotation failures.
