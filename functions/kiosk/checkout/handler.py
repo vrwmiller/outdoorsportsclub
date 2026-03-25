@@ -231,6 +231,10 @@ def handler(event: dict, context: Any) -> dict:
             except Exception as sns_exc:  # noqa: BLE001
                 # Checkout is already committed — log the failure but return 200
                 # so the kiosk is not blocked by a transient SNS outage.
+                error_code = (
+                    getattr(sns_exc, "response", {}).get("Error", {}).get("Code")
+                    or type(sns_exc).__name__
+                )
                 logger.error(json.dumps({
                     "request_id": context.aws_request_id,
                     "member_id": member_id,
@@ -238,7 +242,7 @@ def handler(event: dict, context: Any) -> dict:
                     "action": "checkout",
                     "duration_ms": duration_ms,
                     "error": "sns_publish_failed",
-                    "detail": str(sns_exc),
+                    "error_code": error_code,
                 }))
         return {
             "statusCode": 200,
