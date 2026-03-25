@@ -28,6 +28,7 @@ from _auth import (
     DB_SECRET_ARN,
     DB_NAME,
     CORS_HEADERS,
+    MEMBER_NUM_MAX_LEN,
     authenticate_device,
     error_response,
 )
@@ -58,7 +59,7 @@ def handler(event: dict, context: Any) -> dict:
             raise ValueError("member_num is required")
         if not isinstance(member_num, str):
             raise ValueError("member_num must be a string")
-        if len(member_num) > 64:
+        if len(member_num) > MEMBER_NUM_MAX_LEN:
             raise ValueError("member_num exceeds maximum length")
         pdf_b64: str | None = body.get("pdf_bytes")
         if not pdf_b64:

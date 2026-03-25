@@ -52,6 +52,12 @@ CORS_HEADERS: dict[str, str] = {
     "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PATCH,DELETE",
 }
 
+# SEC-15: Upper bound on member_num length enforced at the application layer.
+# 64 characters exceeds any plausible badge identifier format; this prevents
+# unbounded-length strings from reaching the DB query parameter.
+# Centralised here so all kiosk handlers share the same limit.
+MEMBER_NUM_MAX_LEN: int = 64
+
 
 def error_response(status_code: int, message: str) -> dict[str, Any]:
     body = "Forbidden" if status_code == 403 else message
