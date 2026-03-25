@@ -163,6 +163,17 @@ class TestCheckin:
             resp = mod.handler(device_event({"member_num": "QR001"}), FakeContext())
         assert resp["statusCode"] == 500
 
+    def test_serialization_failure_returns_503(self, mod):
+        """SQLSTATE 40001 from the serializable transaction returns 503 (not 500)."""
+        rds = _happy_rds()
+        rds.commit_transaction.side_effect = Exception(
+            "ERROR: could not serialize access due to concurrent update SQLSTATE 40001"
+        )
+        with patch("boto3.client", return_value=rds):
+            resp = mod.handler(device_event({"member_num": "QR001"}), FakeContext())
+        assert resp["statusCode"] == 503
+        assert json.loads(resp["body"]) == {"error": "Service temporarily unavailable, please retry"}
+
     def test_cors_headers_present(self, mod):
         with patch("boto3.client", return_value=_happy_rds()):
             resp = mod.handler(device_event({"member_num": "QR001"}), FakeContext())

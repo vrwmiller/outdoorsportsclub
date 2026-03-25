@@ -52,6 +52,17 @@ def handler(event: dict, context: Any) -> dict:
             resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
         try:
+            # SERIALIZABLE must precede all reads — prevents the MAX(position)+1 race
+            # on the wait-list INSERT path when two concurrent check-ins race for the
+            # same range.  Paired with uq_wait_list_range_position_active as a DB-level
+            # belt-and-suspenders guard (migration 0022).
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=outer_tx["transactionId"],
+                sql="SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+            )
             # Set RLS session variable — kiosk acts with training_level 4 (admin).
             rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
@@ -372,6 +383,18 @@ def handler(event: dict, context: Any) -> dict:
     except Exception as exc:  # noqa: BLE001
         error_name = type(exc).__name__
         duration_ms = int((time.monotonic() - start) * 1000)
+        _msg = str(exc)
+        if "40001" in _msg or "could not serialize" in _msg.lower():
+            logger.error(json.dumps({
+                "request_id": context.aws_request_id,
+                "member_id": member_id,
+                "device_id": device_id,
+                "action": "checkin",
+                "training_level": None,
+                "duration_ms": duration_ms,
+                "error": "serialization_failure",
+            }))
+            return error_response(503, "Service temporarily unavailable, please retry")
         logger.exception(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
