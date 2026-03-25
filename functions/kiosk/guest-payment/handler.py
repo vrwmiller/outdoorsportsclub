@@ -80,6 +80,48 @@ def handler(event: dict, context: Any) -> dict:
 
         rds = boto3.client("rds-data")
 
+        # Verify Stripe payment before opening any DB transaction (NFC/Card only).
+        # Mirrors the pattern in consumable-purchase/handler.py: external network
+        # calls must not hold a serializable lock open.
+        if payment_method in ("NFC", "Card"):
+            if not _STRIPE_SECRET_ARN:
+                raise ValueError("Stripe is not configured for this environment")
+            fee_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                sql="SELECT guest_fee_cents FROM club_settings WHERE singleton = TRUE",
+            )
+            if not fee_result["records"]:
+                raise RuntimeError("club_settings row missing")
+            guest_fee_cents: int = int(fee_result["records"][0][0]["longValue"])
+            sm = boto3.client("secretsmanager")
+            stripe_secret = sm.get_secret_value(SecretId=_STRIPE_SECRET_ARN)["SecretString"]
+            import stripe as _stripe
+            _stripe.api_key = stripe_secret
+            intent = _stripe.PaymentIntent.retrieve(stripe_intent_id)
+            intent_ok = (
+                intent["status"] == "succeeded"
+                and intent["amount"] == guest_fee_cents
+                and intent.get("currency", "").lower() == "usd"
+            )
+            if not intent_ok:
+                duration_ms = int((time.monotonic() - start) * 1000)
+                logger.warning(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": member_id,
+                    "device_id": device_id,
+                    "action": "guest_payment",
+                    "stripe_payment_intent_id": stripe_intent_id,
+                    "duration_ms": duration_ms,
+                    "error": "payment_not_confirmed",
+                }))
+                return {
+                    "statusCode": 402,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps({"error": "Payment not confirmed"}),
+                }
+
         # Retry loop for SQLSTATE 40001 (serialization failure) — max _MAX_TX_RETRIES attempts.
         for _attempt in range(_MAX_TX_RETRIES):
             tx = rds.begin_transaction(
@@ -97,7 +139,7 @@ def handler(event: dict, context: Any) -> dict:
                     sql="SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
                 )
 
-                # Set RLS session variable — kiosk acts with training_level 4 (admin).
+                # Set RLS session variables — kiosk acts with training_level 4 (admin).
                 rds.execute_statement(
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,
@@ -118,6 +160,17 @@ def handler(event: dict, context: Any) -> dict:
                 if not m_result["records"]:
                     raise PermissionError("Unknown member badge")
                 member_id = m_result["records"][0][0]["stringValue"]
+
+                # Set current_member_id GUC — required by policy_guests_member_insert,
+                # policy_guest_visits_kiosk_insert, and policy_activity_logs_kiosk_insert.
+                rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql="SELECT set_config('app.current_member_id', :mid, true)",
+                    parameters=[{"name": "mid", "value": {"stringValue": member_id}}],
+                )
 
                 # Verify lane belongs to this range and is occupied by this member
                 lane_check = rds.execute_statement(
@@ -177,18 +230,6 @@ def handler(event: dict, context: Any) -> dict:
                     # Caller should invoke POST /v1/kiosk/waiver first — return 400 with context
                     raise ValueError("Guest waiver is missing or expired; capture signature first")
 
-                # Read current guest fee from club_settings (authoritative source)
-                settings_result = rds.execute_statement(
-                    resourceArn=DB_CLUSTER_ARN,
-                    secretArn=DB_SECRET_ARN,
-                    database=DB_NAME,
-                    transactionId=tx["transactionId"],
-                    sql="SELECT guest_fee_cents FROM club_settings WHERE singleton = TRUE",
-                )
-                if not settings_result["records"]:
-                    raise RuntimeError("club_settings row missing")
-                guest_fee_cents: int = int(settings_result["records"][0][0]["longValue"])
-
                 # Annual visit limit check — transaction is serializable (set above).
                 count_result = rds.execute_statement(
                     resourceArn=DB_CLUSTER_ARN,
@@ -228,45 +269,6 @@ def handler(event: dict, context: Any) -> dict:
                         "headers": CORS_HEADERS,
                         "body": json.dumps({"error": "Annual guest visit limit reached"}),
                     }
-
-                # Verify NFC/Card payment intent: status succeeded AND amount matches club rate
-                if payment_method in ("NFC", "Card"):
-                    if not _STRIPE_SECRET_ARN:
-                        raise ValueError("Stripe is not configured for this environment")
-                    import boto3 as _b3
-                    sm = _b3.client("secretsmanager")
-                    stripe_secret = sm.get_secret_value(SecretId=_STRIPE_SECRET_ARN)["SecretString"]
-                    import stripe as _stripe
-                    _stripe.api_key = stripe_secret
-                    intent = _stripe.PaymentIntent.retrieve(stripe_intent_id)
-                    intent_meta = intent.get("metadata") or {}
-                    intent_ok = (
-                        intent["status"] == "succeeded"
-                        and intent["amount"] == guest_fee_cents
-                        and intent.get("currency", "").lower() == "usd"
-                        and (intent_meta.get("member_id") is None or intent_meta.get("member_id") == member_id)
-                    )
-                    if not intent_ok:
-                        rds.rollback_transaction(
-                            resourceArn=DB_CLUSTER_ARN,
-                            secretArn=DB_SECRET_ARN,
-                            transactionId=tx["transactionId"],
-                        )
-                        duration_ms = int((time.monotonic() - start) * 1000)
-                        logger.warning(json.dumps({
-                            "request_id": context.aws_request_id,
-                            "member_id": member_id,
-                            "device_id": device_id,
-                            "action": "guest_payment",
-                            "stripe_payment_intent_id": stripe_intent_id,
-                            "duration_ms": duration_ms,
-                            "error": "payment_not_confirmed",
-                        }))
-                        return {
-                            "statusCode": 402,
-                            "headers": CORS_HEADERS,
-                            "body": json.dumps({"error": "Payment not confirmed"}),
-                        }
 
                 # Insert guest_visits and activity_log
                 rds.execute_statement(
