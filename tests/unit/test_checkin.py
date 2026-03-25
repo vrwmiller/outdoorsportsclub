@@ -107,6 +107,16 @@ class TestCheckin:
             resp = mod.handler(device_event({}), FakeContext())
         assert resp["statusCode"] == 400
 
+    def test_non_string_member_num_returns_400(self, mod):
+        with patch("boto3.client", return_value=_happy_rds()):
+            resp = mod.handler(device_event({"member_num": 12345, "guest_count": 0}), FakeContext())
+        assert resp["statusCode"] == 400
+
+    def test_overlong_member_num_returns_400(self, mod):
+        with patch("boto3.client", return_value=_happy_rds()):
+            resp = mod.handler(device_event({"member_num": "A" * 65, "guest_count": 0}), FakeContext())
+        assert resp["statusCode"] == 400
+
     def test_invalid_guest_count_returns_400(self, mod):
         with patch("boto3.client", return_value=_happy_rds()):
             resp = mod.handler(device_event({"member_num": "QR001", "guest_count": 5}), FakeContext())

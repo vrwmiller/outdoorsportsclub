@@ -105,6 +105,18 @@ class TestWaiver:
             resp = mod.handler(device_event({"pdf_bytes": FAKE_PDF}), FakeContext())
         assert resp["statusCode"] == 400
 
+    def test_non_string_member_num_returns_400(self, mod):
+        rds = _rds_member()
+        with patch("boto3.client", side_effect=_client_factory(_make_s3(), rds)):
+            resp = mod.handler(device_event({"member_num": 12345, "pdf_bytes": FAKE_PDF}), FakeContext())
+        assert resp["statusCode"] == 400
+
+    def test_overlong_member_num_returns_400(self, mod):
+        rds = _rds_member()
+        with patch("boto3.client", side_effect=_client_factory(_make_s3(), rds)):
+            resp = mod.handler(device_event({"member_num": "A" * 65, "pdf_bytes": FAKE_PDF}), FakeContext())
+        assert resp["statusCode"] == 400
+
     def test_missing_pdf_bytes_returns_400(self, mod):
         rds = _rds_member()
         with patch("boto3.client", side_effect=_client_factory(_make_s3(), rds)):
