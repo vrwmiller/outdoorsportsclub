@@ -63,8 +63,9 @@ CORS_HEADERS: dict[str, str] = {
 
 _jwks_cache: dict | None = None
 _jwks_fetched_at: float = 0.0
-_JWKS_TTL_SECONDS: int = 3600        # 1 hour — normal refresh interval
-_JWKS_RETRY_SECONDS: int = 60        # back-off after a refresh failure
+_JWKS_TTL_SECONDS: int = 3600          # 1 hour — normal refresh interval
+_JWKS_RETRY_SECONDS: int = 60          # back-off after a refresh failure
+_JWKS_MAX_STALENESS_SECONDS: int = 14400  # 4 hours — fail closed beyond this
 
 
 def _get_jwks(*, force_refresh: bool = False) -> dict:
@@ -85,8 +86,16 @@ def _get_jwks(*, force_refresh: bool = False) -> dict:
             if force_refresh or _jwks_cache is None:
                 logger.error("Failed to fetch JWKS from %s: %s", url, exc)
                 raise
-            # For TTL-based refresh failures, fall back to last known-good
-            # keys and log so the failure is observable in CloudWatch.
+            # For TTL-based refresh failures, fall back to last known-good keys
+            # only while the cache is within the maximum staleness window.  Beyond
+            # that ceiling the keys may have been rotated/revoked — fail closed.
+            if (now - _jwks_fetched_at) > _JWKS_MAX_STALENESS_SECONDS:
+                logger.error(
+                    "JWKS cache is stale beyond %ds ceiling; failing closed: %s",
+                    _JWKS_MAX_STALENESS_SECONDS,
+                    exc,
+                )
+                raise
             # Advance _jwks_fetched_at by _JWKS_RETRY_SECONDS so subsequent
             # requests reuse the cached JWKS instead of re-attempting urlopen
             # on every invocation during a JWKS endpoint outage.
