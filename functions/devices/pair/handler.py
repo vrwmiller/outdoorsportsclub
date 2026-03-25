@@ -122,6 +122,8 @@ def handler(event: dict, context: Any) -> dict[str, Any]:
         pairing_code: str | None = body.get("pairing_code")
         if not pairing_code or not isinstance(pairing_code, str):
             raise ValueError("pairing_code is required")
+        if len(pairing_code) < 6:
+            raise ValueError("pairing_code is too short")
         if len(pairing_code) > 64:
             raise ValueError("pairing_code exceeds maximum length")
 
