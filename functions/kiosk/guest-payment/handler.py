@@ -41,6 +41,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 _STRIPE_SECRET_ARN: str = os.environ.get("STRIPE_SECRET_ARN", "")
+_stripe_key: str | None = None  # cached on first NFC/Card invocation per container
 
 _VALID_PAYMENT_METHODS = {"Cash", "NFC", "Card"}
 _MAX_TX_RETRIES = 3  # max transaction attempts on SQLSTATE 40001 (serialization failure)
@@ -95,15 +96,20 @@ def handler(event: dict, context: Any) -> dict:
             if not fee_result["records"]:
                 raise RuntimeError("club_settings row missing")
             guest_fee_cents: int = int(fee_result["records"][0][0]["longValue"])
-            sm = boto3.client("secretsmanager")
-            stripe_secret = sm.get_secret_value(SecretId=_STRIPE_SECRET_ARN)["SecretString"]
+            global _stripe_key
+            if _stripe_key is None:
+                sm = boto3.client("secretsmanager")
+                _stripe_key = sm.get_secret_value(SecretId=_STRIPE_SECRET_ARN)["SecretString"]
             import stripe as _stripe
-            _stripe.api_key = stripe_secret
+            _stripe.api_key = _stripe_key
             intent = _stripe.PaymentIntent.retrieve(stripe_intent_id)
+            intent_meta = intent.get("metadata") or {}
             intent_ok = (
                 intent["status"] == "succeeded"
                 and intent["amount"] == guest_fee_cents
                 and intent.get("currency", "").lower() == "usd"
+                and (intent_meta.get("device_id") is None or str(intent_meta.get("device_id")) == str(device_id))
+                and (intent_meta.get("member_num") is None or str(intent_meta.get("member_num")) == str(member_num))
             )
             if not intent_ok:
                 duration_ms = int((time.monotonic() - start) * 1000)
