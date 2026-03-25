@@ -149,7 +149,7 @@ def handler(event: dict, context: Any) -> dict:
                         "INSERT INTO guests (id, first_name, last_name, phone, email) "
                         "VALUES (gen_random_uuid(), :first_name, :last_name, :phone, :email) "
                         "ON CONFLICT ON CONSTRAINT uq_guests_identity "
-                        "DO UPDATE SET id = EXCLUDED.id "
+                        "DO UPDATE SET id = guests.id "
                         "RETURNING id, waiver_signed_at"
                     ),
                     parameters=[
@@ -232,11 +232,6 @@ def handler(event: dict, context: Any) -> dict:
                 # Verify NFC/Card payment intent: status succeeded AND amount matches club rate
                 if payment_method in ("NFC", "Card"):
                     if not _STRIPE_SECRET_ARN:
-                        rds.rollback_transaction(
-                            resourceArn=DB_CLUSTER_ARN,
-                            secretArn=DB_SECRET_ARN,
-                            transactionId=tx["transactionId"],
-                        )
                         raise ValueError("Stripe is not configured for this environment")
                     import boto3 as _b3
                     sm = _b3.client("secretsmanager")
