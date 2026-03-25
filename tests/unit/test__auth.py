@@ -194,7 +194,9 @@ class TestGetJwks:
         """Network error during TTL refresh → fall back to cached keys and set retry backoff."""
         stale_jwks = {"keys": [{"kid": "stale-key"}]}
         auth._jwks_cache = stale_jwks
-        auth._jwks_fetched_at = time.time() - 4000  # TTL expired
+        stale_age = 4000  # within the 4-hour staleness ceiling
+        auth._jwks_fetched_at = time.time() - stale_age
+        auth._jwks_last_success_at = time.time() - stale_age
         mock_open = MagicMock(side_effect=OSError("connection refused"))
         with patch("urllib.request.urlopen", mock_open):
             result = auth._get_jwks()
@@ -222,3 +224,20 @@ class TestGetJwks:
         with patch("urllib.request.urlopen", mock_open):
             with pytest.raises(OSError):
                 auth._get_jwks(force_refresh=True)
+
+    def test_ttl_refresh_failure_exceeds_staleness_ceiling_raises(self, auth):
+        """Persistent refresh failure beyond _JWKS_MAX_STALENESS_SECONDS → fail closed.
+
+        Staleness is measured from _jwks_last_success_at, not _jwks_fetched_at, so
+        the backoff mutation of _jwks_fetched_at does not defeat the ceiling.
+        """
+        stale_jwks = {"keys": [{"kid": "stale-key"}]}
+        auth._jwks_cache = stale_jwks
+        # Simulate a cache that was last *successfully* fetched 5 hours ago
+        # (beyond the 4-hour ceiling) while _jwks_fetched_at is recent (backoff in-window).
+        auth._jwks_last_success_at = time.time() - (auth._JWKS_MAX_STALENESS_SECONDS + 60)
+        auth._jwks_fetched_at = time.time() - (auth._JWKS_TTL_SECONDS + 1)  # TTL expired
+        mock_open = MagicMock(side_effect=OSError("connection refused"))
+        with patch("urllib.request.urlopen", mock_open):
+            with pytest.raises(OSError):
+                auth._get_jwks()

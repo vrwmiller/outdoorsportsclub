@@ -63,12 +63,14 @@ CORS_HEADERS: dict[str, str] = {
 
 _jwks_cache: dict | None = None
 _jwks_fetched_at: float = 0.0
-_JWKS_TTL_SECONDS: int = 3600        # 1 hour — normal refresh interval
-_JWKS_RETRY_SECONDS: int = 60        # back-off after a refresh failure
+_jwks_last_success_at: float = 0.0   # tracks last *successful* fetch for staleness check
+_JWKS_TTL_SECONDS: int = 3600          # 1 hour — normal refresh interval
+_JWKS_RETRY_SECONDS: int = 60          # back-off after a refresh failure
+_JWKS_MAX_STALENESS_SECONDS: int = 14400  # 4 hours — fail closed beyond this
 
 
 def _get_jwks(*, force_refresh: bool = False) -> dict:
-    global _jwks_cache, _jwks_fetched_at
+    global _jwks_cache, _jwks_fetched_at, _jwks_last_success_at
     now = time.time()
     cache_expired = (now - _jwks_fetched_at) > _JWKS_TTL_SECONDS
     if force_refresh or _jwks_cache is None or cache_expired:
@@ -85,8 +87,18 @@ def _get_jwks(*, force_refresh: bool = False) -> dict:
             if force_refresh or _jwks_cache is None:
                 logger.error("Failed to fetch JWKS from %s: %s", url, exc)
                 raise
-            # For TTL-based refresh failures, fall back to last known-good
-            # keys and log so the failure is observable in CloudWatch.
+            # For TTL-based refresh failures, fall back to last known-good keys
+            # only while the cache is within the maximum staleness window.  Beyond
+            # that ceiling the keys may have been rotated/revoked — fail closed.
+            # Use _jwks_last_success_at (not _jwks_fetched_at) so that the backoff
+            # mutation of _jwks_fetched_at does not defeat the ceiling check.
+            if (now - _jwks_last_success_at) > _JWKS_MAX_STALENESS_SECONDS:
+                logger.error(
+                    "JWKS cache is stale beyond %ds ceiling; failing closed: %s",
+                    _JWKS_MAX_STALENESS_SECONDS,
+                    exc,
+                )
+                raise
             # Advance _jwks_fetched_at by _JWKS_RETRY_SECONDS so subsequent
             # requests reuse the cached JWKS instead of re-attempting urlopen
             # on every invocation during a JWKS endpoint outage.
@@ -99,6 +111,7 @@ def _get_jwks(*, force_refresh: bool = False) -> dict:
         else:
             _jwks_cache = jwks
             _jwks_fetched_at = now
+            _jwks_last_success_at = now
     if _jwks_cache is None:
         raise RuntimeError("JWKS cache is empty after fetch attempt")
     return _jwks_cache

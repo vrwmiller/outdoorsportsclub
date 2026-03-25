@@ -13,6 +13,7 @@ import time
 from typing import Any
 
 import boto3
+from botocore.config import Config
 
 from _auth import (
     DB_CLUSTER_ARN,
@@ -98,7 +99,13 @@ def handler(event: dict, context: Any) -> dict:
             raise ValueError("member_num is required")
 
         rds = boto3.client("rds-data")
-        sns = boto3.client("sns")
+        # Short timeout + 1 retry: SNS is non-critical post-commit; botocore's
+        # default 60s timeout with retries could stall the Lambda past the
+        # API Gateway hard limit even though the checkout is already committed.
+        sns = boto3.client(
+            "sns",
+            config=Config(connect_timeout=2, read_timeout=3, retries={"max_attempts": 2}),
+        )
 
         notify_phone: str | None = None
         tx = rds.begin_transaction(
@@ -220,13 +227,32 @@ def handler(event: dict, context: Any) -> dict:
         }))
         # Send SMS after commit — direct SMS to avoid leaking phone number to topic subscribers
         if notify_phone and _SNS_TOPIC_ARN:
-            sns.publish(
-                PhoneNumber=notify_phone,
-                Message="Your lane is ready. Please check in at the kiosk now.",
-                MessageAttributes={
-                    "AWS.SNS.SMS.SMSType": {"DataType": "String", "StringValue": "Transactional"},
-                },
-            )
+            try:
+                sns.publish(
+                    PhoneNumber=notify_phone,
+                    Message="Your lane is ready. Please check in at the kiosk now.",
+                    MessageAttributes={
+                        "AWS.SNS.SMS.SMSType": {"DataType": "String", "StringValue": "Transactional"},
+                    },
+                )
+            except Exception as sns_exc:  # noqa: BLE001
+                # Checkout is already committed — log the failure but return 200
+                # so the kiosk is not blocked by a transient SNS outage.
+                error_code = (
+                    getattr(sns_exc, "response", {}).get("Error", {}).get("Code")
+                    or type(sns_exc).__name__
+                )
+                # Recompute to include time spent in the SNS attempt.
+                duration_ms = int((time.monotonic() - start) * 1000)
+                logger.error(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": member_id,
+                    "device_id": device_id,
+                    "action": "checkout",
+                    "duration_ms": duration_ms,
+                    "error": "sns_publish_failed",
+                    "error_code": error_code,
+                }))
         return {
             "statusCode": 200,
             "headers": CORS_HEADERS,

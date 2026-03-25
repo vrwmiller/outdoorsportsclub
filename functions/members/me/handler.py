@@ -135,6 +135,7 @@ def handler(event: dict, context: Any) -> dict:
         return error_response(403, "Forbidden")
     except Exception as exc:
         error_name = type(exc).__name__
+        logger.exception("Unhandled error [%s]: %s", context.aws_request_id, exc)
         return error_response(500, "Internal server error")
     finally:
         if error_name:
