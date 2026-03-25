@@ -241,9 +241,13 @@ class TestGuestPayment:
 
         rds = _rds_happy()
         rds.commit_transaction.side_effect = _commit
-        with patch("boto3.client", side_effect=_client_factory(rds)), patch("time.sleep"):
+        with patch("boto3.client", side_effect=_client_factory(rds)), patch("time.sleep") as mock_sleep:
             resp = mod.handler(device_event(_base_body()), FakeContext())
         assert resp["statusCode"] == 200
+        # First attempt failed (40001) then retried — commit must have been called exactly twice.
+        assert rds.commit_transaction.call_count == 2
+        # Backoff sleep must have been called exactly once (between attempt 0 and attempt 1).
+        assert mock_sleep.call_count == 1
 
     def test_serialization_failure_exhausted_returns_503(self, mod):
         """Three consecutive serialization failures return 503."""
@@ -251,8 +255,14 @@ class TestGuestPayment:
         rds.commit_transaction.side_effect = Exception(
             "ERROR: could not serialize access SQLSTATE 40001"
         )
-        with patch("boto3.client", side_effect=_client_factory(rds)), patch("time.sleep"):
+        with patch("boto3.client", side_effect=_client_factory(rds)), patch("time.sleep") as mock_sleep:
             resp = mod.handler(device_event(_base_body()), FakeContext())
         assert resp["statusCode"] == 503
         assert json.loads(resp["body"]) == {"error": "Service temporarily unavailable, please retry"}
+        # All _MAX_TX_RETRIES attempts must have been made — no early bail-out.
+        assert rds.commit_transaction.call_count == 3
+        assert rds.begin_transaction.call_count == 3
+        assert rds.rollback_transaction.call_count == 3
+        # Backoff sleep fires between attempts 0→1 and 1→2 (not after the last failure).
+        assert mock_sleep.call_count == 2
 
