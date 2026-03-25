@@ -29,6 +29,7 @@ logger.setLevel(logging.INFO)
 def handler(event: dict, context: Any) -> dict:
     start = time.monotonic()
     member_id: str | None = None
+    training_level: int | None = None
     error_name: str | None = None
 
     try:
@@ -89,7 +90,7 @@ def handler(event: dict, context: Any) -> dict:
                 raise PermissionError("Unknown member badge")
             m_row = m_result["records"][0]
             member_id = m_row[0]["stringValue"]
-            training_level: int = int(m_row[1]["longValue"])
+            training_level = int(m_row[1]["longValue"])
             dues_paid_until = m_row[2].get("stringValue")  # NULL if never paid
 
             # 2. Resolve range — check is_open and min_training_level
@@ -195,7 +196,7 @@ def handler(event: dict, context: Any) -> dict:
                     transactionId=outer_tx["transactionId"],
                     sql=(
                         "SELECT COALESCE(MAX(position), 0) + 1 FROM wait_list "
-                        "WHERE range_id = :range_id AND status = 'Waiting'"
+                        "WHERE range_id = :range_id AND status IN ('Waiting', 'Called')"
                     ),
                     parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
                 )
@@ -397,7 +398,7 @@ def handler(event: dict, context: Any) -> dict:
                 "member_id": member_id,
                 "device_id": device_id,
                 "action": "checkin",
-                "training_level": None,
+                "training_level": training_level,
                 "duration_ms": duration_ms,
                 "error": error_name,
                 "sqlstate": sqlstate,

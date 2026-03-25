@@ -20,16 +20,17 @@
 -- Before adding the unique index, normalise any historical duplicates so the
 -- index creation cannot fail on existing environments.  For each (range_id,
 -- position) pair with multiple active rows (Waiting or Called), we keep the
--- lowest-id row and mark the others as Cancelled (a terminal status that is
--- excluded from the partial index).  This statement is idempotent: once there
--- are no duplicate active positions, it becomes a no-op on subsequent runs.
+-- earliest-joined row (using id as a deterministic tie-breaker) and mark the
+-- others as Cancelled (a terminal status that is excluded from the partial
+-- index).  This statement is idempotent: once there are no duplicate active
+-- positions, it becomes a no-op on subsequent runs.
 
 WITH ranked AS (
     SELECT
         id,
         row_number() OVER (
             PARTITION BY range_id, position
-            ORDER BY id
+            ORDER BY joined_at, id
         ) AS rn
     FROM wait_list
     WHERE status IN ('Waiting', 'Called')
