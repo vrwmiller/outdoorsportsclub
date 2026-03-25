@@ -220,13 +220,26 @@ def handler(event: dict, context: Any) -> dict:
         }))
         # Send SMS after commit — direct SMS to avoid leaking phone number to topic subscribers
         if notify_phone and _SNS_TOPIC_ARN:
-            sns.publish(
-                PhoneNumber=notify_phone,
-                Message="Your lane is ready. Please check in at the kiosk now.",
-                MessageAttributes={
-                    "AWS.SNS.SMS.SMSType": {"DataType": "String", "StringValue": "Transactional"},
-                },
-            )
+            try:
+                sns.publish(
+                    PhoneNumber=notify_phone,
+                    Message="Your lane is ready. Please check in at the kiosk now.",
+                    MessageAttributes={
+                        "AWS.SNS.SMS.SMSType": {"DataType": "String", "StringValue": "Transactional"},
+                    },
+                )
+            except Exception as sns_exc:  # noqa: BLE001
+                # Checkout is already committed — log the failure but return 200
+                # so the kiosk is not blocked by a transient SNS outage.
+                logger.error(json.dumps({
+                    "request_id": context.aws_request_id,
+                    "member_id": member_id,
+                    "device_id": device_id,
+                    "action": "checkout",
+                    "duration_ms": duration_ms,
+                    "error": "sns_publish_failed",
+                    "detail": str(sns_exc),
+                }))
         return {
             "statusCode": 200,
             "headers": CORS_HEADERS,
