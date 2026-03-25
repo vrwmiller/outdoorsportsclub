@@ -29,6 +29,7 @@ logger.setLevel(logging.INFO)
 def handler(event: dict, context: Any) -> dict:
     start = time.monotonic()
     member_id: str | None = None
+    training_level: int | None = None
     error_name: str | None = None
 
     try:
@@ -47,11 +48,23 @@ def handler(event: dict, context: Any) -> dict:
 
         rds = boto3.client("rds-data")
 
-        # One outer transaction for the entire handler; set_config must be first.
+        # One outer transaction for the entire handler; SERIALIZABLE must be first
+        # (before any reads), then set_config before any RLS-protected reads.
         outer_tx = rds.begin_transaction(
             resourceArn=DB_CLUSTER_ARN, secretArn=DB_SECRET_ARN, database=DB_NAME
         )
         try:
+            # SERIALIZABLE must precede all reads — prevents the MAX(position)+1 race
+            # on the wait-list INSERT path when two concurrent check-ins race for the
+            # same range.  Paired with idx_wait_list_range_position_active as a DB-level
+            # belt-and-suspenders guard (migration 0022).
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=outer_tx["transactionId"],
+                sql="SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+            )
             # Set RLS session variable — kiosk acts with training_level 4 (admin).
             rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
@@ -77,7 +90,7 @@ def handler(event: dict, context: Any) -> dict:
                 raise PermissionError("Unknown member badge")
             m_row = m_result["records"][0]
             member_id = m_row[0]["stringValue"]
-            training_level: int = int(m_row[1]["longValue"])
+            training_level = int(m_row[1]["longValue"])
             dues_paid_until = m_row[2].get("stringValue")  # NULL if never paid
 
             # 2. Resolve range — check is_open and min_training_level
@@ -183,7 +196,7 @@ def handler(event: dict, context: Any) -> dict:
                     transactionId=outer_tx["transactionId"],
                     sql=(
                         "SELECT COALESCE(MAX(position), 0) + 1 FROM wait_list "
-                        "WHERE range_id = :range_id AND status = 'Waiting'"
+                        "WHERE range_id = :range_id AND status IN ('Waiting', 'Called')"
                     ),
                     parameters=[{"name": "range_id", "value": {"stringValue": range_id}}],
                 )
@@ -372,6 +385,25 @@ def handler(event: dict, context: Any) -> dict:
     except Exception as exc:  # noqa: BLE001
         error_name = type(exc).__name__
         duration_ms = int((time.monotonic() - start) * 1000)
+        _msg = str(exc)
+        is_serialization_error = "40001" in _msg or "could not serialize" in _msg.lower()
+        is_expected_unique_violation = "23505" in _msg and (
+            "idx_wait_list_range_position_active" in _msg
+            or "idx_wait_list_active_member_range" in _msg
+        )
+        if is_serialization_error or is_expected_unique_violation:
+            sqlstate = "40001" if is_serialization_error else "23505"
+            logger.error(json.dumps({
+                "request_id": context.aws_request_id,
+                "member_id": member_id,
+                "device_id": device_id,
+                "action": "checkin",
+                "training_level": training_level,
+                "duration_ms": duration_ms,
+                "error": error_name,
+                "sqlstate": sqlstate,
+            }))
+            return error_response(503, "Service temporarily unavailable, please retry")
         logger.exception(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
