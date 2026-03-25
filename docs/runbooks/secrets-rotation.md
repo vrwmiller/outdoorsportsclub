@@ -131,10 +131,10 @@ Check **Amazon CloudWatch Logs** for Lambda function logs immediately after rota
 
 ### 1. Generate a new salt
 
-Generate a cryptographically random 32-byte value and base64-encode it:
+Generate a cryptographically random 32-byte (256-bit) salt represented as 64 hex characters:
 
 ```bash
-python3 -c "import secrets, base64; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
+python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
 Copy the output — it is the new salt value.
@@ -177,9 +177,10 @@ for FUNC in \
     --query 'Environment.Variables' --output json)
   MERGED=$(echo "$CURRENT" | python3 -c \
     "import json,sys; d=json.load(sys.stdin); d['SALT_ROTATED_AT']='$ROTATED_AT'; print(json.dumps(d))")
+  ENV_JSON="{\"Variables\":$MERGED}"
   aws lambda update-function-configuration \
     --function-name "$FUNC" \
-    --environment "Variables=$MERGED" \
+    --environment "$ENV_JSON" \
     --profile outdoorsportsclub
   aws lambda wait function-updated --function-name "$FUNC" --profile outdoorsportsclub
   echo "Updated $FUNC"
@@ -195,4 +196,4 @@ All device tokens were signed with the old salt. After the cold start, the new s
 ### 6. Verify
 
 1. Attempt a check-in scan at each kiosk — a `200` confirms the new token is accepted.
-2. For 10 minutes after rotation, monitor the kiosk Lambda **Amazon CloudWatch Logs** for `403` responses where the structured log field `error` is `PermissionError` and the response body `message` is `"Device not found"`. This specific combination means the container HMAC-hashed the token with the old salt and found no matching row — the container did not cold-start. Re-run Step 4 for that specific function. Do not treat other `403` / `PermissionError` log entries (e.g., `"Unknown member badge"`, `"Dues are not current"`, `"Range is closed"`) as rotation failures.
+2. If any scan in Step 6.1 returns a `403` with response body `{"error":"Forbidden"}`, that kiosk's Lambda is still using the old salt and did not cold-start. Re-run Step 4 for that specific function and repeat the scan until it returns `200`. For the first 10 minutes after rotation, also monitor the kiosk Lambda **Amazon CloudWatch Logs** for unexpected spikes in `403` responses from kiosk routes; sustained `403` responses for a newly-provisioned device token combined with a known-good member badge indicate a missed cold start.
