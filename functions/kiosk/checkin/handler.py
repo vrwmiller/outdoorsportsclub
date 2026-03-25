@@ -391,6 +391,7 @@ def handler(event: dict, context: Any) -> dict:
             or "idx_wait_list_active_member_range" in _msg
         )
         if is_serialization_error or is_expected_unique_violation:
+            sqlstate = "40001" if is_serialization_error else "23505"
             logger.error(json.dumps({
                 "request_id": context.aws_request_id,
                 "member_id": member_id,
@@ -398,7 +399,8 @@ def handler(event: dict, context: Any) -> dict:
                 "action": "checkin",
                 "training_level": None,
                 "duration_ms": duration_ms,
-                "error": "serialization_failure",
+                "error": error_name,
+                "sqlstate": sqlstate,
             }))
             return error_response(503, "Service temporarily unavailable, please retry")
         logger.exception(json.dumps({
