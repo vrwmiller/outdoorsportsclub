@@ -114,6 +114,24 @@ class TestConsumablePurchase:
             )
         assert resp["statusCode"] == 400
 
+    def test_non_string_member_num_returns_400(self, mod):
+        rds = _rds_happy()  # item lookup and set_config needed before member_num check
+        with patch("boto3.client", side_effect=_client_factory(rds)):
+            resp = mod.handler(
+                device_event({"item_id": FAKE_ITEM_ID, "quantity": 1, "payment_method": "Cash", "member_num": 12345}),
+                FakeContext(),
+            )
+        assert resp["statusCode"] == 400
+
+    def test_overlong_member_num_returns_400(self, mod):
+        rds = _rds_happy()  # item lookup and set_config needed before member_num check
+        with patch("boto3.client", side_effect=_client_factory(rds)):
+            resp = mod.handler(
+                device_event({"item_id": FAKE_ITEM_ID, "quantity": 1, "payment_method": "Cash", "member_num": "A" * 65}),
+                FakeContext(),
+            )
+        assert resp["statusCode"] == 400
+
     def test_invalid_item_id_uuid_returns_400(self, mod):
         rds = make_rds({})  # ValueError raised before any RDS query
         with patch("boto3.client", side_effect=_client_factory(rds)):

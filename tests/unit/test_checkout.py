@@ -64,6 +64,16 @@ class TestCheckout:
             resp = mod.handler(device_event({}), FakeContext())
         assert resp["statusCode"] == 400
 
+    def test_non_string_member_num_returns_400(self, mod):
+        with patch("boto3.client", return_value=_happy_rds()):
+            resp = mod.handler(device_event({"member_num": 12345}), FakeContext())
+        assert resp["statusCode"] == 400
+
+    def test_overlong_member_num_returns_400(self, mod):
+        with patch("boto3.client", return_value=_happy_rds()):
+            resp = mod.handler(device_event({"member_num": "A" * 65}), FakeContext())
+        assert resp["statusCode"] == 400
+
     def test_member_not_checked_in_returns_404(self, mod):
         rds = make_rds({
             "set_config": {},

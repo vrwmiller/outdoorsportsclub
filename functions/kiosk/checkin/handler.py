@@ -18,6 +18,7 @@ from _auth import (
     DB_SECRET_ARN,
     DB_NAME,
     CORS_HEADERS,
+    MEMBER_NUM_MAX_LEN,
     authenticate_device,
     error_response,
 )
@@ -29,18 +30,23 @@ logger.setLevel(logging.INFO)
 def handler(event: dict, context: Any) -> dict:
     start = time.monotonic()
     member_id: str | None = None
+    device_id: str | None = None
     training_level: int | None = None
     error_name: str | None = None
 
     try:
         device = authenticate_device(event)
         range_id: str = device["range_id"]
-        device_id: str = device["id"]
+        device_id = device["id"]
 
         body = json.loads(event.get("body") or "{}")
         member_num: str | None = body.get("member_num")
         if not member_num:
             raise ValueError("member_num is required")
+        if not isinstance(member_num, str):
+            raise ValueError("member_num must be a string")
+        if len(member_num) > MEMBER_NUM_MAX_LEN:
+            raise ValueError("member_num exceeds maximum length")
         raw_guest_count = body.get("guest_count", 0)
         if not isinstance(raw_guest_count, int) or raw_guest_count < 0 or raw_guest_count > 2:
             raise ValueError("guest_count must be 0, 1, or 2")
@@ -362,7 +368,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "checkin",
             "training_level": None,
             "duration_ms": duration_ms,
@@ -375,7 +381,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "checkin",
             "training_level": None,
             "duration_ms": duration_ms,
@@ -407,7 +413,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.exception(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "checkin",
             "training_level": None,
             "duration_ms": duration_ms,

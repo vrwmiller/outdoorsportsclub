@@ -110,6 +110,18 @@ class TestDues:
             resp = mod.handler(device_event({"payment_method": "Cash"}), FakeContext())
         assert resp["statusCode"] == 400
 
+    def test_non_string_member_num_returns_400(self, mod):
+        rds = make_rds({})  # ValueError raised before any DB query
+        with patch("boto3.client", return_value=rds):
+            resp = mod.handler(device_event({"member_num": 12345, "payment_method": "Cash"}), FakeContext())
+        assert resp["statusCode"] == 400
+
+    def test_overlong_member_num_returns_400(self, mod):
+        rds = make_rds({})  # ValueError raised before any DB query
+        with patch("boto3.client", return_value=rds):
+            resp = mod.handler(device_event({"member_num": "A" * 65, "payment_method": "Cash"}), FakeContext())
+        assert resp["statusCode"] == 400
+
     def test_invalid_payment_method_returns_400(self, mod):
         rds = make_rds({})  # auto-injects device auth
         with patch("boto3.client", return_value=rds):

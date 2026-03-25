@@ -26,12 +26,13 @@ logger.setLevel(logging.INFO)
 
 def handler(event: dict, context: Any) -> dict:
     start = time.monotonic()
+    device_id: str | None = None
     error_name: str | None = None
 
     try:
         device = authenticate_device(event)
         range_id: str = device["range_id"]
-        device_id: str = device["id"]
+        device_id = device["id"]
 
         rds = boto3.client("rds-data")
 
@@ -138,7 +139,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": None,
-            "device_id": None,
+            "device_id": device_id,
             "action": "range_lanes",
             "duration_ms": duration_ms,
             "error": error_name,
@@ -150,7 +151,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": None,
-            "device_id": None,
+            "device_id": device_id,
             "action": "range_lanes",
             "duration_ms": duration_ms,
             "error": error_name,
@@ -162,7 +163,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.exception(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": None,
-            "device_id": None,
+            "device_id": device_id,
             "action": "range_lanes",
             "duration_ms": duration_ms,
             "error": error_name,

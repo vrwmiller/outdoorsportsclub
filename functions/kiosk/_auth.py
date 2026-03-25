@@ -36,6 +36,12 @@ _raw_salt_secret: str = _sm.get_secret_value(
     SecretId=os.environ["DEVICE_TOKEN_SALT_ARN"]
 )["SecretString"]
 try:
+    # _DEVICE_TOKEN_SALT is fetched once at cold-start and cached for the
+    # lifetime of the Lambda container.  After rotating this secret in
+    # Secrets Manager, all kiosk Lambda containers must be force-cold-started
+    # so they pick up the new salt — warm containers will continue using the
+    # old value and will reject tokens generated against the new salt.
+    # See docs/runbooks/secrets-rotation.md for the rotation procedure.
     _DEVICE_TOKEN_SALT: str = json.loads(_raw_salt_secret)["salt"]
 except (json.JSONDecodeError, KeyError) as _exc:
     raise RuntimeError("DEVICE_TOKEN_SALT secret must be JSON with a 'salt' field") from _exc
@@ -45,6 +51,12 @@ CORS_HEADERS: dict[str, str] = {
     "Access-Control-Allow-Headers": "Content-Type,Authorization,x-device-token",
     "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PATCH,DELETE",
 }
+
+# SEC-15: Upper bound on member_num length enforced at the application layer.
+# 64 characters exceeds any plausible badge identifier format; this prevents
+# unbounded-length strings from reaching the DB query parameter.
+# Centralised here so all kiosk handlers share the same limit.
+MEMBER_NUM_MAX_LEN: int = 64
 
 
 def error_response(status_code: int, message: str) -> dict[str, Any]:

@@ -79,6 +79,18 @@ class TestWaitlistCancel:
             resp = mod.handler(_cancel_event(body={}), FakeContext())
         assert resp["statusCode"] == 400
 
+    def test_non_string_member_num_returns_400(self, mod):
+        rds = make_rds({})  # ValueError raised before any DB query
+        with patch("boto3.client", return_value=rds):
+            resp = mod.handler(_cancel_event(body={"member_num": 12345}), FakeContext())
+        assert resp["statusCode"] == 400
+
+    def test_overlong_member_num_returns_400(self, mod):
+        rds = make_rds({})  # ValueError raised before any DB query
+        with patch("boto3.client", return_value=rds):
+            resp = mod.handler(_cancel_event(body={"member_num": "A" * 65}), FakeContext())
+        assert resp["statusCode"] == 400
+
     def test_unknown_member_returns_404(self, mod):
         rds = make_rds({
             "set_config": {"records": []},

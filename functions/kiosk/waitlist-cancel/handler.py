@@ -18,6 +18,7 @@ from _auth import (
     DB_SECRET_ARN,
     DB_NAME,
     CORS_HEADERS,
+    MEMBER_NUM_MAX_LEN,
     authenticate_device,
     error_response,
 )
@@ -29,12 +30,13 @@ logger.setLevel(logging.INFO)
 def handler(event: dict, context: Any) -> dict:
     start = time.monotonic()
     member_id: str | None = None
+    device_id: str | None = None
     error_name: str | None = None
 
     try:
         device = authenticate_device(event)
         range_id: str = device["range_id"]
-        device_id: str = device["id"]
+        device_id = device["id"]
 
         path_params = event.get("pathParameters") or {}
         entry_id: str | None = path_params.get("entry_id")
@@ -45,6 +47,10 @@ def handler(event: dict, context: Any) -> dict:
         member_num: str | None = body.get("member_num")
         if not member_num:
             raise ValueError("member_num is required")
+        if not isinstance(member_num, str):
+            raise ValueError("member_num must be a string")
+        if len(member_num) > MEMBER_NUM_MAX_LEN:
+            raise ValueError("member_num exceeds maximum length")
 
         rds = boto3.client("rds-data")
 
@@ -180,7 +186,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "waitlist_cancel",
             "duration_ms": duration_ms,
             "error": "LookupError",
@@ -196,7 +202,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "waitlist_cancel",
             "duration_ms": duration_ms,
             "error": error_name,
@@ -208,7 +214,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.warning(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "waitlist_cancel",
             "duration_ms": duration_ms,
             "error": error_name,
@@ -220,7 +226,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.exception(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": member_id,
-            "device_id": None,
+            "device_id": device_id,
             "action": "waitlist_cancel",
             "duration_ms": duration_ms,
             "error": error_name,
