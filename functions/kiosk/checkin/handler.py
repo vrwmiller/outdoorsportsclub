@@ -385,7 +385,12 @@ def handler(event: dict, context: Any) -> dict:
         error_name = type(exc).__name__
         duration_ms = int((time.monotonic() - start) * 1000)
         _msg = str(exc)
-        if "40001" in _msg or "could not serialize" in _msg.lower() or "23505" in _msg:
+        is_serialization_error = "40001" in _msg or "could not serialize" in _msg.lower()
+        is_expected_unique_violation = "23505" in _msg and (
+            "idx_wait_list_range_position_active" in _msg
+            or "idx_wait_list_active_member_range" in _msg
+        )
+        if is_serialization_error or is_expected_unique_violation:
             logger.error(json.dumps({
                 "request_id": context.aws_request_id,
                 "member_id": member_id,
