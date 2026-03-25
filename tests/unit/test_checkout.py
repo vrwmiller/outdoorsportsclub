@@ -108,3 +108,23 @@ class TestCheckout:
         with patch("boto3.client", side_effect=lambda svc, **k: sns if svc == "sns" else _happy_rds()):
             resp = mod.handler(device_event({"member_num": "QR001"}), FakeContext())
         assert "Access-Control-Allow-Origin" in resp["headers"]
+
+    def test_sns_failure_after_commit_still_returns_200(self, mod):
+        """SNS publish failure after DB commit must return 200 — checkout is committed."""
+        rds = make_rds({
+            "set_config": {},
+            "FROM members WHERE member_num": {"records": [[{"stringValue": "member-id-1"}]]},
+            "FROM lanes": {"records": [[{"stringValue": "lane-id-1"}]]},
+            "UPDATE lanes": {"numberOfRecordsUpdated": 1},
+            "INSERT INTO activity_logs": {"numberOfRecordsUpdated": 1},
+            # _advance_wait_list returns a phone number so SNS is attempted
+            "FROM wait_list": {"records": [[{"stringValue": "wl-id-1"}, {"stringValue": "member-id-2"}]]},
+            "UPDATE wait_list": {"numberOfRecordsUpdated": 1},
+            "FROM members WHERE id": {"records": [[{"stringValue": "+15555550100"}]]},
+        })
+        sns = MagicMock()
+        sns.publish.side_effect = Exception("SNS unavailable")
+        with patch("boto3.client", side_effect=lambda svc, **k: sns if svc == "sns" else rds):
+            resp = mod.handler(device_event({"member_num": "QR001"}), FakeContext())
+        assert resp["statusCode"] == 200
+        sns.publish.assert_called_once()
