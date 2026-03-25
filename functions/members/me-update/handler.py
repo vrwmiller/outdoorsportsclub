@@ -74,20 +74,26 @@ def handler(event: dict, context: Any) -> dict:
         if not updates:
             raise ValueError("No updatable fields provided; accepted fields: home_phone, mobile_phone")
 
-        # Build dynamic SET clause — only update supplied fields.
+        # Build SET clause from a static allowlist — column names are never
+        # derived from request input, eliminating the structural SQL-injection
+        # risk present when iterating over updates.keys() directly (SEC-20).
+        _ALLOWED_COLUMNS = ("home_phone", "mobile_phone")
         set_clauses = []
         params = [{"name": "mid", "value": {"stringValue": member_id}}]
-        for col, val in updates.items():
+        for col in _ALLOWED_COLUMNS:
+            if col not in updates:
+                continue
             set_clauses.append(f"{col} = :{col}")
+            val = updates[col]
             if val is None:
                 params.append({"name": col, "value": {"isNull": True}})
             else:
                 params.append({"name": col, "value": {"stringValue": val}})
 
         update_sql = (
-            f"UPDATE members SET {', '.join(set_clauses)} "
-            "WHERE id = :mid "
-            "RETURNING home_phone, mobile_phone"
+            "UPDATE members SET " + ", ".join(set_clauses) +
+            " WHERE id = :mid"
+            " RETURNING home_phone, mobile_phone"
         )
 
         rds = boto3.client("rds-data")
