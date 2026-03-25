@@ -135,6 +135,14 @@ def handler(event: dict, context: Any) -> dict:
         return error_response(403, "Forbidden")
     except Exception as exc:
         error_name = type(exc).__name__
+        logger.exception(json.dumps({
+            "request_id": context.aws_request_id,
+            "member_id": member_id,
+            "device_id": None,
+            "action": "member_me_get",
+            "duration_ms": round((time.monotonic() - start) * 1000),
+            "error": error_name,
+        }))
         return error_response(500, "Internal server error")
     finally:
         if error_name:
