@@ -284,6 +284,14 @@ Resources:
       AccessLogSetting:
         DestinationArn: !GetAtt AccessLogGroup.Arn
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","method":"$context.httpMethod","path":"$context.path","status":"$context.status","responseLength":"$context.responseLength","duration":"$context.responseLatency","user":"$context.authorizer.claims.sub"}'
+      MethodSettings:
+        # Throttle POST /v1/devices/pair to resist brute-force pairing code guessing.
+        # MethodSettings enforces throttle for all callers regardless of API key —
+        # unlike UsagePlan throttle, which requires an associated API key to take effect.
+        - ResourcePath: /v1/devices/pair
+          HttpMethod: POST
+          ThrottlingBurstLimit: 5
+          ThrottlingRateLimit: 1
       Tags:
         - Key: Project
           Value: outdoor-sports-club
@@ -295,30 +303,12 @@ Resources:
   # ---------------------------------------------------------------------------
   # Usage plan — rate-limits POST /v1/devices/pair to resist brute-force attempts
   #
-  # devices/pair is unauthenticated and accepts a short-lived pairing code.
-  # Throttle the route to 1 req/s (burst 5) to prevent rapid code-guessing
-  # while still allowing occasional legitimate pairing operations.
+  # REMOVED: AWS::ApiGateway::UsagePlan throttle is only enforced for requests
+  # that present an API key associated with the plan (via UsagePlanKey). Since
+  # POST /v1/devices/pair is unauthenticated with no API key requirement, the
+  # UsagePlan throttle had no effect. Throttling is now applied via
+  # ApiStage.MethodSettings above, which enforces limits for all callers.
   # ---------------------------------------------------------------------------
-  DevicesPairUsagePlan:
-    Type: AWS::ApiGateway::UsagePlan
-    DependsOn: ApiStage
-    Properties:
-      UsagePlanName: !Sub "osc-devices-pair-throttle-${Environment}"
-      Description: "Throttle unauthenticated POST /v1/devices/pair to limit brute-force exposure"
-      ApiStages:
-        - ApiId: !Ref RestApi
-          Stage: !Ref Environment
-          Throttle:
-            "/v1/devices/pair/POST":
-              BurstLimit: 5
-              RateLimit: 1
-      Tags:
-        - Key: Project
-          Value: outdoor-sports-club
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: ManagedBy
-          Value: cloudformation
 
 Outputs:
 
