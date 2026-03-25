@@ -186,6 +186,80 @@ Resources:
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/GET/v1/members/me"
 
   # ---------------------------------------------------------------------------
+  # Resources — /v1/devices/pair
+  # ---------------------------------------------------------------------------
+  DevicesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref V1Resource
+      PathPart: devices
+
+  DevicesPairResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref DevicesResource
+      PathPart: pair
+
+  # ---------------------------------------------------------------------------
+  # POST /v1/devices/pair — unauthenticated, Lambda proxy
+  # ---------------------------------------------------------------------------
+  DevicesPairPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref DevicesPairResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:osc-devices-pair-${Environment}/invocations"
+          - {}
+
+  # ---------------------------------------------------------------------------
+  # OPTIONS /v1/devices/pair — CORS preflight, no auth
+  # ---------------------------------------------------------------------------
+  DevicesPairOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref DevicesPairResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
+            ResponseTemplates:
+              application/json: "{}"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # ---------------------------------------------------------------------------
+  # Lambda permission — allow API Gateway to invoke the devices-pair function
+  # ---------------------------------------------------------------------------
+  DevicesPairPostPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-devices-pair-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/v1/devices/pair"
+
+  # ---------------------------------------------------------------------------
   # Deployment + Stage
   # ---------------------------------------------------------------------------
   ApiDeployment:
@@ -193,9 +267,11 @@ Resources:
     DependsOn:
       - MemberMeGetMethod
       - MemberMeOptionsMethod
+      - DevicesPairPostMethod
+      - DevicesPairOptionsMethod
     Properties:
       RestApiId: !Ref RestApi
-      Description: !Sub "v${DeploymentVersion} — GET /v1/members/me (${Environment})"
+      Description: !Sub "v${DeploymentVersion} — GET /v1/members/me, POST /v1/devices/pair (${Environment})"
 
   ApiStage:
     Type: AWS::ApiGateway::Stage
@@ -208,6 +284,34 @@ Resources:
       AccessLogSetting:
         DestinationArn: !GetAtt AccessLogGroup.Arn
         Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","method":"$context.httpMethod","path":"$context.path","status":"$context.status","responseLength":"$context.responseLength","duration":"$context.responseLatency","user":"$context.authorizer.claims.sub"}'
+      Tags:
+        - Key: Project
+          Value: outdoor-sports-club
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # ---------------------------------------------------------------------------
+  # Usage plan — rate-limits POST /v1/devices/pair to resist brute-force attempts
+  #
+  # devices/pair is unauthenticated and accepts a short-lived pairing code.
+  # Throttle the route to 1 req/s (burst 5) to prevent rapid code-guessing
+  # while still allowing occasional legitimate pairing operations.
+  # ---------------------------------------------------------------------------
+  DevicesPairUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn: ApiStage
+    Properties:
+      UsagePlanName: !Sub "osc-devices-pair-throttle-${Environment}"
+      Description: "Throttle unauthenticated POST /v1/devices/pair to limit brute-force exposure"
+      ApiStages:
+        - ApiId: !Ref RestApi
+          Stage: !Ref Environment
+          Throttle:
+            "/v1/devices/pair/POST":
+              BurstLimit: 5
+              RateLimit: 1
       Tags:
         - Key: Project
           Value: outdoor-sports-club
