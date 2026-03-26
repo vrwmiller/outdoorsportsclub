@@ -1,30 +1,13 @@
 -- Migration: 0024_extend_activity_type_check_range_settings
--- Description: Adds Range-Status-Change and Settings-Change to the
---              activity_logs.activity_type CHECK constraint.
+-- NO-OP: The complete activity_logs.activity_type CHECK constraint — including
+--        'Range-Status-Change' and 'Settings-Change' — is defined in full in
+--        migration 0023_extend_activity_type_check_auth_reset.
 --
---              Auth-Reset was added in migration 0023_extend_activity_type_check_auth_reset.
---              Range-Status-Change: written by admin/ranges-status when a range is
---                opened or closed.
---              Settings-Change: written by admin/settings-update when club settings
---                (e.g. annual_dues_cents) are updated.
+--        These values were folded into 0023 to prevent a transient constraint-
+--        narrowing window during deployment: scripts/migrate.py applies migrations
+--        sequentially on every run, so an 0023-only constraint (lacking the newer
+--        types) would be live briefly between the two files executing, causing
+--        concurrent handlers to fail CHECK validation.
 --
--- PostgreSQL does not support ALTER CONSTRAINT ADD value; the constraint must be
--- dropped and recreated with the full value list.
--- Both actions are combined in one ALTER TABLE statement to keep the change atomic
--- and avoid the brief window between DROP and ADD where the constraint is absent.
-
-ALTER TABLE activity_logs
-    DROP CONSTRAINT IF EXISTS activity_logs_activity_type_check,
-    ADD CONSTRAINT activity_logs_activity_type_check
-        CHECK (activity_type IN (
-            'Range-Checkin',
-            'Range-Checkout',
-            'Guest-Payment',
-            'Waiver-Signed',
-            'Level-Change',
-            'Dues-Payment',
-            'Service-Hours-Update',
-            'Auth-Reset',
-            'Range-Status-Change',
-            'Settings-Change'
-        ));
+--        This file is retained to preserve the migration sequence.
+--        scripts/migrate.py skips files with no executable statements (warning logged).
