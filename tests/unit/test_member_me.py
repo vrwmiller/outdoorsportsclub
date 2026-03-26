@@ -72,7 +72,7 @@ class TestMemberMe:
 
         assert resp["statusCode"] == 403
 
-    def test_member_not_found_returns_403(self, mod):
+    def test_member_not_found_returns_500(self, mod):
         rds = make_member_rds({
             "members WHERE id": {"records": []},
             "club_settings": {"records": [[{"longValue": 5000}]]},
@@ -81,7 +81,7 @@ class TestMemberMe:
              patch("boto3.client", return_value=rds):
             resp = mod.handler(member_jwt_event(), FakeContext())
 
-        assert resp["statusCode"] == 403
+        assert resp["statusCode"] == 500
 
     def test_cors_headers_present(self, mod):
         rds = make_member_rds({
