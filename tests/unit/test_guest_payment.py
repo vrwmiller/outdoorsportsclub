@@ -213,6 +213,64 @@ class TestGuestPayment:
                 )
         assert resp["statusCode"] == 402
 
+    def test_missing_metadata_returns_402(self, mod):
+        # SEC-23: a succeeded intent with no metadata must be rejected — the guard
+        # requires both device_id and member_num to be present and match.
+        rds = _rds_happy()
+        sm = _sm_mock()
+        intent = {
+            "status": "succeeded",
+            "amount": GUEST_FEE_CENTS,
+            "currency": "usd",
+            "metadata": {},
+        }
+        with patch("boto3.client", side_effect=_client_factory(rds, sm)), patch(
+            "stripe.PaymentIntent.retrieve", return_value=intent
+        ):
+            resp = mod.handler(
+                device_event(_base_body(payment_method="NFC", stripe_payment_intent_id="pi_no_meta")),
+                FakeContext(),
+            )
+        assert resp["statusCode"] == 402
+
+    def test_mismatched_device_id_in_metadata_returns_402(self, mod):
+        # SEC-23: metadata.device_id must match the request's device token.
+        rds = _rds_happy()
+        sm = _sm_mock()
+        intent = {
+            "status": "succeeded",
+            "amount": GUEST_FEE_CENTS,
+            "currency": "usd",
+            "metadata": {"device_id": "wrong-device", "member_num": "M001"},
+        }
+        with patch("boto3.client", side_effect=_client_factory(rds, sm)), patch(
+            "stripe.PaymentIntent.retrieve", return_value=intent
+        ):
+            resp = mod.handler(
+                device_event(_base_body(payment_method="NFC", stripe_payment_intent_id="pi_wrong_device")),
+                FakeContext(),
+            )
+        assert resp["statusCode"] == 402
+
+    def test_mismatched_member_num_in_metadata_returns_402(self, mod):
+        # SEC-23: metadata.member_num must match the member_num in the request body.
+        rds = _rds_happy()
+        sm = _sm_mock()
+        intent = {
+            "status": "succeeded",
+            "amount": GUEST_FEE_CENTS,
+            "currency": "usd",
+            "metadata": {"device_id": "device-id-1", "member_num": "M999"},
+        }
+        with patch("boto3.client", side_effect=_client_factory(rds, sm)), patch(
+            "stripe.PaymentIntent.retrieve", return_value=intent
+        ):
+            resp = mod.handler(
+                device_event(_base_body(payment_method="NFC", stripe_payment_intent_id="pi_wrong_member")),
+                FakeContext(),
+            )
+        assert resp["statusCode"] == 402
+
     def test_aws_failure_returns_500(self, mod):
         rds = MagicMock()
         rds.execute_statement.side_effect = Exception("DB offline")
