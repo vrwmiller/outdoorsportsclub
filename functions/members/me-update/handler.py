@@ -68,11 +68,11 @@ def handler(event: dict, context: Any) -> dict:
             if col in body:
                 val = body[col]
                 if val is not None:
-                    _validate_e164(str(val))
+                    val = _validate_e164(str(val))
                 updates[col] = val  # None means set to NULL
 
         if not updates:
-            raise ValueError("No updatable fields provided; accepted fields: home_phone, mobile_phone")
+            raise ValueError("No updatable fields provided; accepted fields: " + ", ".join(_ALLOWED_COLUMNS))
 
         # Build SET clause from a static allowlist — column names are never
         # derived from request input, eliminating the structural SQL-injection
