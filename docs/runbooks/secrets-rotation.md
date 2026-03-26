@@ -119,7 +119,7 @@ Check **Amazon CloudWatch Logs** for Lambda function logs immediately after rota
 
 ## Notes
 
-* Lambda functions read secrets from **AWS Secrets Manager** at cold start — there are no cached copies in environment variables. A rotated secret takes effect on the next Lambda cold start. For urgent rotations, force new containers by redeploying each affected Lambda function (e.g., update the function configuration to publish a new version and force a fresh deployment).
+* Most Lambda functions read secrets from **AWS Secrets Manager** at cold start and cache them in memory for the lifetime of the container — there are no cached copies in environment variables. For those handlers, a rotated secret takes effect on the next cold start. Some handlers (for example, the kiosk device-provisioning Lambdas described in Part C) refresh specific secrets on a short TTL rather than only at cold start. For urgent rotations, force new containers by redeploying each affected Lambda function through the standard deployment pipeline (`make deploy-lambda`).
 * **AWS Secrets Manager** does not send a notification when a manual `put-secret-value` is called. Monitor Lambda error rates in **Amazon CloudWatch** for the 10 minutes following any rotation.
 * **Rotation must be applied to the primary region first**, then confirmed in replica regions before the old credential is revoked or the old secret is deleted. Reverting the order can leave replica regions with invalid secrets.
 
