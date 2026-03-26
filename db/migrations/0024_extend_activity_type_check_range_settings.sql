@@ -10,4 +10,4 @@
 --        concurrent handlers to fail CHECK validation.
 --
 --        This file is retained to preserve the migration sequence.
---        scripts/migrate.py skips files with no executable statements (warning logged).
+SELECT 1;
