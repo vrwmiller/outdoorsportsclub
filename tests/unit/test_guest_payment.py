@@ -14,7 +14,7 @@ from tests.helpers import make_rds
 
 FAKE_MEMBER_ID = "member-id-1"
 FAKE_GUEST_ID = "guest-id-1"
-FAKE_LANE_ID = "lane-id-1"
+FAKE_LANE_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 GUEST_FEE_CENTS = 1000
 VALID_WAIVER_DATE = "2026-02-19T00:00:00+00:00"
 
@@ -87,7 +87,7 @@ class TestGuestPayment:
             "status": "succeeded",
             "amount": GUEST_FEE_CENTS,
             "currency": "usd",
-            "metadata": {},
+            "metadata": {"device_id": "device-id-1", "member_num": "M001"},
         }
         with patch("boto3.client", side_effect=_client_factory(rds, sm)):
             with patch("stripe.PaymentIntent.retrieve", return_value=mock_intent):
@@ -233,7 +233,7 @@ class TestGuestPayment:
 
         with patch("boto3.client", side_effect=_client_factory(rds, sm)), patch(
             "stripe.PaymentIntent.retrieve",
-            return_value={"id": "pi_dup", "status": "succeeded", "amount": GUEST_FEE_CENTS, "currency": "usd", "metadata": {}},
+            return_value={"id": "pi_dup", "status": "succeeded", "amount": GUEST_FEE_CENTS, "currency": "usd", "metadata": {"device_id": "device-id-1", "member_num": "M001"}},
         ):
             resp = mod.handler(
                 device_event(_base_body(payment_method="NFC", stripe_payment_intent_id="pi_dup")),
