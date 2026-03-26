@@ -24,6 +24,7 @@ import logging
 import os
 import random
 import time
+import uuid
 from typing import Any
 
 import boto3
@@ -79,6 +80,17 @@ def handler(event: dict, context: Any) -> dict:
             raise ValueError("member_num exceeds maximum length")
         if payment_method not in _VALID_PAYMENT_METHODS:
             raise ValueError(f"payment_method must be one of: {', '.join(_VALID_PAYMENT_METHODS)}")
+        try:
+            uuid.UUID(lane_id)
+        except (ValueError, AttributeError):
+            raise ValueError("lane_id must be a valid UUID")
+        _MAX_NAME_LEN, _MAX_PHONE_LEN, _MAX_EMAIL_LEN = 100, 20, 320
+        if len(first_name) > _MAX_NAME_LEN or len(last_name) > _MAX_NAME_LEN:
+            raise ValueError("first_name and last_name must be 100 characters or fewer")
+        if len(phone) > _MAX_PHONE_LEN:
+            raise ValueError("phone must be 20 characters or fewer")
+        if len(email) > _MAX_EMAIL_LEN:
+            raise ValueError("email must be 320 characters or fewer")
 
         stripe_intent_id = body.get("stripe_payment_intent_id")
         if payment_method in ("NFC", "Card") and not stripe_intent_id:
