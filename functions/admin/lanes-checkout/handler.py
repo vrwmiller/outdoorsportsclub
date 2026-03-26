@@ -113,7 +113,16 @@ def handler(event: dict, context: Any) -> dict:
                 }
 
             range_id = lane_row[1]["stringValue"]
-            occupant_member_id = lane_row[3].get("stringValue") if not lane_row[3].get("isNull") else None
+            occupant_member_id = (
+                lane_row[3].get("stringValue") if not lane_row[3].get("isNull") else None
+            )
+            # chk_lanes_occupancy guarantees current_member_id IS NOT NULL when status='Occupied'.
+            # A None here means DB-level data corruption — fail loudly rather than misattribute
+            # the audit row.
+            if occupant_member_id is None:
+                raise RuntimeError(
+                    f"Lane {lane_id} is Occupied but current_member_id is NULL — constraint violation"
+                )
 
             # Clear the lane.
             rds.execute_statement(
@@ -131,8 +140,6 @@ def handler(event: dict, context: Any) -> dict:
             )
 
             # Activity log — Range-Checkout with actor_member_id = RSO.
-            # Always written; when the lane has no tracked occupant (edge case: DB constraint
-            # bypassed via direct SQL), the actor is recorded as the affected member.
             rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
@@ -144,7 +151,7 @@ def handler(event: dict, context: Any) -> dict:
                     "VALUES (:occupant, :actor, 'Range-Checkout', :lid)"
                 ),
                 parameters=[
-                    {"name": "occupant", "value": {"stringValue": occupant_member_id or actor_member_id}},
+                    {"name": "occupant", "value": {"stringValue": occupant_member_id}},
                     {"name": "actor", "value": {"stringValue": actor_member_id}},
                     {"name": "lid", "value": {"stringValue": lane_id}},
                 ],

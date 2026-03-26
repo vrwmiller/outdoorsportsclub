@@ -163,3 +163,21 @@ class TestAdminLanesCheckout:
             resp = mod.handler(_event(), FakeContext())
 
         assert resp["statusCode"] == 200
+
+    def test_occupied_lane_with_null_occupant_returns_500(self, mod):
+        """Occupied lane with NULL current_member_id violates chk_lanes_occupancy — must raise RuntimeError and roll back, returning 500."""
+        null_occupant_lane = [[
+            {"stringValue": _LANE_ID},
+            {"stringValue": "11111111-2222-3333-4444-555555555555"},
+            {"stringValue": "Occupied"},
+            {"isNull": True},  # data-corruption scenario
+        ]]
+        rds = make_member_rds({
+            "FROM lanes WHERE id": {"records": null_occupant_lane},
+        })
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
+             patch("boto3.client", return_value=rds):
+            resp = mod.handler(_event(), FakeContext())
+
+        assert resp["statusCode"] == 500
+        rds.rollback_transaction.assert_called_once()
