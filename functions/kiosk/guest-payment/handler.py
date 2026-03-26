@@ -113,8 +113,8 @@ def handler(event: dict, context: Any) -> dict:
                 intent["status"] == "succeeded"
                 and intent["amount"] == guest_fee_cents
                 and intent.get("currency", "").lower() == "usd"
-                and (intent_meta.get("device_id") is None or str(intent_meta.get("device_id")) == str(device_id))
-                and (intent_meta.get("member_num") is None or str(intent_meta.get("member_num")) == str(member_num))
+                and str(intent_meta.get("device_id", "")) == str(device_id)
+                and str(intent_meta.get("member_num", "")) == str(member_num)
             )
             if not intent_ok:
                 duration_ms = int((time.monotonic() - start) * 1000)
