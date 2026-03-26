@@ -22,19 +22,19 @@ _ADMIN = {"member_id": FAKE_MEMBER_ID, "sub": FAKE_SUB, "training_level": 4}
 
 _MOD_NAME = "admin_lanes_checkout_handler"
 
-_LANE_ID = "lane-id-1"
+_LANE_ID = "eeeeeeee-ffff-0000-1111-222222222222"
 _OCCUPANT_ID = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
 
 _OCCUPIED_LANE = [[
     {"stringValue": _LANE_ID},
-    {"stringValue": "range-id-1"},
+    {"stringValue": "11111111-2222-3333-4444-555555555555"},
     {"stringValue": "Occupied"},
     {"stringValue": _OCCUPANT_ID},
 ]]
 
 _AVAILABLE_LANE = [[
     {"stringValue": _LANE_ID},
-    {"stringValue": "range-id-1"},
+    {"stringValue": "11111111-2222-3333-4444-555555555555"},
     {"stringValue": "Available"},
     {"isNull": True},
 ]]

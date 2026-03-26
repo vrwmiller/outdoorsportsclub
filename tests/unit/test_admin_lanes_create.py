@@ -21,9 +21,11 @@ _ADMIN = {"member_id": FAKE_MEMBER_ID, "sub": FAKE_SUB, "training_level": 4}
 
 _MOD_NAME = "admin_lanes_create_handler"
 
+_RANGE_ID = "11111111-2222-3333-4444-555555555555"
+
 _INSERT_ROW = [[
     {"stringValue": "lane-new-1"},
-    {"stringValue": "range-id-1"},
+    {"stringValue": _RANGE_ID},
     {"longValue": 3},
     {"stringValue": "Available"},
 ]]
@@ -46,7 +48,7 @@ class TestAdminLanesCreate:
         with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
              patch("boto3.client", return_value=rds):
             resp = mod.handler(
-                member_jwt_event({"range_id": "range-id-1", "lane_number": 3}, method="POST"),
+                member_jwt_event({"range_id": _RANGE_ID, "lane_number": 3}, method="POST"),
                 FakeContext(),
             )
 
@@ -70,7 +72,7 @@ class TestAdminLanesCreate:
         with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
              patch("boto3.client", return_value=rds):
             resp = mod.handler(
-                member_jwt_event({"range_id": "range-id-1", "lane_number": 1}, method="POST"),
+                member_jwt_event({"range_id": _RANGE_ID, "lane_number": 1}, method="POST"),
                 FakeContext(),
             )
 
@@ -88,7 +90,7 @@ class TestAdminLanesCreate:
     def test_missing_lane_number_returns_400(self, mod):
         with patch.object(mod, "authenticate_member", return_value=_ADMIN):
             resp = mod.handler(
-                member_jwt_event({"range_id": "range-id-1"}, method="POST"),
+                member_jwt_event({"range_id": _RANGE_ID}, method="POST"),
                 FakeContext(),
             )
 
@@ -97,7 +99,7 @@ class TestAdminLanesCreate:
     def test_zero_lane_number_returns_400(self, mod):
         with patch.object(mod, "authenticate_member", return_value=_ADMIN):
             resp = mod.handler(
-                member_jwt_event({"range_id": "range-id-1", "lane_number": 0}, method="POST"),
+                member_jwt_event({"range_id": _RANGE_ID, "lane_number": 0}, method="POST"),
                 FakeContext(),
             )
 
@@ -107,7 +109,7 @@ class TestAdminLanesCreate:
         low = {"member_id": FAKE_MEMBER_ID, "sub": FAKE_SUB, "training_level": 3}
         with patch.object(mod, "authenticate_member", return_value=low):
             resp = mod.handler(
-                member_jwt_event({"range_id": "range-id-1", "lane_number": 1}, method="POST"),
+                member_jwt_event({"range_id": _RANGE_ID, "lane_number": 1}, method="POST"),
                 FakeContext(),
             )
 
@@ -116,7 +118,7 @@ class TestAdminLanesCreate:
     def test_auth_failure_returns_403(self, mod):
         with patch.object(mod, "authenticate_member", side_effect=PermissionError("denied")):
             resp = mod.handler(
-                member_jwt_event({"range_id": "range-id-1", "lane_number": 1}, method="POST"),
+                member_jwt_event({"range_id": _RANGE_ID, "lane_number": 1}, method="POST"),
                 FakeContext(),
             )
 

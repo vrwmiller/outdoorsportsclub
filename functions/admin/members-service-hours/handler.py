@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import time
+import uuid
 from typing import Any
 
 import boto3
@@ -48,6 +49,10 @@ def handler(event: dict, context: Any) -> dict:
         target_member_id = path_params.get("member_id")
         if not target_member_id:
             raise ValueError("member_id path parameter is required")
+        try:
+            uuid.UUID(target_member_id)
+        except ValueError:
+            raise ValueError("member_id must be a valid UUID")
 
         body = json.loads(event.get("body") or "{}")
         service_hours = body.get("service_hours")
@@ -117,6 +122,17 @@ def handler(event: dict, context: Any) -> dict:
                     {"name": "tid", "value": {"stringValue": target_member_id}},
                 ],
             )
+            if not update_result["records"]:
+                rds.rollback_transaction(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    transactionId=tx["transactionId"],
+                )
+                return {
+                    "statusCode": 404,
+                    "headers": CORS_HEADERS,
+                    "body": json.dumps({"error": "Member not found"}),
+                }
 
             rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
@@ -153,6 +169,8 @@ def handler(event: dict, context: Any) -> dict:
             "member_id": actor_member_id,
             "device_id": None,
             "action": "admin_members_service_hours",
+            "target_member_id": target_member_id,
+            "new_service_hours": hours_out,
             "duration_ms": round((time.monotonic() - start) * 1000),
             "error": None,
         }))
@@ -167,7 +185,11 @@ def handler(event: dict, context: Any) -> dict:
         error_name = type(exc).__name__
         logger.warning("Auth failure [%s]: %s", context.aws_request_id, exc)
         return error_response(403, "Forbidden")
-    except (ValueError, json.JSONDecodeError) as exc:
+    except json.JSONDecodeError:
+        error_name = "JSONDecodeError"
+        logger.warning("Validation error [%s]: invalid JSON body", context.aws_request_id)
+        return error_response(400, "Invalid JSON body")
+    except ValueError as exc:
         error_name = type(exc).__name__
         logger.warning("Validation error [%s]: %s", context.aws_request_id, exc)
         return error_response(400, str(exc))
