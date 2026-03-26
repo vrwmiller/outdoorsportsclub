@@ -82,7 +82,7 @@ def handler(event: dict, context: Any) -> dict:
             raise
 
         if not result["records"]:
-            raise PermissionError("Member not found")
+            raise RuntimeError("Member record missing after authenticated lookup")
 
         member_num = result["records"][0][0]["stringValue"]
 

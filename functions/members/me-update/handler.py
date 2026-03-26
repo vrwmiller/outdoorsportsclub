@@ -139,7 +139,7 @@ def handler(event: dict, context: Any) -> dict:
             raise
 
         if not result["records"]:
-            raise PermissionError("Member not found")
+            raise RuntimeError("Member record missing after authenticated update")
 
         row = result["records"][0]
         resp_body = {
