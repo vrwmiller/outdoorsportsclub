@@ -69,7 +69,7 @@ def handler(event: dict, context: Any) -> dict:
                 secretArn=DB_SECRET_ARN,
                 database=DB_NAME,
                 transactionId=tx["transactionId"],
-                sql="SELECT id, name, is_open FROM ranges ORDER BY name",
+                sql="SELECT id, name, is_open FROM ranges ORDER BY name LIMIT 500",
             )
             lanes_result = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
@@ -78,7 +78,7 @@ def handler(event: dict, context: Any) -> dict:
                 transactionId=tx["transactionId"],
                 sql=(
                     "SELECT id, range_id, lane_number, status, current_member_id, guest_count "
-                    "FROM lanes ORDER BY range_id, lane_number"
+                    "FROM lanes ORDER BY range_id, lane_number LIMIT 500"
                 ),
             )
             rds.commit_transaction(

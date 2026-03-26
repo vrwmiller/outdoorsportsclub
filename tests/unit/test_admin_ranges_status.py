@@ -21,7 +21,7 @@ _ADMIN = {"member_id": FAKE_MEMBER_ID, "sub": FAKE_SUB, "training_level": 4}
 
 _MOD_NAME = "admin_ranges_status_handler"
 
-_RANGE_ID = "range-id-1"
+_RANGE_ID = "11111111-2222-3333-4444-555555555555"
 
 
 @pytest.fixture()
