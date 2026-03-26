@@ -21,7 +21,7 @@ _ADMIN = {"member_id": FAKE_MEMBER_ID, "sub": FAKE_SUB, "training_level": 4}
 
 _MOD_NAME = "admin_lanes_update_handler"
 
-_LANE_ID = "lane-id-1"
+_LANE_ID = "eeeeeeee-ffff-0000-1111-222222222222"
 
 _AVAILABLE_ROW = [[
     {"stringValue": _LANE_ID},

@@ -15,6 +15,7 @@ Returns:
 import json
 import logging
 import time
+import uuid
 from typing import Any
 
 import boto3
@@ -47,6 +48,10 @@ def handler(event: dict, context: Any) -> dict:
         target_member_id = path_params.get("member_id")
         if not target_member_id:
             raise ValueError("member_id path parameter is required")
+        try:
+            uuid.UUID(target_member_id)
+        except ValueError:
+            raise ValueError("member_id must be a valid UUID")
 
         body = json.loads(event.get("body") or "{}")
         new_level = body.get("training_level")
@@ -181,6 +186,7 @@ def handler(event: dict, context: Any) -> dict:
         logger.info(json.dumps({
             "request_id": context.aws_request_id,
             "member_id": actor_member_id,
+            "target_member_id": target_member_id,
             "device_id": None,
             "action": "admin_members_level",
             "training_level": new_level,
