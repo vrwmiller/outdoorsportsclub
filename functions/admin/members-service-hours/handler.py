@@ -100,6 +100,7 @@ def handler(event: dict, context: Any) -> dict:
                 parameters=[{"name": "tid", "value": {"stringValue": target_member_id}}],
             )
             if not check_result["records"]:
+                error_name = "not_found"
                 rds.commit_transaction(
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,
@@ -123,6 +124,7 @@ def handler(event: dict, context: Any) -> dict:
                 ],
             )
             if not update_result["records"]:
+                error_name = "not_found"
                 rds.rollback_transaction(
                     resourceArn=DB_CLUSTER_ARN,
                     secretArn=DB_SECRET_ARN,

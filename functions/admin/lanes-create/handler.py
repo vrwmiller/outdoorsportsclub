@@ -47,15 +47,20 @@ def handler(event: dict, context: Any) -> dict:
         range_id = body.get("range_id")
         lane_number = body.get("lane_number")
 
-        if not range_id:
-            raise ValueError("range_id is required")
+        if not isinstance(range_id, str) or not range_id:
+            raise ValueError("range_id must be a non-empty string")
         try:
-            uuid.UUID(range_id)
-        except ValueError:
+            range_id = str(uuid.UUID(range_id))
+        except (ValueError, TypeError):
             raise ValueError("range_id must be a valid UUID")
         if lane_number is None:
             raise ValueError("lane_number is required")
-        if isinstance(lane_number, bool) or not isinstance(lane_number, int) or lane_number < 1 or lane_number > 32767:
+        if (
+            isinstance(lane_number, bool)
+            or not isinstance(lane_number, int)
+            or lane_number < 1
+            or lane_number > 32767
+        ):
             raise ValueError("lane_number must be a positive integer no greater than 32767")
 
         rds = boto3.client("rds-data")

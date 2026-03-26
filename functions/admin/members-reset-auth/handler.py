@@ -56,8 +56,8 @@ def handler(event: dict, context: Any) -> dict:
         if not target_member_id:
             raise ValueError("member_id is required")
         try:
-            uuid.UUID(str(target_member_id))
-        except ValueError:
+            target_member_id = str(uuid.UUID(str(target_member_id)))
+        except (ValueError, TypeError):
             raise ValueError("member_id must be a valid UUID")
 
         rds = boto3.client("rds-data")
