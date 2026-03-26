@@ -2,7 +2,7 @@
 
 **Audience:** Webmaster (Level 6).
 
-This runbook covers rotating the secrets stored in **AWS Secrets Manager** for the Outdoor Sports Club system: the Stripe API key and the Aurora database credentials. Each secret lives in the environment-specific namespace (`osc/dev/…` for dev, `osc/prod/…` for prod).
+This runbook covers rotating the secrets stored in **AWS Secrets Manager** for the Outdoor Sports Club system: the Stripe API key, the Aurora database credentials, and the kiosk device-token HMAC salt. Each secret lives in the environment-specific namespace (`osc/dev/…` for dev, `osc/prod/…` for prod).
 
 > Always rotate `dev` and `prod` secrets independently. Never copy a secret from one environment to the other.
 
@@ -152,6 +152,8 @@ aws secretsmanager put-secret-value \
 
 Replace `osc/prod/device-token-salt` with `osc/dev/device-token-salt` for dev.
 
+> **CloudFormation parameter note:** The secrets stack (`infra/stacks/secrets.yaml`) provisions this secret from the `DeviceTokenSalt` CloudFormation parameter at deploy time. After rotating the secret here, also update the stored/recorded deploy-time parameter value for this stack (e.g., in your deployment notes or secrets vault). If the stack is redeployed without updating the parameter, CloudFormation will overwrite the rotated secret back to the old salt value.
+
 ### 3. Wait for multi-region replication (prod only)
 
 Verify the updated secret has propagated to all replica regions before force-cold-starting Lambdas (see Step 3 in Part A for the verification command, substituting the `device-token-salt` secret name).
@@ -189,11 +191,16 @@ done
 
 Replace `-prod` with `-dev` for dev. The loop reads the current `Environment.Variables` map for each function before writing, so no existing environment variables are overwritten.
 
-### 5. Re-provision kiosk devices
+### 5. Wait for provisioning Lambdas to pick up the new salt
 
-All device tokens were signed with the old salt. After the cold start, the new salt is active and all existing tokens are invalid. Re-provision each physical kiosk device through the admin provisioning flow to generate new tokens signed with the new salt.
+The kiosk device-provisioning functions (`osc-admin-devices-pairing-code-*` and `osc-devices-pair-*`) refresh the HMAC salt from Secrets Manager every 60 seconds rather than caching it for the lifetime of the container. Wait at least 60 seconds after Step 2 before proceeding, so any warm provisioning containers have refreshed to the new salt. Tokens signed before this window may use the old salt and will be rejected by kiosk handlers.
 
-### 6. Verify
+### 6. Re-provision kiosk devices
 
-1. Attempt a check-in scan at each kiosk — a `200` confirms the new token is accepted.
-2. If any scan in Step 6.1 returns a `403` with response body `{"error":"Forbidden"}`, that kiosk's Lambda is still using the old salt and did not cold-start. Re-run Step 4 for that specific function and repeat the scan until it returns `200`. For the first 10 minutes after rotation, also monitor the kiosk Lambda **Amazon CloudWatch Logs** for unexpected spikes in `403` responses from kiosk routes; sustained `403` responses for a newly-provisioned device token combined with a known-good member badge indicate a missed cold start.
+All device tokens were signed with the old salt. After the 60-second wait, the new salt is active in all containers and all existing tokens are invalid. Re-provision each physical kiosk device through the admin provisioning flow to generate new tokens signed with the new salt.
+
+### 7. Verify
+
+1. Using a newly provisioned device token and a known-good member badge (active dues, correct training level, range open), perform a check-in scan at each kiosk — a `200` confirms both the new device token and the new salt are accepted. Repeat for every physical kiosk.
+2. Using the same device token, trigger a quick call to each of the other kiosk routes (checkout, dues, waiver, guest-payment, consumable-purchase, waitlist-cancel, range-lanes) to confirm each of the eight Lambda functions recycled successfully. A `200` or expected business-logic response (e.g., `404 Not Found` for a non-existent lane) is acceptable; a `403` with response body `{"error":"Forbidden"}` means that specific function's container did not cold-start with the new salt — re-run Step 4 for that function alone and retest.
+3. For the first 10 minutes after rotation, monitor the kiosk Lambda **Amazon CloudWatch Logs** for unexpected spikes in `403` responses; sustained `403` responses for newly-provisioned device tokens indicate a missed cold start.
