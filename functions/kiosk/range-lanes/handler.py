@@ -107,7 +107,6 @@ def handler(event: dict, context: Any) -> dict:
                 "lane_id": lane_id,
                 "lane_number": lane_number,
                 "status": status,
-                "current_member_id": current_member_id,
                 "member_num": member_num,
                 "guest_count": guest_count,
                 "checked_in_at": checked_in_at,
