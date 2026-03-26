@@ -38,6 +38,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 _STRIPE_SECRET_ARN: str = os.environ.get("STRIPE_SECRET_ARN", "")
+_stripe_key: str | None = None  # cached on first NFC/Card invocation per container
 _VALID_PAYMENT_METHODS = {"Cash", "NFC", "Card"}
 
 
@@ -95,10 +96,12 @@ def handler(event: dict, context: Any) -> dict:
         if payment_method in ("NFC", "Card"):
             if not _STRIPE_SECRET_ARN:
                 raise ValueError("Stripe is not configured for this environment")
-            sm = boto3.client("secretsmanager")
-            stripe_secret = sm.get_secret_value(SecretId=_STRIPE_SECRET_ARN)["SecretString"]
+            global _stripe_key
+            if _stripe_key is None:
+                sm = boto3.client("secretsmanager")
+                _stripe_key = sm.get_secret_value(SecretId=_STRIPE_SECRET_ARN)["SecretString"]
             import stripe as _stripe
-            _stripe.api_key = stripe_secret
+            _stripe.api_key = _stripe_key
             intent = _stripe.PaymentIntent.retrieve(stripe_intent_id)
             expected_amount = unit_price_cents * quantity
             if intent["status"] != "succeeded" or intent["amount"] != expected_amount:
