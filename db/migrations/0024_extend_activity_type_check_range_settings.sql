@@ -1,9 +1,8 @@
--- Migration: 0023_extend_activity_type_check
--- Description: Adds Auth-Reset, Range-Status-Change, and Settings-Change to the
+-- Migration: 0024_extend_activity_type_check_range_settings
+-- Description: Adds Range-Status-Change and Settings-Change to the
 --              activity_logs.activity_type CHECK constraint.
 --
---              Auth-Reset: written by admin/members-reset-auth when a social login
---                is unlinked and the member is signed out of Cognito.
+--              Auth-Reset was added in migration 0023_extend_activity_type_check_auth_reset.
 --              Range-Status-Change: written by admin/ranges-status when a range is
 --                opened or closed.
 --              Settings-Change: written by admin/settings-update when club settings
