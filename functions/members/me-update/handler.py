@@ -37,6 +37,10 @@ logger.setLevel(logging.INFO)
 # E.164: + followed by 1-3 digit country code + subscriber number; total 7-15 digits.
 _E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
 
+# SEC-20: column names in the SET clause always come from this trusted constant —
+# never from request-derived input.
+_ALLOWED_COLUMNS = ("home_phone", "mobile_phone")
+
 
 def _validate_e164(value: str) -> str:
     """Return the value if it is a valid E.164 number, else raise ValueError."""
@@ -57,37 +61,38 @@ def handler(event: dict, context: Any) -> dict:
         body = json.loads(event.get("body") or "{}")
 
         # Collect only the allowed updatable fields present in the request.
+        # Drive the loop from _ALLOWED_COLUMNS so adding a new field here
+        # automatically covers body parsing — no second list to keep in sync.
         updates: dict[str, str | None] = {}
-
-        if "home_phone" in body:
-            val = body["home_phone"]
-            if val is not None:
-                _validate_e164(str(val))
-            updates["home_phone"] = val  # None means set to NULL
-
-        if "mobile_phone" in body:
-            val = body["mobile_phone"]
-            if val is not None:
-                _validate_e164(str(val))
-            updates["mobile_phone"] = val
+        for col in _ALLOWED_COLUMNS:
+            if col in body:
+                val = body[col]
+                if val is not None:
+                    val = _validate_e164(str(val))
+                updates[col] = val  # None means set to NULL
 
         if not updates:
-            raise ValueError("No updatable fields provided; accepted fields: home_phone, mobile_phone")
+            raise ValueError("No updatable fields provided; accepted fields: " + ", ".join(_ALLOWED_COLUMNS))
 
-        # Build dynamic SET clause — only update supplied fields.
+        # Build SET clause from a static allowlist — column names are never
+        # derived from request input, eliminating the structural SQL-injection
+        # risk present when iterating over updates.keys() directly (SEC-20).
         set_clauses = []
         params = [{"name": "mid", "value": {"stringValue": member_id}}]
-        for col, val in updates.items():
-            set_clauses.append(f"{col} = :{col}")
+        for col in _ALLOWED_COLUMNS:
+            if col not in updates:
+                continue
+            set_clauses.append(col + " = :" + col)
+            val = updates[col]
             if val is None:
                 params.append({"name": col, "value": {"isNull": True}})
             else:
                 params.append({"name": col, "value": {"stringValue": val}})
 
         update_sql = (
-            f"UPDATE members SET {', '.join(set_clauses)} "
-            "WHERE id = :mid "
-            "RETURNING home_phone, mobile_phone"
+            "UPDATE members SET " + ", ".join(set_clauses) +
+            " WHERE id = :mid"
+            " RETURNING home_phone, mobile_phone"
         )
 
         rds = boto3.client("rds-data")
