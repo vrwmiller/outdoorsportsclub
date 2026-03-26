@@ -44,7 +44,7 @@ class TestMemberBadge:
         body = json.loads(resp["body"])
         assert body["member_num"] == "MBR-042"
 
-    def test_member_not_found_returns_403(self, mod):
+    def test_member_not_found_returns_500(self, mod):
         rds = make_member_rds({
             "member_num FROM members": {"records": []},
         })
@@ -52,7 +52,7 @@ class TestMemberBadge:
              patch("boto3.client", return_value=rds):
             resp = mod.handler(member_jwt_event(), FakeContext())
 
-        assert resp["statusCode"] == 403
+        assert resp["statusCode"] == 500
 
     def test_auth_failure_returns_403(self, mod):
         with patch.object(mod, "authenticate_member", side_effect=PermissionError("denied")):

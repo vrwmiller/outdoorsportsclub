@@ -75,7 +75,7 @@ def handler(event: dict, context: Any) -> dict:
                 parameters=[{"name": "mid", "value": {"stringValue": member_id}}],
             )
             if not m_result["records"]:
-                raise PermissionError("Member not found")
+                raise RuntimeError("Member record missing after authenticated lookup")
 
             # club_settings is not under RLS; read directly in the same transaction.
             cs_result = rds.execute_statement(

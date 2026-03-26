@@ -59,6 +59,8 @@ def handler(event: dict, context: Any) -> dict:
         member_id = member["member_id"]
 
         body = json.loads(event.get("body") or "{}")
+        if not isinstance(body, dict):
+            raise ValueError("Request body must be a JSON object")
 
         # Collect only the allowed updatable fields present in the request.
         # Drive the loop from _ALLOWED_COLUMNS so adding a new field here
@@ -139,7 +141,7 @@ def handler(event: dict, context: Any) -> dict:
             raise
 
         if not result["records"]:
-            raise PermissionError("Member not found")
+            raise RuntimeError("Member record missing after authenticated update")
 
         row = result["records"][0]
         resp_body = {
