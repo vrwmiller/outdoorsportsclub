@@ -142,6 +142,17 @@ def handler(event: dict, context: Any) -> dict:
                 raise LookupError("Unknown member badge")
             member_id = m_result["records"][0][0]["stringValue"]
 
+            # Set current_member_id GUC so RLS policies on activity_logs
+            # work correctly if they tighten to require it on checkout paths.
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT set_config('app.current_member_id', :mid, true)",
+                parameters=[{"name": "mid", "value": {"stringValue": member_id}}],
+            )
+
             # Find the lane this member currently occupies on this range
             lane_result = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
