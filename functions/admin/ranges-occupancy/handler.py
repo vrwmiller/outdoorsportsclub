@@ -1,7 +1,9 @@
 """GET /v1/admin/ranges/occupancy  — Level 4+ RSO
 
-Returns current lane occupancy for all ranges. Used by the Admin Portal for
-the supervisory cross-range view, polled at a suitable interval.
+Returns current lane occupancy for all ranges, up to 500 ranges and 500 lanes
+(a safety cap that far exceeds the physical footprint of any realistic facility).
+Used by the Admin Portal for the supervisory cross-range view, polled at a
+suitable interval.
 
 Returns:
     200 OK  [ { range_id, name, is_open, lanes: [{ lane_id, lane_number,

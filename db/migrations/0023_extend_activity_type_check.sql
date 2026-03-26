@@ -11,11 +11,11 @@
 --
 -- PostgreSQL does not support ALTER CONSTRAINT ADD value; the constraint must be
 -- dropped and recreated with the full value list.
+-- Both actions are combined in one ALTER TABLE statement to keep the change atomic
+-- and avoid the brief window between DROP and ADD where the constraint is absent.
 
 ALTER TABLE activity_logs
-    DROP CONSTRAINT IF EXISTS activity_logs_activity_type_check;
-
-ALTER TABLE activity_logs
+    DROP CONSTRAINT IF EXISTS activity_logs_activity_type_check,
     ADD CONSTRAINT activity_logs_activity_type_check
         CHECK (activity_type IN (
             'Range-Checkin',

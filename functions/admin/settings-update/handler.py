@@ -88,7 +88,7 @@ def handler(event: dict, context: Any) -> dict:
                 secretArn=DB_SECRET_ARN,
                 database=DB_NAME,
                 transactionId=tx["transactionId"],
-                sql="SELECT annual_dues_cents FROM club_settings WHERE singleton = TRUE",
+                sql="SELECT annual_dues_cents FROM club_settings WHERE singleton = TRUE FOR UPDATE",
             )
             prev_dues_cents = (
                 int(prev_result["records"][0][0]["longValue"])
