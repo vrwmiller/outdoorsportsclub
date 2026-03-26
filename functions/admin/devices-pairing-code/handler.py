@@ -113,10 +113,12 @@ def handler(event: dict, context: Any) -> dict:
         body = json.loads(event.get("body") or "{}")
         location_tag = body.get("location_tag")
         range_id = body.get("range_id")
-        if not location_tag:
+        if location_tag is None:
             raise ValueError("location_tag is required")
         if not isinstance(location_tag, str):
             raise ValueError("location_tag must be a string")
+        if not location_tag:
+            raise ValueError("location_tag must not be empty")
         if len(location_tag) > 64:
             raise ValueError("location_tag must not exceed 64 characters")
         if not range_id:

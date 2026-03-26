@@ -134,3 +134,17 @@ class TestAdminLanesUpdate:
             resp = mod.handler(_event({"status": "Closed"}), FakeContext())
 
         assert resp["statusCode"] == 403
+
+    def test_invalid_lane_id_returns_400(self, mod):
+        """Non-UUID lane_id path parameter must be rejected before any RDS call."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"status": "Closed"}, lane_id="not-a-uuid"), FakeContext())
+
+        assert resp["statusCode"] == 400
+
+    def test_lane_number_too_large_returns_400(self, mod):
+        """lane_number > 32767 (SMALLINT max) must be rejected with 400."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"lane_number": 32768}), FakeContext())
+
+        assert resp["statusCode"] == 400
