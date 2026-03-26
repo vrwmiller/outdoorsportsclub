@@ -37,6 +37,10 @@ logger.setLevel(logging.INFO)
 # E.164: + followed by 1-3 digit country code + subscriber number; total 7-15 digits.
 _E164_RE = re.compile(r"^\+[1-9]\d{6,14}$")
 
+# SEC-20: column names in the SET clause always come from this trusted constant —
+# never from request-derived input.
+_ALLOWED_COLUMNS = ("home_phone", "mobile_phone")
+
 
 def _validate_e164(value: str) -> str:
     """Return the value if it is a valid E.164 number, else raise ValueError."""
@@ -77,13 +81,12 @@ def handler(event: dict, context: Any) -> dict:
         # Build SET clause from a static allowlist — column names are never
         # derived from request input, eliminating the structural SQL-injection
         # risk present when iterating over updates.keys() directly (SEC-20).
-        _ALLOWED_COLUMNS = ("home_phone", "mobile_phone")
         set_clauses = []
         params = [{"name": "mid", "value": {"stringValue": member_id}}]
         for col in _ALLOWED_COLUMNS:
             if col not in updates:
                 continue
-            set_clauses.append(f"{col} = :{col}")
+            set_clauses.append(col + " = :" + col)
             val = updates[col]
             if val is None:
                 params.append({"name": col, "value": {"isNull": True}})
