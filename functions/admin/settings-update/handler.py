@@ -39,6 +39,8 @@ def handler(event: dict, context: Any) -> dict:
     start = time.monotonic()
     member_id: str | None = None
     error_name: str | None = None
+    prev_dues_cents: int | None = None
+    annual_dues_cents: int | None = None
 
     try:
         member = authenticate_member(event)
@@ -48,6 +50,8 @@ def handler(event: dict, context: Any) -> dict:
         _MAX_DUES_CENTS = 99_999  # $999.99
 
         body = json.loads(event.get("body") or "{}")
+        if not isinstance(body, dict):
+            raise ValueError("Request body must be a JSON object")
         annual_dues_cents = body.get("annual_dues_cents")
         if annual_dues_cents is None:
             raise ValueError("annual_dues_cents is required")
@@ -79,6 +83,18 @@ def handler(event: dict, context: Any) -> dict:
             )
 
             # club_settings is not under RLS.
+            prev_result = rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql="SELECT annual_dues_cents FROM club_settings WHERE singleton = TRUE FOR UPDATE",
+            )
+            prev_dues_cents = (
+                int(prev_result["records"][0][0]["longValue"])
+                if prev_result["records"]
+                else None
+            )
             result = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
@@ -97,6 +113,20 @@ def handler(event: dict, context: Any) -> dict:
                     {"name": "mid", "value": {"stringValue": member_id}},
                 ],
             )
+            if result["records"]:
+                rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql=(
+                        "INSERT INTO activity_logs (member_id, actor_member_id, activity_type) "
+                        "VALUES (:mid, :mid, 'Settings-Change')"
+                    ),
+                    parameters=[
+                        {"name": "mid", "value": {"stringValue": member_id}},
+                    ],
+                )
             rds.commit_transaction(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
@@ -124,6 +154,8 @@ def handler(event: dict, context: Any) -> dict:
             "member_id": member_id,
             "device_id": None,
             "action": "admin_settings_update",
+            "prev_annual_dues_cents": prev_dues_cents,
+            "new_annual_dues_cents": annual_dues_cents,
             "duration_ms": round((time.monotonic() - start) * 1000),
             "error": None,
         }))
@@ -138,7 +170,11 @@ def handler(event: dict, context: Any) -> dict:
         error_name = type(exc).__name__
         logger.warning("Auth failure [%s]: %s", context.aws_request_id, exc)
         return error_response(403, "Forbidden")
-    except (ValueError, json.JSONDecodeError) as exc:
+    except json.JSONDecodeError:
+        error_name = "JSONDecodeError"
+        logger.warning("Validation error [%s]: invalid JSON body", context.aws_request_id)
+        return error_response(400, "Invalid JSON body")
+    except ValueError as exc:
         error_name = type(exc).__name__
         logger.warning("Validation error [%s]: %s", context.aws_request_id, exc)
         return error_response(400, str(exc))

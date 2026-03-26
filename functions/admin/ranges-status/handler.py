@@ -15,6 +15,7 @@ Returns:
 import json
 import logging
 import time
+import uuid
 from typing import Any
 
 import boto3
@@ -47,8 +48,14 @@ def handler(event: dict, context: Any) -> dict:
         range_id = path_params.get("range_id")
         if not range_id:
             raise ValueError("range_id path parameter is required")
+        try:
+            uuid.UUID(range_id)
+        except ValueError:
+            raise ValueError("range_id must be a valid UUID")
 
         body = json.loads(event.get("body") or "{}")
+        if not isinstance(body, dict):
+            raise ValueError("Request body must be a JSON object")
         if "is_open" not in body:
             raise ValueError("is_open is required")
         is_open = body["is_open"]
@@ -92,6 +99,20 @@ def handler(event: dict, context: Any) -> dict:
                     {"name": "rid", "value": {"stringValue": range_id}},
                 ],
             )
+            if result["records"]:
+                rds.execute_statement(
+                    resourceArn=DB_CLUSTER_ARN,
+                    secretArn=DB_SECRET_ARN,
+                    database=DB_NAME,
+                    transactionId=tx["transactionId"],
+                    sql=(
+                        "INSERT INTO activity_logs (member_id, actor_member_id, activity_type) "
+                        "VALUES (:mid, :mid, 'Range-Status-Change')"
+                    ),
+                    parameters=[
+                        {"name": "mid", "value": {"stringValue": member_id}},
+                    ],
+                )
             rds.commit_transaction(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
@@ -123,6 +144,8 @@ def handler(event: dict, context: Any) -> dict:
             "member_id": member_id,
             "device_id": None,
             "action": "admin_ranges_status",
+            "range_id": range_id,
+            "is_open": is_open,
             "duration_ms": round((time.monotonic() - start) * 1000),
             "error": None,
         }))
@@ -137,7 +160,11 @@ def handler(event: dict, context: Any) -> dict:
         error_name = type(exc).__name__
         logger.warning("Auth failure [%s]: %s", context.aws_request_id, exc)
         return error_response(403, "Forbidden")
-    except (ValueError, json.JSONDecodeError) as exc:
+    except json.JSONDecodeError:
+        error_name = "JSONDecodeError"
+        logger.warning("Validation error [%s]: invalid JSON body", context.aws_request_id)
+        return error_response(400, "Invalid JSON body")
+    except ValueError as exc:
         error_name = type(exc).__name__
         logger.warning("Validation error [%s]: %s", context.aws_request_id, exc)
         return error_response(400, str(exc))

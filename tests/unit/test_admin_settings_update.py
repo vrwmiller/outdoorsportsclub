@@ -119,6 +119,55 @@ class TestAdminSettingsUpdate:
 
         assert resp["statusCode"] == 200
 
+    def test_null_body_returns_400(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            event = member_jwt_event({"annual_dues_cents": 5000}, method="PATCH")
+            event["body"] = "null"
+            resp = mod.handler(event, FakeContext())
+
+        assert resp["statusCode"] == 400
+        assert "JSON object" in json.loads(resp["body"])["error"]
+
+    def test_array_body_returns_400(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            event = member_jwt_event({"annual_dues_cents": 5000}, method="PATCH")
+            event["body"] = "[]"
+            resp = mod.handler(event, FakeContext())
+
+        assert resp["statusCode"] == 400
+        assert "JSON object" in json.loads(resp["body"])["error"]
+
+    def test_invalid_json_body_returns_400(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            event = member_jwt_event({"annual_dues_cents": 5000}, method="PATCH")
+            event["body"] = "{"
+            resp = mod.handler(event, FakeContext())
+
+        assert resp["statusCode"] == 400
+        body = json.loads(resp["body"])
+        assert body["error"] == "Invalid JSON body"
+
+    def test_audit_insert_and_prev_select_on_success(self, mod):
+        rds = make_member_rds({
+            "SELECT annual_dues_cents FROM club_settings": {
+                "records": [[{"longValue": 10000}]]
+            },
+            "UPDATE club_settings": {
+                "records": [[{"longValue": 12000}, {"stringValue": "2025-01-01T00:00:00Z"}]]
+            },
+        })
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
+             patch("boto3.client", return_value=rds):
+            resp = mod.handler(
+                member_jwt_event({"annual_dues_cents": 12000}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 200
+        calls = [c.kwargs.get("sql", c.args[0] if c.args else "") for c in rds.execute_statement.call_args_list]
+        assert any("SELECT annual_dues_cents" in s for s in calls), "prev SELECT not executed"
+        assert any("Settings-Change" in s for s in calls), "audit INSERT not executed"
+
     def test_boolean_true_returns_400(self, mod):
         # bool is a subclass of int; True must be rejected, not treated as 1 cent
         with patch.object(mod, "authenticate_member", return_value=_ADMIN):

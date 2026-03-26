@@ -21,7 +21,7 @@ _ADMIN = {"member_id": FAKE_MEMBER_ID, "sub": FAKE_SUB, "training_level": 4}
 
 _MOD_NAME = "admin_ranges_status_handler"
 
-_RANGE_ID = "range-id-1"
+_RANGE_ID = "11111111-2222-3333-4444-555555555555"
 
 
 @pytest.fixture()
@@ -115,3 +115,63 @@ class TestAdminRangesStatus:
             resp = mod.handler(_event(False), FakeContext())
 
         assert resp["statusCode"] == 403
+
+    def test_invalid_range_id_returns_400(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(
+                member_jwt_event(
+                    {"is_open": False},
+                    path_params={"range_id": "not-a-uuid"},
+                    method="PATCH",
+                ),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+        assert "UUID" in json.loads(resp["body"])["error"]
+
+    def test_null_body_returns_400(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            event = member_jwt_event({}, path_params={"range_id": _RANGE_ID}, method="PATCH")
+            event["body"] = "null"
+            resp = mod.handler(event, FakeContext())
+
+        assert resp["statusCode"] == 400
+        assert "JSON object" in json.loads(resp["body"])["error"]
+
+    def test_array_body_returns_400(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            event = member_jwt_event({}, path_params={"range_id": _RANGE_ID}, method="PATCH")
+            event["body"] = "[]"
+            resp = mod.handler(event, FakeContext())
+
+        assert resp["statusCode"] == 400
+        assert "JSON object" in json.loads(resp["body"])["error"]
+
+    def test_invalid_json_body_returns_400(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            event = member_jwt_event({}, path_params={"range_id": _RANGE_ID}, method="PATCH")
+            event["body"] = "{"
+            resp = mod.handler(event, FakeContext())
+
+        assert resp["statusCode"] == 400
+        body = json.loads(resp["body"])
+        assert body["error"] == "Invalid JSON body"
+
+    def test_happy_path_writes_range_status_change_audit(self, mod):
+        """Successful update must insert a Range-Status-Change row into activity_logs."""
+        rds = make_member_rds({
+            "UPDATE ranges SET is_open": {"records": [[
+                {"stringValue": _RANGE_ID},
+                {"booleanValue": False},
+            ]]},
+        })
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
+             patch("boto3.client", return_value=rds):
+            resp = mod.handler(_event(False), FakeContext())
+
+        assert resp["statusCode"] == 200
+        sql_calls = [call.kwargs.get("sql", "") for call in rds.execute_statement.call_args_list]
+        assert any("Range-Status-Change" in sql for sql in sql_calls), (
+            "execute_statement was never called with 'Range-Status-Change' — audit write is missing"
+        )

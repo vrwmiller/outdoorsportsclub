@@ -1,7 +1,9 @@
 """GET /v1/admin/ranges/occupancy  — Level 4+ RSO
 
-Returns current lane occupancy for all ranges. Used by the Admin Portal for
-the supervisory cross-range view, polled at a suitable interval.
+Returns current lane occupancy for all ranges, up to 500 ranges and 500 lanes
+(a safety cap that far exceeds the physical footprint of any realistic facility).
+Used by the Admin Portal for the supervisory cross-range view, polled at a
+suitable interval.
 
 Returns:
     200 OK  [ { range_id, name, is_open, lanes: [{ lane_id, lane_number,
@@ -69,7 +71,7 @@ def handler(event: dict, context: Any) -> dict:
                 secretArn=DB_SECRET_ARN,
                 database=DB_NAME,
                 transactionId=tx["transactionId"],
-                sql="SELECT id, name, is_open FROM ranges ORDER BY name",
+                sql="SELECT id, name, is_open FROM ranges ORDER BY name LIMIT 500",
             )
             lanes_result = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
@@ -78,7 +80,7 @@ def handler(event: dict, context: Any) -> dict:
                 transactionId=tx["transactionId"],
                 sql=(
                     "SELECT id, range_id, lane_number, status, current_member_id, guest_count "
-                    "FROM lanes ORDER BY range_id, lane_number"
+                    "FROM lanes ORDER BY range_id, lane_number LIMIT 500"
                 ),
             )
             rds.commit_transaction(

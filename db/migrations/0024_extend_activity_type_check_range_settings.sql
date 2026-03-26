@@ -1,0 +1,13 @@
+-- Migration: 0024_extend_activity_type_check_range_settings
+-- NO-OP: The complete activity_logs.activity_type CHECK constraint — including
+--        'Range-Status-Change' and 'Settings-Change' — is defined in full in
+--        migration 0023_extend_activity_type_check_auth_reset.
+--
+--        These values were folded into 0023 to prevent a transient constraint-
+--        narrowing window during deployment: scripts/migrate.py applies migrations
+--        sequentially on every run, so an 0023-only constraint (lacking the newer
+--        types) would be live briefly between the two files executing, causing
+--        concurrent handlers to fail CHECK validation.
+--
+--        This file is retained to preserve the migration sequence.
+SELECT 1;
