@@ -113,12 +113,20 @@ def handler(event: dict, context: Any) -> dict:
         body = json.loads(event.get("body") or "{}")
         location_tag = body.get("location_tag")
         range_id = body.get("range_id")
-        if not location_tag:
+        if location_tag is None:
             raise ValueError("location_tag is required")
-        if not range_id:
+        if not isinstance(location_tag, str):
+            raise ValueError("location_tag must be a string")
+        if not location_tag:
+            raise ValueError("location_tag must not be empty")
+        if len(location_tag) > 64:
+            raise ValueError("location_tag must not exceed 64 characters")
+        if range_id is None:
             raise ValueError("range_id is required")
         if not isinstance(range_id, str):
-            raise ValueError("range_id must be a valid UUID")
+            raise ValueError("range_id must be a string")
+        if not range_id:
+            raise ValueError("range_id must not be empty")
         try:
             uuid.UUID(range_id)
         except ValueError:

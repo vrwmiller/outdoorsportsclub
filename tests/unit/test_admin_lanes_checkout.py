@@ -22,19 +22,19 @@ _ADMIN = {"member_id": FAKE_MEMBER_ID, "sub": FAKE_SUB, "training_level": 4}
 
 _MOD_NAME = "admin_lanes_checkout_handler"
 
-_LANE_ID = "lane-id-1"
+_LANE_ID = "eeeeeeee-ffff-0000-1111-222222222222"
 _OCCUPANT_ID = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
 
 _OCCUPIED_LANE = [[
     {"stringValue": _LANE_ID},
-    {"stringValue": "range-id-1"},
+    {"stringValue": "11111111-2222-3333-4444-555555555555"},
     {"stringValue": "Occupied"},
     {"stringValue": _OCCUPANT_ID},
 ]]
 
 _AVAILABLE_LANE = [[
     {"stringValue": _LANE_ID},
-    {"stringValue": "range-id-1"},
+    {"stringValue": "11111111-2222-3333-4444-555555555555"},
     {"stringValue": "Available"},
     {"isNull": True},
 ]]
@@ -120,6 +120,29 @@ class TestAdminLanesCheckout:
 
         assert resp["statusCode"] == 403
 
+    def test_invalid_lane_id_returns_400(self, mod):
+        """Non-UUID lane_id path parameter must be rejected before any RDS call."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event(lane_id="not-a-uuid"), FakeContext())
+
+        assert resp["statusCode"] == 400
+
+    def test_wait_list_sql_contains_race_guards(self, mod):
+        """The wait-list promotion UPDATE must include FOR UPDATE SKIP LOCKED and AND status='Waiting'."""
+        rds = make_member_rds({
+            "FROM lanes WHERE id": {"records": _OCCUPIED_LANE},
+            "SET status = 'Available'": {"numberOfRecordsUpdated": 1},
+            "Range-Checkout": {"numberOfRecordsUpdated": 1},
+            "UPDATE wait_list": {"records": []},
+        })
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
+             patch("boto3.client", return_value=rds):
+            mod.handler(_event(), FakeContext())
+
+        all_sql = " ".join(str(c) for c in rds.execute_statement.call_args_list)
+        assert "FOR UPDATE SKIP LOCKED" in all_sql
+        assert "AND status = 'Waiting'" in all_sql
+
     def test_sns_failure_does_not_fail_request(self, mod):
         """SNS publish failure must be swallowed — 200 still returned."""
         rds = make_member_rds({
@@ -140,3 +163,21 @@ class TestAdminLanesCheckout:
             resp = mod.handler(_event(), FakeContext())
 
         assert resp["statusCode"] == 200
+
+    def test_occupied_lane_with_null_occupant_returns_500(self, mod):
+        """Occupied lane with NULL current_member_id violates chk_lanes_occupancy — must raise RuntimeError and roll back, returning 500."""
+        null_occupant_lane = [[
+            {"stringValue": _LANE_ID},
+            {"stringValue": "11111111-2222-3333-4444-555555555555"},
+            {"stringValue": "Occupied"},
+            {"isNull": True},  # data-corruption scenario
+        ]]
+        rds = make_member_rds({
+            "FROM lanes WHERE id": {"records": null_occupant_lane},
+        })
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
+             patch("boto3.client", return_value=rds):
+            resp = mod.handler(_event(), FakeContext())
+
+        assert resp["statusCode"] == 500
+        rds.rollback_transaction.assert_called_once()

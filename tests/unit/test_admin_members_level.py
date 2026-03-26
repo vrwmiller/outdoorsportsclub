@@ -111,6 +111,13 @@ class TestAdminMembersLevel:
 
         assert resp["statusCode"] == 403
 
+    def test_invalid_member_id_uuid_returns_400(self, mod):
+        """Non-UUID member_id path parameter must be rejected before any RDS call."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"training_level": 2}, target_id="not-a-uuid"), FakeContext())
+
+        assert resp["statusCode"] == 400
+
     def test_cannot_grant_own_level_returns_403(self, mod):
         """Level 5 actor cannot set any member to Level 5."""
         with patch.object(mod, "authenticate_member", return_value=_ADMIN):

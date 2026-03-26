@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from typing import Any
 
 import boto3
@@ -54,6 +55,10 @@ def handler(event: dict, context: Any) -> dict:
         target_member_id = body.get("member_id")
         if not target_member_id:
             raise ValueError("member_id is required")
+        try:
+            target_member_id = str(uuid.UUID(str(target_member_id)))
+        except (ValueError, TypeError):
+            raise ValueError("member_id must be a valid UUID")
 
         rds = boto3.client("rds-data")
         tx = rds.begin_transaction(
@@ -111,6 +116,22 @@ def handler(event: dict, context: Any) -> dict:
                     sql="UPDATE members SET social_provider_id = NULL WHERE id = :tid",
                     parameters=[{"name": "tid", "value": {"stringValue": target_member_id}}],
                 )
+
+            # Write durable audit record — atomic with the social_provider_id reset.
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql=(
+                    "INSERT INTO activity_logs (member_id, actor_member_id, activity_type) "
+                    "VALUES (:tid, :actor, 'Auth-Reset')"
+                ),
+                parameters=[
+                    {"name": "tid", "value": {"stringValue": target_member_id}},
+                    {"name": "actor", "value": {"stringValue": actor_member_id}},
+                ],
+            )
 
             rds.commit_transaction(
                 resourceArn=DB_CLUSTER_ARN,

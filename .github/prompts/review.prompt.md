@@ -3,7 +3,7 @@ agent: agent
 description: Read all review comments on the current PR, validate each against authoritative project docs and the changed files, fix valid claims, and post replies.
 ---
 
-Follow these steps exactly. Do not skip any step.
+Follow these steps exactly. Do not skip any step. To reduce potential for rate-limiting, add random 2-5 second sleep where you prompt the user for approval to execute a command.
 
 1. **Identify the PR** — run `gh pr view --json number,headRefName` to get the PR number and branch name. If the current branch has no open PR, stop and tell the user.
 

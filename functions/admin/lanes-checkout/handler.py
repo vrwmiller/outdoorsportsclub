@@ -17,6 +17,7 @@ Returns:
 import json
 import logging
 import time
+import uuid
 from typing import Any
 
 import boto3
@@ -49,6 +50,10 @@ def handler(event: dict, context: Any) -> dict:
         lane_id = path_params.get("lane_id")
         if not lane_id:
             raise ValueError("lane_id path parameter is required")
+        try:
+            uuid.UUID(lane_id)
+        except ValueError:
+            raise ValueError("lane_id must be a valid UUID")
 
         rds = boto3.client("rds-data")
         tx = rds.begin_transaction(
@@ -108,7 +113,16 @@ def handler(event: dict, context: Any) -> dict:
                 }
 
             range_id = lane_row[1]["stringValue"]
-            occupant_member_id = lane_row[3].get("stringValue") if not lane_row[3].get("isNull") else None
+            occupant_member_id = (
+                lane_row[3].get("stringValue") if not lane_row[3].get("isNull") else None
+            )
+            # chk_lanes_occupancy guarantees current_member_id IS NOT NULL when status='Occupied'.
+            # A None here means DB-level data corruption — fail loudly rather than misattribute
+            # the audit row.
+            if occupant_member_id is None:
+                raise RuntimeError(
+                    f"Lane {lane_id} is Occupied but current_member_id is NULL — constraint violation"
+                )
 
             # Clear the lane.
             rds.execute_statement(
@@ -126,23 +140,22 @@ def handler(event: dict, context: Any) -> dict:
             )
 
             # Activity log — Range-Checkout with actor_member_id = RSO.
-            if occupant_member_id:
-                rds.execute_statement(
-                    resourceArn=DB_CLUSTER_ARN,
-                    secretArn=DB_SECRET_ARN,
-                    database=DB_NAME,
-                    transactionId=tx["transactionId"],
-                    sql=(
-                        "INSERT INTO activity_logs "
-                        "(member_id, actor_member_id, activity_type, lane_id) "
-                        "VALUES (:occupant, :actor, 'Range-Checkout', :lid)"
-                    ),
-                    parameters=[
-                        {"name": "occupant", "value": {"stringValue": occupant_member_id}},
-                        {"name": "actor", "value": {"stringValue": actor_member_id}},
-                        {"name": "lid", "value": {"stringValue": lane_id}},
-                    ],
-                )
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=tx["transactionId"],
+                sql=(
+                    "INSERT INTO activity_logs "
+                    "(member_id, actor_member_id, activity_type, lane_id) "
+                    "VALUES (:occupant, :actor, 'Range-Checkout', :lid)"
+                ),
+                parameters=[
+                    {"name": "occupant", "value": {"stringValue": occupant_member_id}},
+                    {"name": "actor", "value": {"stringValue": actor_member_id}},
+                    {"name": "lid", "value": {"stringValue": lane_id}},
+                ],
+            )
 
             # Advance wait list: promote next Waiting entry to Called.
             next_result = rds.execute_statement(
@@ -158,8 +171,10 @@ def handler(event: dict, context: Any) -> dict:
                     "WHERE id = ("
                     "  SELECT id FROM wait_list "
                     "  WHERE range_id = :rid AND status = 'Waiting' "
-                    "  ORDER BY position LIMIT 1"
+                    "  ORDER BY position LIMIT 1 "
+                    "  FOR UPDATE SKIP LOCKED"
                     ") "
+                    "AND status = 'Waiting' "
                     "RETURNING id"
                 ),
                 parameters=[{"name": "rid", "value": {"stringValue": range_id}}],

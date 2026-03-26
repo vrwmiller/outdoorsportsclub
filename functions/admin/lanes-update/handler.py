@@ -16,6 +16,7 @@ Returns:
 import json
 import logging
 import time
+import uuid
 from typing import Any
 
 import boto3
@@ -57,14 +58,20 @@ def handler(event: dict, context: Any) -> dict:
         lane_id = path_params.get("lane_id")
         if not lane_id:
             raise ValueError("lane_id path parameter is required")
+        try:
+            uuid.UUID(lane_id)
+        except ValueError:
+            raise ValueError("lane_id must be a valid UUID")
 
         body = json.loads(event.get("body") or "{}")
 
         updates: dict = {}
         if "lane_number" in body:
             val = body["lane_number"]
-            if not isinstance(val, int) or val < 1:
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
                 raise ValueError("lane_number must be a positive integer")
+            if val > 32767:
+                raise ValueError("lane_number must not exceed 32767")
             updates["lane_number"] = val
         if "status" in body:
             val = body["status"]
@@ -176,6 +183,8 @@ def handler(event: dict, context: Any) -> dict:
             "member_id": member_id,
             "device_id": None,
             "action": "admin_lanes_update",
+            "lane_id": lane_id,
+            "updates": updates,
             "duration_ms": round((time.monotonic() - start) * 1000),
             "error": None,
         }))

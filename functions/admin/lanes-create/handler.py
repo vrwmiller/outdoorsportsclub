@@ -14,6 +14,7 @@ Returns:
 import json
 import logging
 import time
+import uuid
 from typing import Any
 
 import boto3
@@ -46,12 +47,21 @@ def handler(event: dict, context: Any) -> dict:
         range_id = body.get("range_id")
         lane_number = body.get("lane_number")
 
-        if not range_id:
-            raise ValueError("range_id is required")
+        if not isinstance(range_id, str) or not range_id:
+            raise ValueError("range_id must be a non-empty string")
+        try:
+            range_id = str(uuid.UUID(range_id))
+        except (ValueError, TypeError):
+            raise ValueError("range_id must be a valid UUID")
         if lane_number is None:
             raise ValueError("lane_number is required")
-        if not isinstance(lane_number, int) or lane_number < 1:
-            raise ValueError("lane_number must be a positive integer")
+        if (
+            isinstance(lane_number, bool)
+            or not isinstance(lane_number, int)
+            or lane_number < 1
+            or lane_number > 32767
+        ):
+            raise ValueError("lane_number must be a positive integer no greater than 32767")
 
         rds = boto3.client("rds-data")
         tx = rds.begin_transaction(
@@ -105,6 +115,18 @@ def handler(event: dict, context: Any) -> dict:
                         "headers": CORS_HEADERS,
                         "body": json.dumps({"error": "Lane number already exists for this range"}),
                     }
+                if "foreign key constraint" in str(exc).lower():
+                    rds.rollback_transaction(
+                        resourceArn=DB_CLUSTER_ARN,
+                        secretArn=DB_SECRET_ARN,
+                        transactionId=tx["transactionId"],
+                    )
+                    error_name = "ValidationError"
+                    return {
+                        "statusCode": 400,
+                        "headers": CORS_HEADERS,
+                        "body": json.dumps({"error": "range_id does not reference a valid range"}),
+                    }
                 raise
 
             rds.commit_transaction(
@@ -147,7 +169,11 @@ def handler(event: dict, context: Any) -> dict:
         error_name = type(exc).__name__
         logger.warning("Auth failure [%s]: %s", context.aws_request_id, exc)
         return error_response(403, "Forbidden")
-    except (ValueError, json.JSONDecodeError) as exc:
+    except json.JSONDecodeError:
+        error_name = "JSONDecodeError"
+        logger.warning("Validation error [%s]: invalid JSON body", context.aws_request_id)
+        return error_response(400, "Invalid JSON body")
+    except ValueError as exc:
         error_name = type(exc).__name__
         logger.warning("Validation error [%s]: %s", context.aws_request_id, exc)
         return error_response(400, str(exc))

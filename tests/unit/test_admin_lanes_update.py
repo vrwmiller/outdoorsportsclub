@@ -21,7 +21,7 @@ _ADMIN = {"member_id": FAKE_MEMBER_ID, "sub": FAKE_SUB, "training_level": 4}
 
 _MOD_NAME = "admin_lanes_update_handler"
 
-_LANE_ID = "lane-id-1"
+_LANE_ID = "eeeeeeee-ffff-0000-1111-222222222222"
 
 _AVAILABLE_ROW = [[
     {"stringValue": _LANE_ID},
@@ -134,3 +134,24 @@ class TestAdminLanesUpdate:
             resp = mod.handler(_event({"status": "Closed"}), FakeContext())
 
         assert resp["statusCode"] == 403
+
+    def test_invalid_lane_id_returns_400(self, mod):
+        """Non-UUID lane_id path parameter must be rejected before any RDS call."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"status": "Closed"}, lane_id="not-a-uuid"), FakeContext())
+
+        assert resp["statusCode"] == 400
+
+    def test_lane_number_too_large_returns_400(self, mod):
+        """lane_number > 32767 (SMALLINT max) must be rejected with 400."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"lane_number": 32768}), FakeContext())
+
+        assert resp["statusCode"] == 400
+
+    def test_boolean_lane_number_returns_400(self, mod):
+        """Boolean lane_number (True/False) must be rejected — bool is subclass of int."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"lane_number": True}), FakeContext())
+
+        assert resp["statusCode"] == 400
