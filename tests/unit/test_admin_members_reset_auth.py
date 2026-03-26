@@ -140,3 +140,35 @@ class TestAdminMembersResetAuth:
             )
 
         assert resp["statusCode"] == 403
+
+    def test_audit_insert_executed_on_success(self, mod):
+        """Auth-Reset activity_log INSERT must be executed atomically with the social_provider_id reset."""
+        rds = make_member_rds({
+            "FROM members WHERE id = :tid": {"records": _MEMBER_ROW_WITH_IDP},
+            "social_provider_id = NULL": {"numberOfRecordsUpdated": 1},
+        })
+        cognito_mock = MagicMock()
+        def _boto(svc, **kw):
+            if svc == "cognito-idp":
+                return cognito_mock
+            return rds
+        with patch.object(mod, "authenticate_member", return_value=_WEBMASTER), \
+             patch("boto3.client", side_effect=_boto):
+            resp = mod.handler(
+                member_jwt_event({"member_id": _TARGET_ID}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 200
+        all_calls = " ".join(str(c) for c in rds.execute_statement.call_args_list)
+        assert "Auth-Reset" in all_calls
+
+    def test_invalid_member_id_type_returns_400(self, mod):
+        """Non-string member_id (e.g. integer) must return 400, not 500."""
+        with patch.object(mod, "authenticate_member", return_value=_WEBMASTER):
+            resp = mod.handler(
+                member_jwt_event({"member_id": 123}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400

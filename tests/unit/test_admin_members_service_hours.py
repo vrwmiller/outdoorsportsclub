@@ -126,3 +126,25 @@ class TestAdminMembersServiceHours:
             resp = mod.handler(_event({"service_hours": 2}), FakeContext())
 
         assert resp["statusCode"] == 403
+
+    def test_concurrent_delete_returns_404(self, mod):
+        """Member found in initial SELECT but deleted before UPDATE RETURNING — must return 404."""
+        rds = make_member_rds({
+            "FROM members WHERE id = :tid": {"records": [[{"stringValue": _TARGET_ID}]]},
+            "service_hours = :hours": {"records": []},  # concurrent delete between check and update
+        })
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
+             patch("boto3.client", return_value=rds):
+            resp = mod.handler(_event({"service_hours": 2}), FakeContext())
+
+        assert resp["statusCode"] == 404
+
+    def test_invalid_json_body_returns_400(self, mod):
+        """Malformed JSON body must return 400 with a fixed message — parse position must not be echoed."""
+        event = member_jwt_event(None, path_params={"member_id": _TARGET_ID}, method="PATCH")
+        event["body"] = "not valid json{"
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(event, FakeContext())
+
+        assert resp["statusCode"] == 400
+        assert json.loads(resp["body"])["error"] == "Invalid JSON body"

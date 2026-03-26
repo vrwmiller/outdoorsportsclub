@@ -120,6 +120,29 @@ class TestAdminLanesCheckout:
 
         assert resp["statusCode"] == 403
 
+    def test_invalid_lane_id_returns_400(self, mod):
+        """Non-UUID lane_id path parameter must be rejected before any RDS call."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event(lane_id="not-a-uuid"), FakeContext())
+
+        assert resp["statusCode"] == 400
+
+    def test_wait_list_sql_contains_race_guards(self, mod):
+        """The wait-list promotion UPDATE must include FOR UPDATE SKIP LOCKED and AND status='Waiting'."""
+        rds = make_member_rds({
+            "FROM lanes WHERE id": {"records": _OCCUPIED_LANE},
+            "SET status = 'Available'": {"numberOfRecordsUpdated": 1},
+            "Range-Checkout": {"numberOfRecordsUpdated": 1},
+            "UPDATE wait_list": {"records": []},
+        })
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
+             patch("boto3.client", return_value=rds):
+            mod.handler(_event(), FakeContext())
+
+        all_sql = " ".join(str(c) for c in rds.execute_statement.call_args_list)
+        assert "FOR UPDATE SKIP LOCKED" in all_sql
+        assert "AND status = 'Waiting'" in all_sql
+
     def test_sns_failure_does_not_fail_request(self, mod):
         """SNS publish failure must be swallowed — 200 still returned."""
         rds = make_member_rds({
