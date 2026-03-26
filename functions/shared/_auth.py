@@ -43,6 +43,11 @@ for _var in _REQUIRED_ENV:
     if not os.environ.get(_var):
         raise RuntimeError(f"Missing required environment variable: {_var}")
 
+if os.environ.get("CORS_ALLOW_ORIGIN") == "*":
+    raise RuntimeError(
+        "CORS_ALLOW_ORIGIN must not be '*'; set the explicit origin for this environment"
+    )
+
 DB_CLUSTER_ARN: str = os.environ["DB_CLUSTER_ARN"]
 DB_SECRET_ARN: str = os.environ["DB_SECRET_ARN"]
 DB_NAME: str = os.environ["DB_NAME"]
@@ -161,7 +166,7 @@ def validate_cognito_jwt(token: str) -> dict:
     except jwt.ExpiredSignatureError as exc:
         raise PermissionError("JWT has expired") from exc
     except jwt.InvalidTokenError as exc:
-        raise PermissionError(f"Invalid JWT: {exc}") from exc
+        raise PermissionError("JWT validation failed") from exc
 
     # Validate issuer — prevents tokens from other User Pools or environments.
     expected_iss = f"https://cognito-idp.{_REGION}.amazonaws.com/{_POOL_ID}"
