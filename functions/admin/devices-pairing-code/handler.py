@@ -121,10 +121,12 @@ def handler(event: dict, context: Any) -> dict:
             raise ValueError("location_tag must not be empty")
         if len(location_tag) > 64:
             raise ValueError("location_tag must not exceed 64 characters")
-        if not range_id:
+        if range_id is None:
             raise ValueError("range_id is required")
         if not isinstance(range_id, str):
-            raise ValueError("range_id must be a valid UUID")
+            raise ValueError("range_id must be a string")
+        if not range_id:
+            raise ValueError("range_id must not be empty")
         try:
             uuid.UUID(range_id)
         except ValueError:

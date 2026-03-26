@@ -148,3 +148,10 @@ class TestAdminLanesUpdate:
             resp = mod.handler(_event({"lane_number": 32768}), FakeContext())
 
         assert resp["statusCode"] == 400
+
+    def test_boolean_lane_number_returns_400(self, mod):
+        """Boolean lane_number (True/False) must be rejected — bool is subclass of int."""
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN):
+            resp = mod.handler(_event({"lane_number": True}), FakeContext())
+
+        assert resp["statusCode"] == 400

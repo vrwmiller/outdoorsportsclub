@@ -68,7 +68,7 @@ def handler(event: dict, context: Any) -> dict:
         updates: dict = {}
         if "lane_number" in body:
             val = body["lane_number"]
-            if not isinstance(val, int) or val < 1:
+            if isinstance(val, bool) or not isinstance(val, int) or val < 1:
                 raise ValueError("lane_number must be a positive integer")
             if val > 32767:
                 raise ValueError("lane_number must not exceed 32767")
