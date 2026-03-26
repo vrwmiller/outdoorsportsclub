@@ -157,3 +157,21 @@ class TestAdminRangesStatus:
         assert resp["statusCode"] == 400
         body = json.loads(resp["body"])
         assert body["error"] == "Invalid JSON body"
+
+    def test_happy_path_writes_range_status_change_audit(self, mod):
+        """Successful update must insert a Range-Status-Change row into activity_logs."""
+        rds = make_member_rds({
+            "UPDATE ranges SET is_open": {"records": [[
+                {"stringValue": _RANGE_ID},
+                {"booleanValue": False},
+            ]]},
+        })
+        with patch.object(mod, "authenticate_member", return_value=_ADMIN), \
+             patch("boto3.client", return_value=rds):
+            resp = mod.handler(_event(False), FakeContext())
+
+        assert resp["statusCode"] == 200
+        sql_calls = [call.kwargs.get("sql", "") for call in rds.execute_statement.call_args_list]
+        assert any("Range-Status-Change" in sql for sql in sql_calls), (
+            "execute_statement was never called with 'Range-Status-Change' — audit write is missing"
+        )
