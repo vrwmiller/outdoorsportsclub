@@ -61,19 +61,15 @@ def handler(event: dict, context: Any) -> dict:
         body = json.loads(event.get("body") or "{}")
 
         # Collect only the allowed updatable fields present in the request.
+        # Drive the loop from _ALLOWED_COLUMNS so adding a new field here
+        # automatically covers body parsing — no second list to keep in sync.
         updates: dict[str, str | None] = {}
-
-        if "home_phone" in body:
-            val = body["home_phone"]
-            if val is not None:
-                _validate_e164(str(val))
-            updates["home_phone"] = val  # None means set to NULL
-
-        if "mobile_phone" in body:
-            val = body["mobile_phone"]
-            if val is not None:
-                _validate_e164(str(val))
-            updates["mobile_phone"] = val
+        for col in _ALLOWED_COLUMNS:
+            if col in body:
+                val = body[col]
+                if val is not None:
+                    _validate_e164(str(val))
+                updates[col] = val  # None means set to NULL
 
         if not updates:
             raise ValueError("No updatable fields provided; accepted fields: home_phone, mobile_phone")
