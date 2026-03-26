@@ -51,7 +51,6 @@ def _make_execute_side_effect(range_found, is_open, lanes):
             {"longValue": 1},
             {"stringValue": "Available"},
             {"isNull": True},
-            {"isNull": True},
             {"longValue": 0},
             {"isNull": True},
         ]

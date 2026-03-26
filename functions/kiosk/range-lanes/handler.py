@@ -64,14 +64,17 @@ def handler(event: dict, context: Any) -> dict:
             range_name: str = r_row[0]["stringValue"]
             is_open: bool = r_row[1]["booleanValue"]
 
-            # Lane occupancy with member_num for display
+            # Lane occupancy with member_num for display.
+            # The JOIN on l.current_member_id is on the DB side only — it is not
+            # included in the SELECT list because the internal UUID is not part
+            # of the response payload (SEC-29).
             lanes_result = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
                 database=DB_NAME,
                 transactionId=tx["transactionId"],
                 sql=(
-                    "SELECT l.id, l.lane_number, l.status, l.current_member_id, "
+                    "SELECT l.id, l.lane_number, l.status, "
                     "m.member_num, l.guest_count, l.checked_in_at "
                     "FROM lanes l "
                     "LEFT JOIN members m ON m.id = l.current_member_id "
@@ -99,10 +102,9 @@ def handler(event: dict, context: Any) -> dict:
             lane_id = row[0]["stringValue"]
             lane_number = int(row[1]["longValue"])
             status = row[2]["stringValue"]
-            current_member_id = row[3].get("stringValue")
-            member_num = row[4].get("stringValue")
-            guest_count = int(row[5]["longValue"])
-            checked_in_at = row[6].get("stringValue")
+            member_num = row[3].get("stringValue")
+            guest_count = int(row[4]["longValue"])
+            checked_in_at = row[5].get("stringValue")
             lanes.append({
                 "lane_id": lane_id,
                 "lane_number": lane_number,

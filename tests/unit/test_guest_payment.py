@@ -135,6 +135,48 @@ class TestGuestPayment:
             resp = mod.handler(device_event(body), FakeContext())
         assert resp["statusCode"] == 400
 
+    def test_non_string_lane_id_returns_400(self, mod):
+        body = _base_body(lane_id=12345)
+        rds = make_rds({})
+        with patch("boto3.client", side_effect=_client_factory(rds)):
+            resp = mod.handler(device_event(body), FakeContext())
+        assert resp["statusCode"] == 400
+
+    def test_invalid_uuid_lane_id_returns_400(self, mod):
+        body = _base_body(lane_id="not-a-uuid")
+        rds = make_rds({})
+        with patch("boto3.client", side_effect=_client_factory(rds)):
+            resp = mod.handler(device_event(body), FakeContext())
+        assert resp["statusCode"] == 400
+
+    def test_non_string_first_name_returns_400(self, mod):
+        body = _base_body(first_name=42)
+        rds = make_rds({})
+        with patch("boto3.client", side_effect=_client_factory(rds)):
+            resp = mod.handler(device_event(body), FakeContext())
+        assert resp["statusCode"] == 400
+
+    def test_overlong_first_name_returns_400(self, mod):
+        body = _base_body(first_name="A" * 101)
+        rds = make_rds({})
+        with patch("boto3.client", side_effect=_client_factory(rds)):
+            resp = mod.handler(device_event(body), FakeContext())
+        assert resp["statusCode"] == 400
+
+    def test_overlong_phone_returns_400(self, mod):
+        body = _base_body(phone="1" * 21)
+        rds = make_rds({})
+        with patch("boto3.client", side_effect=_client_factory(rds)):
+            resp = mod.handler(device_event(body), FakeContext())
+        assert resp["statusCode"] == 400
+
+    def test_overlong_email_returns_400(self, mod):
+        body = _base_body(email="a" * 321)
+        rds = make_rds({})
+        with patch("boto3.client", side_effect=_client_factory(rds)):
+            resp = mod.handler(device_event(body), FakeContext())
+        assert resp["statusCode"] == 400
+
     def test_nfc_missing_stripe_intent_returns_400(self, mod):
         rds = make_rds({})  # ValueError raised before DB queries
         with patch("boto3.client", side_effect=_client_factory(rds)):
@@ -233,7 +275,13 @@ class TestGuestPayment:
 
         with patch("boto3.client", side_effect=_client_factory(rds, sm)), patch(
             "stripe.PaymentIntent.retrieve",
-            return_value={"id": "pi_dup", "status": "succeeded", "amount": GUEST_FEE_CENTS, "currency": "usd", "metadata": {"device_id": "device-id-1", "member_num": "M001"}},
+            return_value={
+                "id": "pi_dup",
+                "status": "succeeded",
+                "amount": GUEST_FEE_CENTS,
+                "currency": "usd",
+                "metadata": {"device_id": "device-id-1", "member_num": "M001"},
+            },
         ):
             resp = mod.handler(
                 device_event(_base_body(payment_method="NFC", stripe_payment_intent_id="pi_dup")),

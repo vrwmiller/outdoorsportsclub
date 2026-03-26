@@ -80,10 +80,14 @@ def handler(event: dict, context: Any) -> dict:
             raise ValueError("member_num exceeds maximum length")
         if payment_method not in _VALID_PAYMENT_METHODS:
             raise ValueError(f"payment_method must be one of: {', '.join(_VALID_PAYMENT_METHODS)}")
+        if not isinstance(lane_id, str):
+            raise ValueError("lane_id must be a string")
         try:
             uuid.UUID(lane_id)
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, TypeError):
             raise ValueError("lane_id must be a valid UUID")
+        if not all(isinstance(v, str) for v in (first_name, last_name, phone, email)):
+            raise ValueError("first_name, last_name, phone, and email must be strings")
         _MAX_NAME_LEN, _MAX_PHONE_LEN, _MAX_EMAIL_LEN = 100, 20, 320
         if len(first_name) > _MAX_NAME_LEN or len(last_name) > _MAX_NAME_LEN:
             raise ValueError("first_name and last_name must be 100 characters or fewer")

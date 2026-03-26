@@ -100,7 +100,8 @@ def handler(event: dict, context: Any) -> dict:
             dues_paid_until = m_row[2].get("stringValue")  # NULL if never paid
 
             # Set current_member_id GUC so RLS policies on activity_logs
-            # and wait_list work correctly if they tighten to require it.
+            # work correctly if they tighten to require it.
+            # (wait_list is intentionally excluded from RLS — see migration 0013.)
             rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
                 secretArn=DB_SECRET_ARN,
