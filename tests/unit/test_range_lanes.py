@@ -102,6 +102,9 @@ class TestRangeLanes:
         body = json.loads(resp["body"])
         assert "lanes" in body
         assert "range_id" in body or "name" in body
+        # SEC-29: internal member UUID must never appear in the lane payload
+        for lane in body["lanes"]:
+            assert "current_member_id" not in lane
 
     def test_missing_device_token_returns_403(self, mod):
         event = {"httpMethod": "GET", "headers": {}, "body": None}
