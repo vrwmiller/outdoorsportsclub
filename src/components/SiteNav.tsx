@@ -39,9 +39,8 @@ export default function SiteNav() {
               {item.hasDropdown ? (
                 <button
                   type="button"
-                  aria-haspopup="true"
-                  aria-expanded="false"
-                  className={linkClass}
+                  disabled
+                  className={linkClass + " cursor-default opacity-70"}
                 >
                   {item.label} ▾
                 </button>
