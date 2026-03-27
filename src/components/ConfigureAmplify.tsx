@@ -18,12 +18,13 @@ const ENV = {
 // If the Cognito stack has not been provisioned yet (local dev before infra is
 // deployed), skip Amplify configuration entirely rather than crashing the page.
 // Login will be non-functional but the rest of the UI will render normally.
-const cognitoConfigured =
-  ENV.userPoolId &&
-  ENV.userPoolClientId &&
-  ENV.domain;
+// Extract required fields to local consts so TypeScript can narrow their types
+// without assertions — narrowing through an intermediate boolean is unreliable.
+const userPoolId = ENV.userPoolId;
+const userPoolClientId = ENV.userPoolClientId;
+const cognitoDomain = ENV.domain;
 
-if (!cognitoConfigured) {
+if (!userPoolId || !userPoolClientId || !cognitoDomain) {
   if (process.env.NODE_ENV === "production") {
     console.error(
       "[ConfigureAmplify] Cognito env vars not set in production — Amplify Auth is disabled. " +
@@ -63,11 +64,11 @@ if (!cognitoConfigured) {
       {
         Auth: {
           Cognito: {
-            userPoolId: ENV.userPoolId as string,
-            userPoolClientId: ENV.userPoolClientId as string,
+            userPoolId,
+            userPoolClientId,
             loginWith: {
               oauth: {
-                domain: ENV.domain as string,
+                domain: cognitoDomain,
                 scopes: ["email", "openid", "profile"],
                 redirectSignIn: [redirectSignIn],
                 redirectSignOut: [redirectSignOut],

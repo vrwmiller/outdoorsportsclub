@@ -195,6 +195,7 @@ npm run build
 ```
 
 **Rules:**
+
 - If the build fails (TypeScript errors, import errors, etc.), fix it before opening the PR. Do not open a PR with a known build failure.
 - Paste the final summary line (e.g., `✓ Compiled successfully`) into the PR description under **Testing**.
 - If the PR touches no frontend files (e.g., handler-only, infra-only, docs-only, schema-only), running the build is not required.
