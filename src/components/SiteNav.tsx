@@ -1,21 +1,33 @@
 import Link from "next/link";
 
-interface NavItem {
+interface NavLink {
   label: string;
   href: string;
-  hasDropdown?: boolean;
+  hasDropdown?: false;
 }
+
+interface NavDropdown {
+  label: string;
+  hasDropdown: true;
+}
+
+type NavItem = NavLink | NavDropdown;
 
 const NAV_ITEMS: NavItem[] = [
   { label: "HOME", href: "/" },
   { label: "CALENDAR", href: "/calendar" },
-  { label: "INFORMATION", href: "#", hasDropdown: true },
-  { label: "RANGES", href: "#", hasDropdown: true },
-  { label: "RESOURCES", href: "#", hasDropdown: true },
-  { label: "CONSERVATION", href: "#", hasDropdown: true },
-  { label: "YOUTH", href: "#", hasDropdown: true },
+  { label: "INFORMATION", hasDropdown: true },
+  { label: "RANGES", hasDropdown: true },
+  { label: "RESOURCES", hasDropdown: true },
+  { label: "CONSERVATION", hasDropdown: true },
+  { label: "YOUTH", hasDropdown: true },
   { label: "ABOUT THE CLUB", href: "/about" },
 ];
+
+const linkClass =
+  "block px-4 py-3 text-sm font-semibold tracking-wide hover:bg-green-800 transition-colors whitespace-nowrap";
+const activeClass =
+  "block px-4 py-3 text-sm font-semibold tracking-wide bg-green-800 hover:bg-green-800 transition-colors whitespace-nowrap";
 
 export default function SiteNav() {
   return (
@@ -24,17 +36,23 @@ export default function SiteNav() {
         <ul className="flex flex-wrap">
           {NAV_ITEMS.map((item) => (
             <li key={item.label}>
-              <Link
-                href={item.href}
-                className={
-                  item.href === "/"
-                    ? "block px-4 py-3 text-sm font-semibold tracking-wide bg-green-800 hover:bg-green-800 transition-colors whitespace-nowrap"
-                    : "block px-4 py-3 text-sm font-semibold tracking-wide hover:bg-green-800 transition-colors whitespace-nowrap"
-                }
-              >
-                {item.label}
-                {item.hasDropdown ? " ▾" : ""}
-              </Link>
+              {item.hasDropdown ? (
+                <button
+                  type="button"
+                  aria-haspopup="true"
+                  aria-expanded="false"
+                  className={linkClass}
+                >
+                  {item.label} ▾
+                </button>
+              ) : (
+                <Link
+                  href={item.href}
+                  className={item.href === "/" ? activeClass : linkClass}
+                >
+                  {item.label}
+                </Link>
+              )}
             </li>
           ))}
         </ul>
