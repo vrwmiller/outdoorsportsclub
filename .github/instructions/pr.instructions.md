@@ -186,6 +186,19 @@ find infra -name "*.yaml" | xargs cfn-lint
 - Warnings (`W` prefix) may be noted in the PR description and addressed in a follow-up if they are not actionable.
 - If the PR touches no infra files (e.g., handler-only, docs-only, schema-only), running cfn-lint is not required.
 
+## next build gate before opening
+
+Before opening any PR that touches `src/**/*.ts`, `src/**/*.tsx`, or `src/**/*.css`, run the Next.js production build locally and verify it passes:
+
+```bash
+npm run build
+```
+
+**Rules:**
+- If the build fails (TypeScript errors, import errors, etc.), fix it before opening the PR. Do not open a PR with a known build failure.
+- Paste the final summary line (e.g., `✓ Compiled successfully`) into the PR description under **Testing**.
+- If the PR touches no frontend files (e.g., handler-only, infra-only, docs-only, schema-only), running the build is not required.
+
 ## pymarkdown gate before opening
 
 Before opening any PR that touches `**/*.md`, run pymarkdown on all Markdown files and verify there are no errors:
@@ -212,6 +225,7 @@ pymarkdown scan -r docs/ README.md
 - [ ] CORS headers are returned on all Lambda responses (including errors)
 - [ ] `training_level` is re-queried from Aurora — not read from the JWT claim
 - [ ] If the PR touches `functions/**/*.py` or `tests/**/*.py`: pytest passes; summary line included in PR description
+- [ ] If the PR touches `src/**/*.ts`, `src/**/*.tsx`, or `src/**/*.css`: `npm run build` passes; summary line included in PR description
 - [ ] If the PR touches `infra/**/*.yaml`: cfn-lint reports no errors
 - [ ] If the PR touches `**/*.md`: pymarkdown reports no errors (`pymarkdown scan -r docs/ README.md`)
 - [ ] If a new file type or directory was introduced: verify `.gitignore` does not block it (`grep -r '<extension>' .gitignore`) before committing — this project has aggressive catch-all rules (`*.sql`, `*.csv`, `*.dump`) that silently swallow new file types
