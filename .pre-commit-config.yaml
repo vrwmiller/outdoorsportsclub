@@ -6,7 +6,7 @@ repos:
         language: system
         # next dev auto-injects `import "./.next/dev/types/routes.d.ts"` into
         # next-env.d.ts. That path only exists locally and must not be committed.
-        entry: bash -c 'sed -i "" "/import \".\\/\\.next\\/dev\\/types\\/routes\\.d\\.ts\";/d" next-env.d.ts && git add next-env.d.ts'
+        entry: bash -c 'sed -i.bak "/import \".\\/\\.next\\/dev\\/types\\/routes\\.d\\.ts\";/d" next-env.d.ts && rm -f next-env.d.ts.bak && git add next-env.d.ts'
         files: ^next-env\.d\.ts$
         pass_filenames: false
       - id: detect-secrets
