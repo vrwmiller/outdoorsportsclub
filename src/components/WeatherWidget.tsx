@@ -1,3 +1,4 @@
+import { CLUB_LAT, CLUB_LON } from "@/config/location";
 import { OpenMeteoResponse } from "@/types/api";
 
 const WMO_CODES: Record<number, string> = {
@@ -35,22 +36,11 @@ function kmhToMph(kmh: number): number {
 }
 
 export default async function WeatherWidget() {
-  const lat = process.env.WEATHER_LAT;
-  const lon = process.env.WEATHER_LON;
-
-  if (!lat || !lon) {
-    return (
-      <div className="bg-white rounded-2xl shadow-md p-6 text-center">
-        <p className="text-gray-500 text-sm">Weather unavailable</p>
-      </div>
-    );
-  }
-
   let data: OpenMeteoResponse | null = null;
 
   try {
     const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`,
+      `https://api.open-meteo.com/v1/forecast?latitude=${CLUB_LAT}&longitude=${CLUB_LON}&current_weather=true`,
       { next: { revalidate: 1800 } },
     );
     if (res.ok) {
