@@ -14,65 +14,59 @@ export default function HomePage() {
         {/* ── Main column ─────────────────────────────────────────── */}
         <main>
           {/* Status banner */}
-          <div className="bg-green-100 border border-green-300 rounded-lg p-4 mb-6">
-            <span className="text-green-800 font-bold text-lg">
+          <div className="bg-green-100 border border-green-300 rounded-lg p-4 mb-6 flex items-center gap-3">
+            <span className="text-green-800 font-bold text-base">
               Chapter Operating Status:
             </span>
-            <span className="bg-green-700 text-white px-3 py-1 rounded-full text-sm font-bold ml-2">
+            <span className="bg-green-700 text-white px-3 py-1 rounded-full text-sm font-bold">
               OPEN
             </span>
-            <p className="text-green-700 text-sm mt-2">
+            <span className="text-green-700 text-sm ml-2">
               Check the{" "}
               <Link
                 href="/calendar"
-                className="underline hover:text-green-900 focus:outline-none focus:ring-2 focus:ring-green-600 rounded"
+                className="underline focus:outline-none focus:ring-2 focus:ring-green-600 rounded"
               >
-                calendar
+                chapter calendar
               </Link>{" "}
-              for scheduled range hours and events.
-            </p>
+              for current hours and closures.
+            </span>
           </div>
 
           {/* Changes / Cancellations / Closures */}
           <section className="mb-6">
             <h2 className="text-xl font-bold text-green-800 border-b-2 border-green-700 pb-1 mb-3">
-              Changes / Cancellations / Closures:
+              Changes / Cancellations / Closures
             </h2>
             <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
-              <li>No current closures.</li>
+              <li>No current closures or cancellations.</li>
             </ul>
           </section>
 
           {/* Announcements */}
           <section className="mb-6">
             <h2 className="text-xl font-bold text-green-800 border-b-2 border-green-700 pb-1 mb-3">
-              Announcements:
+              Announcements
             </h2>
             <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
-              <li>Check back for upcoming events and club news.</li>
+              <li>Check back for upcoming events and announcements.</li>
+              <li>
+                Chapter meetings: 1st Tuesday (Board) and 3rd Tuesday (General
+                Membership) at 7:30 p.m.
+              </li>
             </ul>
           </section>
 
           {/* Membership */}
           <section className="mb-6">
             <h2 className="text-xl font-bold text-green-800 border-b-2 border-green-700 pb-1 mb-3">
-              Membership:
+              Membership
             </h2>
             <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
+              <li>2026 Membership Renewal period is now open.</li>
+              <li>Contact the membership office for renewal information.</li>
               <li>
-                Annual dues renewals are processed through the Member Portal.
-              </li>
-              <li>
-                New members must complete a safety orientation before range
-                access is granted.
-              </li>
-              <li>
-                Guest passes are available — members may sponsor up to two
-                guests per visit.
-              </li>
-              <li>
-                Contact the membership committee with any questions about your
-                account.
+                New Member Orientation — see the Membership page for details.
               </li>
             </ul>
           </section>
@@ -80,36 +74,36 @@ export default function HomePage() {
           {/* Chapter Information */}
           <section className="mb-6">
             <h2 className="text-xl font-bold text-green-800 border-b-2 border-green-700 pb-1 mb-3">
-              Chapter Information:
+              Chapter Information
             </h2>
             <ul className="list-disc list-inside space-y-1 text-gray-700 text-sm">
               <li>
-                General meetings are held monthly — see the calendar for dates
-                and times.
+                All members must display their range badge when accessing all
+                chapter ranges.
               </li>
+              <li>Chapter speed limit: 10 MPH on all property roads.</li>
               <li>
-                Range safety rules and operating procedures are posted at each
-                range entrance.
+                Always check the{" "}
+                <Link
+                  href="/calendar"
+                  className="text-green-700 underline focus:outline-none focus:ring-2 focus:ring-green-600 rounded"
+                >
+                  chapter calendar
+                </Link>{" "}
+                for up-to-date events and closures.
               </li>
-              <li>
-                Training courses and certification programs are offered
-                throughout the year.
-              </li>
-              <li>
-                Conservation projects and volunteer opportunities are listed on
-                the calendar.
-              </li>
+              <li>Chapter Campus Map — available at the main office.</li>
             </ul>
           </section>
         </main>
 
         {/* ── Sidebar ──────────────────────────────────────────────── */}
         <aside className="flex flex-col gap-4">
-          {/* Weather */}
           <WeatherWidget />
 
-          {/* Member login */}
+          {/* Member Login */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col items-center gap-3">
+            <h3 className="font-bold text-gray-800">Member Login</h3>
             <LoginButton />
             <Link
               href="/admin"
@@ -121,10 +115,8 @@ export default function HomePage() {
 
           {/* Our Mission */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <h3 className="text-green-800 font-bold text-sm mb-2 uppercase tracking-wide">
-              Our Mission
-            </h3>
-            <p className="text-gray-700 text-sm leading-relaxed">
+            <h3 className="font-bold text-green-800 mb-2">Our Mission</h3>
+            <p className="text-gray-700 text-sm italic">
               To conserve, restore, and promote the sustainable use and
               enjoyment of our natural resources, including soil, air, woods,
               waters, and wildlife.
@@ -133,32 +125,30 @@ export default function HomePage() {
 
           {/* Quick Links */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            <h3 className="text-green-800 font-bold text-sm mb-2 uppercase tracking-wide">
-              Quick Links
-            </h3>
-            <ul className="space-y-2">
+            <h3 className="font-bold text-green-800 mb-2">Quick Links</h3>
+            <ul className="space-y-1 text-sm">
               <li>
                 <Link
                   href="/calendar"
-                  className="text-green-700 text-sm hover:text-green-900 hover:underline focus:outline-none focus:ring-2 focus:ring-green-600 rounded"
+                  className="text-green-700 hover:underline focus:outline-none focus:ring-2 focus:ring-green-600 rounded"
                 >
-                  Calendar
+                  Chapter Calendar
                 </Link>
               </li>
               <li>
                 <Link
                   href="/about"
-                  className="text-green-700 text-sm hover:text-green-900 hover:underline focus:outline-none focus:ring-2 focus:ring-green-600 rounded"
+                  className="text-green-700 hover:underline focus:outline-none focus:ring-2 focus:ring-green-600 rounded"
                 >
-                  About
+                  About the Club
                 </Link>
               </li>
               <li>
                 <Link
                   href="/contact"
-                  className="text-green-700 text-sm hover:text-green-900 hover:underline focus:outline-none focus:ring-2 focus:ring-green-600 rounded"
+                  className="text-green-700 hover:underline focus:outline-none focus:ring-2 focus:ring-green-600 rounded"
                 >
-                  Contact
+                  Contact Us
                 </Link>
               </li>
             </ul>
@@ -167,14 +157,11 @@ export default function HomePage() {
       </div>
 
       <footer className="bg-green-900 text-white mt-8">
-        <div className="max-w-6xl mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-sm">
-            © 2026 Outdoor Sports Club. All rights reserved.
-          </p>
+        <div className="max-w-6xl mx-auto px-4 py-4 text-sm text-center text-green-200">
+          © 2026 Outdoor Sports Club. All rights reserved.
           <a
-            href="#"
-            aria-label="Outdoor Sports Club on Facebook"
-            className="text-white text-sm hover:underline focus:outline-none focus:ring-2 focus:ring-white rounded"
+            href="https://www.facebook.com"
+            className="ml-4 hover:text-white focus:outline-none focus:ring-2 focus:ring-white rounded"
           >
             Facebook
           </a>
