@@ -1,5 +1,16 @@
 // API response types — filled in as endpoints are implemented.
 
+export interface OpenMeteoCurrentWeather {
+  temperature: number; // Celsius
+  windspeed: number; // km/h
+  weathercode: number;
+  time: string;
+}
+
+export interface OpenMeteoResponse {
+  current_weather: OpenMeteoCurrentWeather;
+}
+
 /** Response shape of GET /v1/members/me */
 export interface MemberProfile {
   member_num: string;
