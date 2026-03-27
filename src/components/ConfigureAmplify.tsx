@@ -63,11 +63,11 @@ if (!cognitoConfigured) {
       {
         Auth: {
           Cognito: {
-            userPoolId: ENV.userPoolId,
-            userPoolClientId: ENV.userPoolClientId,
+            userPoolId: ENV.userPoolId as string,
+            userPoolClientId: ENV.userPoolClientId as string,
             loginWith: {
               oauth: {
-                domain: ENV.domain,
+                domain: ENV.domain as string,
                 scopes: ["email", "openid", "profile"],
                 redirectSignIn: [redirectSignIn],
                 redirectSignOut: [redirectSignOut],
