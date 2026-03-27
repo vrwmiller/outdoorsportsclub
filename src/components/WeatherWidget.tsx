@@ -50,7 +50,14 @@ export default async function WeatherWidget() {
     console.error("[WeatherWidget] Failed to fetch weather data:", err);
   }
 
-  if (!data) {
+  const cw = data?.current_weather;
+  const validShape =
+    cw &&
+    typeof cw.temperature === "number" &&
+    typeof cw.windspeed === "number" &&
+    typeof cw.weathercode === "number";
+
+  if (!validShape) {
     return (
       <div className="bg-white rounded-2xl shadow-md p-6 text-center">
         <p className="text-gray-500 text-sm">Weather unavailable</p>
@@ -58,7 +65,7 @@ export default async function WeatherWidget() {
     );
   }
 
-  const { temperature, windspeed, weathercode } = data.current_weather;
+  const { temperature, windspeed, weathercode } = cw;
   const tempF = celsiusToFahrenheit(temperature);
   const windMph = kmhToMph(windspeed);
   const condition = mapWeatherCode(weathercode);
