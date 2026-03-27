@@ -15,53 +15,50 @@ const ENV = {
   redirectSignOut: process.env.NEXT_PUBLIC_COGNITO_REDIRECT_SIGN_OUT,
 };
 
-function requireEnv(value: string | undefined, name: string): string {
-  if (!value) {
-    throw new Error(
-      `Missing required environment variable "${name}" for Amplify Auth configuration.`,
-    );
-  }
-  return value;
-}
+// If the Cognito stack has not been provisioned yet (local dev before infra is
+// deployed), skip Amplify configuration entirely rather than crashing the page.
+// Login will be non-functional but the rest of the UI will render normally.
+const cognitoConfigured =
+  ENV.userPoolId &&
+  ENV.userPoolClientId &&
+  ENV.domain;
 
-function resolveRedirect(value: string | undefined, fallbackPath: string, name: string): string {
-  if (value) {
-    return value;
-  }
-  if (typeof window !== "undefined") {
-    return `${window.location.origin}${fallbackPath}`;
-  }
-  throw new Error(
-    `Missing environment variable "${name}" and unable to compute redirect URL during SSR.`,
+if (!cognitoConfigured) {
+  console.warn(
+    "[ConfigureAmplify] Cognito env vars not set — Amplify Auth is disabled. " +
+      "Set NEXT_PUBLIC_COGNITO_* in .env.local to enable login.",
   );
-}
+} else {
+  const redirectSignIn =
+    ENV.redirectSignIn ??
+    (typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "");
+  const redirectSignOut =
+    ENV.redirectSignOut ??
+    (typeof window !== "undefined" ? `${window.location.origin}/` : "");
 
-// Called once at module load time — safe to run outside a component.
-// The { ssr: true } option enables server-side token refresh in Next.js.
-Amplify.configure(
-  {
-    Auth: {
-      Cognito: {
-        userPoolId: requireEnv(ENV.userPoolId, "NEXT_PUBLIC_COGNITO_USER_POOL_ID"),
-        userPoolClientId: requireEnv(ENV.userPoolClientId, "NEXT_PUBLIC_COGNITO_APP_CLIENT_ID"),
-        loginWith: {
-          oauth: {
-            domain: requireEnv(ENV.domain, "NEXT_PUBLIC_COGNITO_DOMAIN"),
-            scopes: ["email", "openid", "profile"],
-            redirectSignIn: [
-              resolveRedirect(ENV.redirectSignIn, "/auth/callback", "NEXT_PUBLIC_COGNITO_REDIRECT_SIGN_IN"),
-            ],
-            redirectSignOut: [
-              resolveRedirect(ENV.redirectSignOut, "/", "NEXT_PUBLIC_COGNITO_REDIRECT_SIGN_OUT"),
-            ],
-            responseType: "code",
+  // Called once at module load time — safe to run outside a component.
+  // The { ssr: true } option enables server-side token refresh in Next.js.
+  Amplify.configure(
+    {
+      Auth: {
+        Cognito: {
+          userPoolId: ENV.userPoolId,
+          userPoolClientId: ENV.userPoolClientId,
+          loginWith: {
+            oauth: {
+              domain: ENV.domain,
+              scopes: ["email", "openid", "profile"],
+              redirectSignIn: [redirectSignIn],
+              redirectSignOut: [redirectSignOut],
+              responseType: "code",
+            },
           },
         },
       },
     },
-  },
-  { ssr: true },
-);
+    { ssr: true },
+  );
+}
 
 export default function ConfigureAmplify() {
   return null;
