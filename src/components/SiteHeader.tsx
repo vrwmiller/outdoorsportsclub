@@ -7,6 +7,7 @@ export default function SiteHeader() {
         <div className="flex items-center gap-3">
           <div
             className="w-12 h-12 bg-green-700 rounded-full flex items-center justify-center shrink-0"
+            role="img"
             aria-label="Outdoor Sports Club logo"
           >
             <span className="text-white font-bold text-sm">OSC</span>
