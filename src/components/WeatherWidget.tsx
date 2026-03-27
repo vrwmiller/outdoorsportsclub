@@ -46,8 +46,8 @@ export default async function WeatherWidget() {
     if (res.ok) {
       data = (await res.json()) as OpenMeteoResponse;
     }
-  } catch {
-    // fall through to error state below
+  } catch (err) {
+    console.error("[WeatherWidget] Failed to fetch weather data:", err);
   }
 
   if (!data) {

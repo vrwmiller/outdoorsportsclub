@@ -24,10 +24,17 @@ const cognitoConfigured =
   ENV.domain;
 
 if (!cognitoConfigured) {
-  console.warn(
-    "[ConfigureAmplify] Cognito env vars not set — Amplify Auth is disabled. " +
-      "Set NEXT_PUBLIC_COGNITO_* in .env.local to enable login.",
-  );
+  if (process.env.NODE_ENV === "production") {
+    console.error(
+      "[ConfigureAmplify] Cognito env vars not set in production — Amplify Auth is disabled. " +
+        "Set NEXT_PUBLIC_COGNITO_* in the deployment environment.",
+    );
+  } else {
+    console.warn(
+      "[ConfigureAmplify] Cognito env vars not set — Amplify Auth is disabled. " +
+        "Set NEXT_PUBLIC_COGNITO_* in .env.local to enable login.",
+    );
+  }
 } else {
   const redirectSignIn =
     ENV.redirectSignIn ??
