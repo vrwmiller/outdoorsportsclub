@@ -99,6 +99,18 @@ def handler(event: dict, context: Any) -> dict:
             training_level = int(m_row[1]["longValue"])
             dues_paid_until = m_row[2].get("stringValue")  # NULL if never paid
 
+            # Set current_member_id GUC so RLS policies on activity_logs
+            # work correctly if they tighten to require it.
+            # (wait_list is intentionally excluded from RLS — see migration 0013.)
+            rds.execute_statement(
+                resourceArn=DB_CLUSTER_ARN,
+                secretArn=DB_SECRET_ARN,
+                database=DB_NAME,
+                transactionId=outer_tx["transactionId"],
+                sql="SELECT set_config('app.current_member_id', :mid, true)",
+                parameters=[{"name": "mid", "value": {"stringValue": member_id}}],
+            )
+
             # 2. Resolve range — check is_open and min_training_level
             r_result = rds.execute_statement(
                 resourceArn=DB_CLUSTER_ARN,
@@ -122,7 +134,7 @@ def handler(event: dict, context: Any) -> dict:
 
             # 3. Dues current? dues_paid_until >= today (UTC)
             import datetime
-            today = datetime.date.today().isoformat()
+            today = datetime.datetime.now(tz=datetime.timezone.utc).date().isoformat()
             if not dues_paid_until or dues_paid_until < today:
                 raise PermissionError("Dues are not current")
 
