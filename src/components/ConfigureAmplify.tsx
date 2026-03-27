@@ -36,36 +36,50 @@ if (!cognitoConfigured) {
     );
   }
 } else {
+  // Redirect URLs require window.location.origin when env vars are not explicitly set.
+  // Use null (not "") as the SSR fallback so we can detect and skip misconfigured calls.
   const redirectSignIn =
     ENV.redirectSignIn ??
-    (typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : "");
+    (typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : null);
   const redirectSignOut =
     ENV.redirectSignOut ??
-    (typeof window !== "undefined" ? `${window.location.origin}/` : "");
+    (typeof window !== "undefined" ? `${window.location.origin}/` : null);
 
-  // Called once at module load time in the browser — safe to run outside a component.
-  // The { ssr: true } option configures Amplify to use cookies instead of localStorage
-  // so that Server Components and middleware can read the auth session server-side.
-  Amplify.configure(
-    {
-      Auth: {
-        Cognito: {
-          userPoolId: ENV.userPoolId,
-          userPoolClientId: ENV.userPoolClientId,
-          loginWith: {
-            oauth: {
-              domain: ENV.domain,
-              scopes: ["email", "openid", "profile"],
-              redirectSignIn: [redirectSignIn],
-              redirectSignOut: [redirectSignOut],
-              responseType: "code",
+  if (!redirectSignIn || !redirectSignOut) {
+    // SSR context: redirect URLs cannot be computed without window.location.origin
+    // and NEXT_PUBLIC_COGNITO_REDIRECT_* env vars are not set. Skip Amplify.configure
+    // here — the browser will configure Amplify when this module re-evaluates client-side.
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        "[ConfigureAmplify] NEXT_PUBLIC_COGNITO_REDIRECT_* env vars are not set. " +
+          "Set them in the deployment environment — login will fail without explicit redirect URLs.",
+      );
+    }
+  } else {
+    // Called once at module load time in the browser — safe to run outside a component.
+    // The { ssr: true } option configures Amplify to use cookies instead of localStorage
+    // so that Server Components and middleware can read the auth session server-side.
+    Amplify.configure(
+      {
+        Auth: {
+          Cognito: {
+            userPoolId: ENV.userPoolId,
+            userPoolClientId: ENV.userPoolClientId,
+            loginWith: {
+              oauth: {
+                domain: ENV.domain,
+                scopes: ["email", "openid", "profile"],
+                redirectSignIn: [redirectSignIn],
+                redirectSignOut: [redirectSignOut],
+                responseType: "code",
+              },
             },
           },
         },
       },
-    },
-    { ssr: true },
-  );
+      { ssr: true },
+    );
+  }
 }
 
 export default function ConfigureAmplify() {
