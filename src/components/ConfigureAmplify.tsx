@@ -43,8 +43,9 @@ if (!cognitoConfigured) {
     ENV.redirectSignOut ??
     (typeof window !== "undefined" ? `${window.location.origin}/` : "");
 
-  // Called once at module load time — safe to run outside a component.
-  // The { ssr: true } option enables server-side token refresh in Next.js.
+  // Called once at module load time in the browser — safe to run outside a component.
+  // The { ssr: true } option configures Amplify to use cookies instead of localStorage
+  // so that Server Components and middleware can read the auth session server-side.
   Amplify.configure(
     {
       Auth: {

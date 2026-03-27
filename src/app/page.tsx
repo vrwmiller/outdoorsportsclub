@@ -105,12 +105,9 @@ export default function HomePage() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col items-center gap-3">
             <h3 className="font-bold text-gray-800">Member Login</h3>
             <LoginButton />
-            <Link
-              href="/admin"
-              className="text-gray-500 text-sm hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-600 rounded"
-            >
-              Admin login
-            </Link>
+            <p className="text-gray-500 text-sm text-center">
+              Admin portal (coming soon)
+            </p>
           </div>
 
           {/* Our Mission */}
