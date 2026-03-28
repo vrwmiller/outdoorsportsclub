@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getCurrentUser, fetchAuthSession, signOut } from "aws-amplify/auth";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { MemberProfile } from "@/types/api";
 
 export default function DashboardPage() {
@@ -106,15 +107,23 @@ export default function DashboardPage() {
             </div>
           </dl>
         ) : null}
-        <button
-          onClick={handleSignOut}
-          disabled={isSigningOut}
-          aria-disabled={isSigningOut}
-          aria-busy={isSigningOut}
-          className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
-        >
-          {isSigningOut ? "Signing out…" : "Sign out"}
-        </button>
+        <div className="space-y-3">
+          <Link
+            href="/portal/settings"
+            className="block w-full text-center bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors"
+          >
+            Settings
+          </Link>
+          <button
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+            aria-disabled={isSigningOut}
+            aria-busy={isSigningOut}
+            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isSigningOut ? "Signing out…" : "Sign out"}
+          </button>
+        </div>
         {signOutError && (
           <p className="mt-2 text-red-600 text-sm" role="alert">
             {signOutError}
