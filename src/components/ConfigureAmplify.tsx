@@ -68,7 +68,7 @@ if (!userPoolId || !userPoolClientId || !cognitoDomain) {
           loginWith: {
             oauth: {
               domain: cognitoDomain,
-              scopes: ["email", "openid", "profile"],
+              scopes: ["email", "openid", "profile", "aws.cognito.signin.user.admin"],
               redirectSignIn: [redirectSignIn],
               redirectSignOut: [redirectSignOut],
               responseType: "code",

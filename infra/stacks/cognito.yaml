@@ -250,6 +250,7 @@ Resources:
         - email
         - openid
         - profile
+        - aws.cognito.signin.user.admin
 
       CallbackURLs: !Ref CallbackUrl
 
