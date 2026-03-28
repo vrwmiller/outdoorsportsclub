@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getCurrentUser, fetchAuthSession, signOut } from "aws-amplify/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { getCurrentUser, fetchAuthSession, signOut } from "aws-amplify/auth";
 import type { MemberProfile } from "@/types/api";
 
 export default function DashboardPage() {

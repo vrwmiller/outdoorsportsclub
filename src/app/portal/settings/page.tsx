@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, type FormEvent } from "react";
-import { getCurrentUser, updatePassword, signOut } from "aws-amplify/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { getCurrentUser, updatePassword, signOut } from "aws-amplify/auth";
 export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -35,8 +35,6 @@ export default function SettingsPage() {
     setIsSubmitting(true);
     try {
       await updatePassword({ oldPassword: currentPassword, newPassword });
-      await signOut();
-      router.replace("/");
     } catch (err: unknown) {
       console.error("Password change failed", err);
       let message = "Password change failed. Please try again.";
@@ -52,7 +50,15 @@ export default function SettingsPage() {
       }
       setError(message);
       setIsSubmitting(false);
+      return;
     }
+
+    try {
+      await signOut();
+    } catch (err: unknown) {
+      console.error("Sign-out after password change failed", err);
+    }
+    router.replace("/");
   }
 
   return (
