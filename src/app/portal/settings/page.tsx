@@ -10,12 +10,15 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    getCurrentUser().catch(() => {
-      router.replace("/");
-    });
+    getCurrentUser()
+      .then(() => setIsAuthChecked(true))
+      .catch(() => {
+        router.replace("/");
+      });
   }, [router]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -57,8 +60,21 @@ export default function SettingsPage() {
       await signOut();
     } catch (err: unknown) {
       console.error("Sign-out after password change failed", err);
+      setError(
+        "Your password was updated, but we couldn't sign you out. Please close your browser to end your session."
+      );
+      setIsSubmitting(false);
+      return;
     }
     router.replace("/");
+  }
+
+  if (!isAuthChecked) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-50">
+        <p className="text-gray-500 text-sm">Loading…</p>
+      </main>
+    );
   }
 
   return (
