@@ -29,8 +29,8 @@ export default function SettingsPage() {
       return;
     }
 
-    if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters.");
+    if (newPassword.length < 12) {
+      setError("New password must be at least 12 characters.");
       return;
     }
 
@@ -40,9 +40,18 @@ export default function SettingsPage() {
       await signOut();
       router.replace("/");
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Password change failed. Please try again.";
-      // Cognito returns "Incorrect username or password." for a wrong current password
+      console.error("Password change failed", err);
+      let message = "Password change failed. Please try again.";
+      if (err instanceof Error) {
+        const name = (err as { name?: string }).name ?? "";
+        if (name === "NotAuthorizedException") {
+          message = "Current password is incorrect.";
+        } else if (name === "InvalidPasswordException" || name === "InvalidParameterException") {
+          message = "New password does not meet the requirements. Use at least 12 characters with uppercase, lowercase, and a number.";
+        } else if (name === "LimitExceededException") {
+          message = "Too many attempts. Please wait a few minutes and try again.";
+        }
+      }
       setError(message);
       setIsSubmitting(false);
     }
