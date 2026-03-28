@@ -154,17 +154,19 @@ def validate_cognito_jwt(token: str) -> dict:
     public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
 
     try:
-        # Cognito access tokens do not carry an aud claim; the client is
-        # identified by the client_id claim instead. aud verification is
-        # handled explicitly below via client_id.
+        # ID tokens carry the app client ID in the aud claim; PyJWT can verify
+        # this directly. Access tokens lack an aud claim and are rejected at the
+        # API Gateway layer before reaching Lambda.
         claims = jwt.decode(
             token,
             public_key,
             algorithms=["RS256"],
-            options={"verify_aud": False},
+            audience=_APP_CLIENT_ID,
         )
     except jwt.ExpiredSignatureError as exc:
         raise PermissionError("JWT has expired") from exc
+    except jwt.InvalidAudienceError as exc:
+        raise PermissionError("JWT audience mismatch") from exc
     except jwt.InvalidTokenError as exc:
         raise PermissionError("JWT validation failed") from exc
 
@@ -173,13 +175,9 @@ def validate_cognito_jwt(token: str) -> dict:
     if claims.get("iss") != expected_iss:
         raise PermissionError("JWT issuer mismatch")
 
-    # Only access tokens are accepted; ID tokens are rejected.
-    if claims.get("token_use") != "access":
-        raise PermissionError("JWT token_use must be 'access'")
-
-    # Validate client binding — prevents cross-client token reuse within the pool.
-    if claims.get("client_id") != _APP_CLIENT_ID:
-        raise PermissionError("JWT client_id mismatch")
+    # Only ID tokens are accepted; access tokens are rejected at the gateway.
+    if claims.get("token_use") != "id":
+        raise PermissionError("JWT token_use must be 'id'")
 
     return claims
 

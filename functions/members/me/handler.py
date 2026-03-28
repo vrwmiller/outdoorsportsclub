@@ -70,7 +70,7 @@ def handler(event: dict, context: Any) -> dict:
                 sql=(
                     "SELECT member_num, training_level, service_hours, "
                     "dues_paid_until, waiver_signed_at, mobile_phone "
-                    "FROM members WHERE id = :mid"
+                    "FROM members WHERE id = :mid::uuid"
                 ),
                 parameters=[{"name": "mid", "value": {"stringValue": member_id}}],
             )

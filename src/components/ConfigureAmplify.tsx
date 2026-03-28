@@ -58,28 +58,25 @@ if (!userPoolId || !userPoolClientId || !cognitoDomain) {
     }
   } else {
     // Called once at module load time in the browser — safe to run outside a component.
-    // The { ssr: true } option configures Amplify to use cookies instead of localStorage
-    // so that Server Components and middleware can read the auth session server-side.
-    Amplify.configure(
-      {
-        Auth: {
-          Cognito: {
-            userPoolId,
-            userPoolClientId,
-            loginWith: {
-              oauth: {
-                domain: cognitoDomain,
-                scopes: ["email", "openid", "profile"],
-                redirectSignIn: [redirectSignIn],
-                redirectSignOut: [redirectSignOut],
-                responseType: "code",
-              },
+    // Note: { ssr: true } requires a server-side route handler to complete the OAuth
+    // code exchange and is not used here. Auth state is stored in localStorage (default).
+    Amplify.configure({
+      Auth: {
+        Cognito: {
+          userPoolId,
+          userPoolClientId,
+          loginWith: {
+            oauth: {
+              domain: cognitoDomain,
+              scopes: ["email", "openid", "profile"],
+              redirectSignIn: [redirectSignIn],
+              redirectSignOut: [redirectSignOut],
+              responseType: "code",
             },
           },
         },
       },
-      { ssr: true },
-    );
+    });
   }
 }
 

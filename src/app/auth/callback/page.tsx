@@ -4,40 +4,93 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Hub } from "aws-amplify/utils";
-import { getCurrentUser } from "aws-amplify/auth";
 
-// Cognito redirects here after a successful social login with the auth code in
-// the URL. aws-amplify exchanges the code for tokens automatically; this page
-// waits for the signedIn Hub event and then navigates to the dashboard.
+// Cognito redirects here after a successful OAuth login with the auth code in
+// the URL. In Amplify v6 the token exchange is triggered lazily by the first
+// fetchAuthSession() call — it detects ?code= in the URL and completes the
+// PKCE exchange. A module-level flag ensures the exchange is attempted exactly
+// once per page load — prevents React Strict Mode's synthetic double-mount from
+// triggering a second exchange and consuming the one-time-use PKCE code.
+let _exchangeStarted = false;
+
 export default function AuthCallbackPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = Hub.listen("auth", ({ payload }) => {
-      if (payload.event === "signedIn") {
-        unsubscribe();
-        router.replace("/portal/dashboard");
+    if (_exchangeStarted) return;
+    _exchangeStarted = true;
+
+    let cancelled = false;
+    let finished = false;
+
+    const isDev = process.env.NODE_ENV !== "production";
+    // Log PKCE state to diagnose state-mismatch failures (dev only).
+    // Reads are inside the isDev block so they are omitted in production
+    // and cannot throw (localStorage is inaccessible in some privacy modes).
+    if (isDev) {
+      try {
+        const clientId = process.env.NEXT_PUBLIC_COGNITO_APP_CLIENT_ID ?? "";
+        const storedState = localStorage.getItem(`CognitoIdentityServiceProvider.${clientId}.oauthState`);
+        const storedPKCE = localStorage.getItem(`CognitoIdentityServiceProvider.${clientId}.oauthPKCE`);
+        const urlState = new URLSearchParams(window.location.search).get("state");
+        const code = new URLSearchParams(window.location.search).get("code");
+        console.log("[callback] code:", code ? code.slice(0, 8) + "…" : "MISSING");
+        console.log("[callback] url state:", urlState);
+        console.log("[callback] stored state:", storedState);
+        console.log("[callback] state match:", urlState === storedState);
+        console.log("[callback] has PKCE verifier:", !!storedPKCE);
+      } catch (err) {
+        console.warn("[callback] dev diagnostics unavailable:", err);
+      }
+    }
+
+    // Listen for Amplify signalled completion as backup
+    const hubUnsub = Hub.listen("auth", ({ payload }) => {
+      if (isDev) console.log("[hub]", payload.event);
+      if (payload.event === "signInWithRedirect" || payload.event === "signedIn") {
+        if (!cancelled && !finished) { finished = true; router.replace("/portal/dashboard"); }
       } else if (payload.event === "signInWithRedirect_failure") {
-        unsubscribe();
-        console.error("OAuth sign-in failed", payload.data);
-        setError("Sign-in failed. Please try again.");
+        console.error("[hub] failure");
+        if (!cancelled && !finished) { finished = true; setError("Sign-in failed. Please try again."); }
       }
     });
 
-    // If already signed in (e.g. page refresh after a completed exchange),
-    // navigate immediately without waiting for the Hub event.
-    getCurrentUser()
-      .then(() => {
-        unsubscribe();
-        router.replace("/portal/dashboard");
-      })
-      .catch(() => {
-        // Not signed in yet — Amplify is still exchanging the auth code.
-        // The Hub listener above will fire once the exchange completes.
-      });
+    // In Amplify v6, fetchAuthSession() is what triggers the OAuth code exchange
+    // when ?code= is present in the URL. It must be called exactly once — multiple
+    // concurrent calls deadlock the internal mutex. No retry loop.
+    async function triggerExchange() {
+      try {
+        if (isDev) console.log("[callback] calling fetchAuthSession() to trigger exchange…");
+        const { fetchAuthSession } = await import("aws-amplify/auth");
+        const session = await fetchAuthSession();
+        if (isDev) console.log("[callback] fetchAuthSession resolved, tokens:", !!session.tokens);
+        if (session.tokens?.idToken) {
+          if (!cancelled && !finished) { finished = true; router.replace("/portal/dashboard"); }
+        } else {
+          if (!cancelled && !finished) { finished = true; setError("Sign-in failed — no tokens returned. Please try again."); }
+        }
+      } catch (err) {
+        console.error("[callback] fetchAuthSession error:", err);
+        if (!cancelled && !finished) { finished = true; setError("Sign-in failed. Please try again."); }
+      }
+    }
 
-    return unsubscribe;
+    triggerExchange();
+
+    const timeoutId = setTimeout(() => {
+      if (!cancelled && !finished) {
+        finished = true;
+        console.error("[callback] timed out — exchange did not complete after 30s");
+        setError("Sign-in timed out. Please try again.");
+      }
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      hubUnsub();
+      clearTimeout(timeoutId);
+    };
   }, [router]);
 
   if (error) {

@@ -5,8 +5,8 @@ Covers two areas added in the JWT hardening PR (Issues #74, #75, #76):
   validate_cognito_jwt():
     - success path returns decoded claims
     - iss mismatch raises PermissionError       (#75)
-    - token_use != "access" raises PermissionError  (#74)
-    - client_id mismatch raises PermissionError     (#74)
+    - token_use != "id" raises PermissionError  (#74)
+    - aud mismatch raises PermissionError       (#74)
     - expired token raises PermissionError
     - unknown kid triggers a force-refresh then fails cleanly (#76)
 
@@ -53,12 +53,12 @@ _EXPECTED_ISS = f"https://cognito-idp.{_REGION}.amazonaws.com/{_POOL_ID}"
 # ---------------------------------------------------------------------------
 
 def _mint_token(overrides: dict | None = None) -> str:
-    """Return a valid RS256-signed JWT using the test key pair."""
+    """Return a valid RS256-signed ID token using the test key pair."""
     claims = {
         "sub": "test-sub-123",
         "iss": _EXPECTED_ISS,
-        "token_use": "access",
-        "client_id": _CLIENT_ID,
+        "token_use": "id",
+        "aud": _CLIENT_ID,
         "exp": int(time.time()) + 3600,
     }
     if overrides:
@@ -110,7 +110,7 @@ class TestValidateCognitoJwt:
         with patch.object(auth, "_get_jwks", return_value=_FAKE_JWKS):
             claims = auth.validate_cognito_jwt(token)
         assert claims["sub"] == "test-sub-123"
-        assert claims["client_id"] == _CLIENT_ID
+        assert claims["aud"] == _CLIENT_ID
 
     def test_issuer_mismatch_raises(self, auth):
         token = _mint_token({"iss": "https://cognito-idp.us-east-1.amazonaws.com/wrong-pool"})
@@ -118,16 +118,16 @@ class TestValidateCognitoJwt:
             with pytest.raises(PermissionError, match="issuer"):
                 auth.validate_cognito_jwt(token)
 
-    def test_token_use_id_token_raises(self, auth):
-        token = _mint_token({"token_use": "id"})
+    def test_token_use_access_token_raises(self, auth):
+        token = _mint_token({"token_use": "access"})
         with patch.object(auth, "_get_jwks", return_value=_FAKE_JWKS):
             with pytest.raises(PermissionError, match="token_use"):
                 auth.validate_cognito_jwt(token)
 
-    def test_client_id_mismatch_raises(self, auth):
-        token = _mint_token({"client_id": "other-client-id"})
+    def test_audience_mismatch_raises(self, auth):
+        token = _mint_token({"aud": "other-client-id"})
         with patch.object(auth, "_get_jwks", return_value=_FAKE_JWKS):
-            with pytest.raises(PermissionError, match="client_id"):
+            with pytest.raises(PermissionError, match="audience"):
                 auth.validate_cognito_jwt(token)
 
     def test_expired_token_raises(self, auth):
