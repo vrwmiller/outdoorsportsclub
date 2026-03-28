@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { getCurrentUser, updatePassword, signOut } from "aws-amplify/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useEffect } from "react";
-
 export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -20,7 +18,7 @@ export default function SettingsPage() {
     });
   }, [router]);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
 
