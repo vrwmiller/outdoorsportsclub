@@ -1,16 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithRedirect } from "aws-amplify/auth";
+import { useRouter } from "next/navigation";
+import { signInWithRedirect, getCurrentUser } from "aws-amplify/auth";
 
 export default function LoginButton() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   async function handleClick() {
     if (isSubmitting) return;
     setError(null);
     setIsSubmitting(true);
+    try {
+      await getCurrentUser();
+      // Already signed in — go straight to the dashboard.
+      setIsSubmitting(false);
+      router.push("/portal/dashboard");
+      return;
+    } catch {
+      // Not signed in — proceed with the hosted UI redirect.
+    }
     try {
       await signInWithRedirect();
     } catch (err) {
