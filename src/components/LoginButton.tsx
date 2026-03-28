@@ -16,6 +16,7 @@ export default function LoginButton() {
     try {
       await getCurrentUser();
       // Already signed in — go straight to the dashboard.
+      setIsSubmitting(false);
       router.push("/portal/dashboard");
       return;
     } catch {
