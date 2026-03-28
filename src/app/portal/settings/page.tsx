@@ -127,7 +127,7 @@ export default function SettingsPage() {
           <button
             type="submit"
             disabled={isSubmitting || !currentPassword || !newPassword || !confirmPassword}
-            aria-disabled={isSubmitting}
+            aria-disabled={isSubmitting || !currentPassword || !newPassword || !confirmPassword}
             aria-busy={isSubmitting}
             className="w-full bg-green-700 hover:bg-green-800 text-white font-semibold py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
           >
