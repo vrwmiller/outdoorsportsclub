@@ -24,19 +24,25 @@ export default function AuthCallbackPage() {
     let cancelled = false;
     let finished = false;
 
-    // Log PKCE state to diagnose state-mismatch failures (dev only)
-    const clientId = process.env.NEXT_PUBLIC_COGNITO_APP_CLIENT_ID ?? "";
-    const storedState = localStorage.getItem(`CognitoIdentityServiceProvider.${clientId}.oauthState`);
-    const storedPKCE = localStorage.getItem(`CognitoIdentityServiceProvider.${clientId}.oauthPKCE`);
-    const urlState = new URLSearchParams(window.location.search).get("state");
-    const code = new URLSearchParams(window.location.search).get("code");
     const isDev = process.env.NODE_ENV !== "production";
+    // Log PKCE state to diagnose state-mismatch failures (dev only).
+    // Reads are inside the isDev block so they are omitted in production
+    // and cannot throw (localStorage is inaccessible in some privacy modes).
     if (isDev) {
-      console.log("[callback] code:", code ? code.slice(0, 8) + "…" : "MISSING");
-      console.log("[callback] url state:", urlState);
-      console.log("[callback] stored state:", storedState);
-      console.log("[callback] state match:", urlState === storedState);
-      console.log("[callback] has PKCE verifier:", !!storedPKCE);
+      try {
+        const clientId = process.env.NEXT_PUBLIC_COGNITO_APP_CLIENT_ID ?? "";
+        const storedState = localStorage.getItem(`CognitoIdentityServiceProvider.${clientId}.oauthState`);
+        const storedPKCE = localStorage.getItem(`CognitoIdentityServiceProvider.${clientId}.oauthPKCE`);
+        const urlState = new URLSearchParams(window.location.search).get("state");
+        const code = new URLSearchParams(window.location.search).get("code");
+        console.log("[callback] code:", code ? code.slice(0, 8) + "…" : "MISSING");
+        console.log("[callback] url state:", urlState);
+        console.log("[callback] stored state:", storedState);
+        console.log("[callback] state match:", urlState === storedState);
+        console.log("[callback] has PKCE verifier:", !!storedPKCE);
+      } catch (err) {
+        console.warn("[callback] dev diagnostics unavailable:", err);
+      }
     }
 
     // Listen for Amplify signalled completion as backup
