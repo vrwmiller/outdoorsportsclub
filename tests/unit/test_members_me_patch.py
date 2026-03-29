@@ -365,6 +365,34 @@ class TestPatchValidation:
 
         assert resp["statusCode"] == 400
 
+    def test_text_field_as_dict_rejected(self, mod):
+        """Non-string JSON types for text fields must be rejected — not coerced."""
+        with patch.object(mod, "authenticate_member", return_value=_MEMBER):
+            resp = mod.handler(
+                member_jwt_event(body={"first_name": {"value": "Alice"}}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+
+    def test_text_field_as_list_rejected(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_MEMBER):
+            resp = mod.handler(
+                member_jwt_event(body={"state": ["CA"]}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+
+    def test_text_field_as_integer_rejected(self, mod):
+        with patch.object(mod, "authenticate_member", return_value=_MEMBER):
+            resp = mod.handler(
+                member_jwt_event(body={"zip": 12345}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 400
+
 
 # ---------------------------------------------------------------------------
 # Protected fields are silently ignored
