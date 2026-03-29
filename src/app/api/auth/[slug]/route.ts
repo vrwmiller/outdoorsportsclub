@@ -1,5 +1,5 @@
-import { getCreateAuthRouteHandlers } from "@/lib/amplifyServerUtils";
 import { NextRequest } from "next/server";
+import { getCreateAuthRouteHandlers } from "@/lib/amplifyServerUtils";
 
 async function handleAuthRequest(
   request: Request,
@@ -41,7 +41,7 @@ export async function POST(
 ): Promise<Response> {
   const { slug } = await context.params;
   if (slug !== "sign-out") {
-    return new Response("Method Not Allowed", { status: 405 });
+    return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET" } });
   }
   const getRequest = new NextRequest(request.url, { method: "GET", headers: request.headers });
   return handleAuthRequest(getRequest, context);
