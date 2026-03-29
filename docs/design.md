@@ -372,7 +372,7 @@ erDiagram
 | `city` | TEXT (Nullable) | City (mailing address). |
 | `state` | CHAR(2) (Nullable) | Two-letter US state code (mailing address). |
 | `zip` | TEXT (Nullable) | ZIP or postal code (mailing address). |
-| `notification_email` | TEXT (Nullable) | Separate notification email address. Falls back to `email` when null. |
+| `notification_email` | TEXT (Nullable) | Separate notification email address. When non-null, application-layer notification dispatch uses this address; otherwise it falls back to `email`. This fallback is not enforced by the schema. |
 | `notify_email` | BOOLEAN | Whether to send email notifications. Defaults to `true`. |
 | `notify_sms` | BOOLEAN | Whether to send SMS notifications. Defaults to `false`. |
 | `notify_push` | BOOLEAN | Whether to send push notifications. Defaults to `false`. |
