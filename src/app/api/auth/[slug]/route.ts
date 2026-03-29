@@ -25,6 +25,12 @@ async function handleAuthRequest(
 
 export const GET = handleAuthRequest;
 
-// Sign-out is exposed as POST so the UI can use a form submission rather than
-// a plain link, preventing logout CSRF via cross-site navigation.
-export const POST = handleAuthRequest;
+// The Amplify adapter only handles GET internally. For POST sign-out (submitted
+// from a form to prevent logout CSRF via cross-site navigation), return a 303
+// redirect so the browser performs a normal GET to this same route.
+export async function POST(
+  request: Request,
+  _context: { params: Promise<{ slug: string }> },
+): Promise<Response> {
+  return Response.redirect(request.url, 303);
+}
