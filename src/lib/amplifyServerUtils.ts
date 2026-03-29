@@ -4,30 +4,30 @@ import { getServerAmplifyConfig } from "@/config/amplifyAuth";
 type ServerRunner = ReturnType<typeof createServerRunner>;
 
 function getServerRunner(): ServerRunner | null {
-	const config = getServerAmplifyConfig();
-	if (!config) {
-		return null;
-	}
+  const config = getServerAmplifyConfig();
+  if (!config) {
+    return null;
+  }
 
-	return createServerRunner({ config });
+  return createServerRunner({ config });
 }
 
 export function getRunWithAmplifyServerContext():
-	| ServerRunner["runWithAmplifyServerContext"]
-	| null {
-	const runner = getServerRunner();
-	if (!runner) {
-		return null;
-	}
+  | ServerRunner["runWithAmplifyServerContext"]
+  | null {
+  const runner = getServerRunner();
+  if (!runner) {
+    return null;
+  }
 
-	return runner.runWithAmplifyServerContext;
+  return runner.runWithAmplifyServerContext;
 }
 
 export function getCreateAuthRouteHandlers(): ServerRunner["createAuthRouteHandlers"] | null {
-	const runner = getServerRunner();
-	if (!runner) {
-		return null;
-	}
+  const runner = getServerRunner();
+  if (!runner) {
+    return null;
+  }
 
-	return runner.createAuthRouteHandlers;
+  return runner.createAuthRouteHandlers;
 }

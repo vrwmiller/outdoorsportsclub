@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "aws-amplify/auth/server";
 import { getRunWithAmplifyServerContext } from "@/lib/amplifyServerUtils";
 
-export default async function SettingsPage(): Promise<JSX.Element> {
+export default async function SettingsPage() {
   const runWithAmplifyServerContext = getRunWithAmplifyServerContext();
   if (!runWithAmplifyServerContext) {
     redirect("/");
@@ -12,8 +13,8 @@ export default async function SettingsPage(): Promise<JSX.Element> {
   let username: string | null = null;
   try {
     const user = await runWithAmplifyServerContext({
-      nextServerContext: null,
-      operation: async (contextSpec) => getCurrentUser(contextSpec),
+      nextServerContext: { cookies },
+      operation: (contextSpec) => getCurrentUser(contextSpec),
     });
     username = user?.username ?? null;
   } catch {
