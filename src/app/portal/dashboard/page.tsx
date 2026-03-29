@@ -1,85 +1,73 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getCurrentUser, fetchAuthSession, signOut } from "aws-amplify/auth";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { getCurrentUser, fetchAuthSession } from "aws-amplify/auth/server";
 import type { MemberProfile } from "@/types/api";
+import { getRunWithAmplifyServerContext } from "@/lib/amplifyServerUtils";
 
-export default function DashboardPage() {
-  const [profile, setProfile] = useState<MemberProfile | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [isSigningOut, setIsSigningOut] = useState(false);
-  const [signOutError, setSignOutError] = useState<string | null>(null);
-  const router = useRouter();
-
-  useEffect(() => {
-    async function loadProfile() {
-      try {
-        await getCurrentUser();
-      } catch {
-        router.replace("/");
-        return;
-      }
-
-      try {
-        const session = await fetchAuthSession();
-        const idToken = session.tokens?.idToken?.toString();
-        if (!idToken) {
-          setLoadError("Session expired. Please sign in again.");
-          return;
-        }
-
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}/v1/members/me`,
-          { headers: { Authorization: `Bearer ${idToken}` } }
-        );
-
-        if (!res.ok) {
-          setLoadError(`Failed to load profile (${res.status}). Please try again.`);
-          return;
-        }
-
-        setProfile(await res.json());
-      } catch (err) {
-        console.error("Failed to load member profile", err);
-        setLoadError("Could not load your profile. Please try again.");
-      }
-    }
-
-    loadProfile();
-  }, [router]);
-
-  async function handleSignOut() {
-    if (isSigningOut) return;
-    setSignOutError(null);
-    setIsSigningOut(true);
-    try {
-      await signOut();
-      router.replace("/");
-    } catch (err) {
-      console.error("Sign-out failed", err);
-      setSignOutError("Sign-out failed. Please try again.");
-      setIsSigningOut(false);
-    }
+async function loadProfile(): Promise<{ profile: MemberProfile | null; error: string | null }> {
+  const runWithAmplifyServerContext = getRunWithAmplifyServerContext();
+  if (!runWithAmplifyServerContext) {
+    return { profile: null, error: "Auth is not configured. Contact an administrator." };
   }
 
-  if (!profile && !loadError) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-50">
-        <p className="text-gray-500 text-sm">Loading…</p>
-      </main>
-    );
+  let idToken: string | null = null;
+
+  try {
+    await runWithAmplifyServerContext({
+      nextServerContext: { cookies },
+      operation: (contextSpec) => getCurrentUser(contextSpec),
+    });
+
+    const session = await runWithAmplifyServerContext({
+      nextServerContext: { cookies },
+      operation: (contextSpec) => fetchAuthSession(contextSpec),
+    });
+
+    idToken = session.tokens?.idToken?.toString() ?? null;
+  } catch {
+    redirect("/");
   }
+
+  if (!idToken) {
+    redirect("/");
+  }
+
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!apiBase) {
+    return { profile: null, error: "API base URL is not configured." };
+  }
+
+  try {
+    const res = await fetch(`${apiBase}/v1/members/me`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      return {
+        profile: null,
+        error: `Failed to load profile (${res.status}). Please try again.`,
+      };
+    }
+
+    return { profile: (await res.json()) as MemberProfile, error: null };
+  } catch {
+    return { profile: null, error: "Could not load your profile. Please try again." };
+  }
+}
+
+export default async function DashboardPage() {
+  const { profile, error } = await loadProfile();
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
       <div className="bg-white rounded-2xl shadow-md p-8 max-w-md w-full">
         <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
 
-        {loadError ? (
+        {error ? (
           <p className="text-red-600 text-sm mb-6" role="alert">
-            {loadError}
+            {error}
           </p>
         ) : profile ? (
           <dl className="mb-6 space-y-3">
@@ -93,9 +81,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <dt className="text-gray-500 text-sm">Dues paid until</dt>
-              <dd className="text-gray-800 text-base font-medium">
-                {profile.dues_paid_until ?? "—"}
-              </dd>
+              <dd className="text-gray-800 text-base font-medium">{profile.dues_paid_until ?? "—"}</dd>
             </div>
             <div>
               <dt className="text-gray-500 text-sm">Annual dues</dt>
@@ -107,6 +93,7 @@ export default function DashboardPage() {
             </div>
           </dl>
         ) : null}
+
         <div className="space-y-3">
           <Link
             href="/portal/settings"
@@ -114,21 +101,15 @@ export default function DashboardPage() {
           >
             Settings
           </Link>
-          <button
-            onClick={handleSignOut}
-            disabled={isSigningOut}
-            aria-disabled={isSigningOut}
-            aria-busy={isSigningOut}
-            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {isSigningOut ? "Signing out…" : "Sign out"}
-          </button>
+          <form action="/api/auth/sign-out" method="POST" className="w-full">
+            <button
+              type="submit"
+              className="block w-full text-center bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors"
+            >
+              Sign out
+            </button>
+          </form>
         </div>
-        {signOutError && (
-          <p className="mt-2 text-red-600 text-sm" role="alert">
-            {signOutError}
-          </p>
-        )}
       </div>
     </main>
   );
