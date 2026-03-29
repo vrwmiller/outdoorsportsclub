@@ -257,6 +257,11 @@ def handler(event: dict, context: Any) -> dict:
         def _str(cell: dict) -> str | None:
             return cell.get("stringValue") if not cell.get("isNull") else None
 
+        def _bool(cell: dict) -> bool:
+            if "booleanValue" not in cell:
+                raise RuntimeError(f"Unexpected DB cell shape — booleanValue missing: {cell!r}")
+            return cell["booleanValue"]
+
         resp_body = {
             "home_phone": _str(row[0]),
             "mobile_phone": _str(row[1]),
@@ -268,9 +273,9 @@ def handler(event: dict, context: Any) -> dict:
             "state": _str(row[7]),
             "zip": _str(row[8]),
             "notification_email": _str(row[9]),
-            "notify_email": row[10].get("booleanValue", True),
-            "notify_sms": row[11].get("booleanValue", False),
-            "notify_push": row[12].get("booleanValue", False),
+            "notify_email": _bool(row[10]),
+            "notify_sms": _bool(row[11]),
+            "notify_push": _bool(row[12]),
         }
 
         logger.info(json.dumps({

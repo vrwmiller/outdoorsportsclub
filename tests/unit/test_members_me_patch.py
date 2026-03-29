@@ -395,6 +395,20 @@ class TestPatchValidation:
 
         assert resp["statusCode"] == 400
 
+    def test_bool_cell_missing_boolean_value_raises(self, mod):
+        """A RETURNING row with no booleanValue on a bool column should fail loudly (500), not silently default."""
+        malformed_row = _patch_row()
+        malformed_row[10] = {"stringValue": "unexpected"}  # notify_email cell is wrong shape
+        rds = make_member_rds({"UPDATE members": {"records": [malformed_row]}})
+        with patch.object(mod, "authenticate_member", return_value=_MEMBER):
+            with patch("boto3.client", return_value=rds):
+                resp = mod.handler(
+                    member_jwt_event(body={"first_name": "Alice"}, method="PATCH"),
+                    FakeContext(),
+                )
+
+        assert resp["statusCode"] == 500
+
 
 # ---------------------------------------------------------------------------
 # Protected fields are silently ignored
