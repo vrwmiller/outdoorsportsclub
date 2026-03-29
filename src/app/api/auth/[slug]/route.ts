@@ -1,4 +1,5 @@
 import { getCreateAuthRouteHandlers } from "@/lib/amplifyServerUtils";
+import { NextRequest } from "next/server";
 
 async function handleAuthRequest(
   request: Request,
@@ -23,14 +24,25 @@ async function handleAuthRequest(
   return handler(request, context);
 }
 
-export const GET = handleAuthRequest;
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ slug: string }> },
+): Promise<Response> {
+  const { slug } = await context.params;
+  if (slug === "sign-out") {
+    return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
+  }
+  return handleAuthRequest(request, context);
+}
 
-// The Amplify adapter only handles GET internally. For POST sign-out (submitted
-// from a form to prevent logout CSRF via cross-site navigation), return a 303
-// redirect so the browser performs a normal GET to this same route.
 export async function POST(
   request: Request,
-  _context: { params: Promise<{ slug: string }> },
+  context: { params: Promise<{ slug: string }> },
 ): Promise<Response> {
-  return Response.redirect(request.url, 303);
+  const { slug } = await context.params;
+  if (slug !== "sign-out") {
+    return new Response("Method Not Allowed", { status: 405 });
+  }
+  const getRequest = new NextRequest(request.url, { method: "GET", headers: request.headers });
+  return handleAuthRequest(getRequest, context);
 }
