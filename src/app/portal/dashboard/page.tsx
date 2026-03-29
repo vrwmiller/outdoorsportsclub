@@ -101,12 +101,14 @@ export default async function DashboardPage() {
           >
             Settings
           </Link>
-          <a
-            href="/api/auth/sign-out"
-            className="block w-full text-center bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors"
-          >
-            Sign out
-          </a>
+          <form action="/api/auth/sign-out" method="POST" className="w-full">
+            <button
+              type="submit"
+              className="block w-full text-center bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors"
+            >
+              Sign out
+            </button>
+          </form>
         </div>
       </div>
     </main>

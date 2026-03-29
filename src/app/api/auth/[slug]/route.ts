@@ -1,6 +1,6 @@
 import { getCreateAuthRouteHandlers } from "@/lib/amplifyServerUtils";
 
-export async function GET(
+async function handleAuthRequest(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ): Promise<Response> {
@@ -22,3 +22,9 @@ export async function GET(
 
   return handler(request, context);
 }
+
+export const GET = handleAuthRequest;
+
+// Sign-out is exposed as POST so the UI can use a form submission rather than
+// a plain link, preventing logout CSRF via cross-site navigation.
+export const POST = handleAuthRequest;

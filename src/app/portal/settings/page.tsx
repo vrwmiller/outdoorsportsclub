@@ -33,12 +33,14 @@ export default async function SettingsPage() {
           <p className="text-gray-500 text-sm">
             Password changes are managed by your identity provider for this account.
           </p>
-          <a
-            href="/api/auth/sign-out"
-            className="inline-flex bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors"
-          >
-            Sign out
-          </a>
+          <form action="/api/auth/sign-out" method="POST">
+            <button
+              type="submit"
+              className="inline-flex bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 transition-colors"
+            >
+              Sign out
+            </button>
+          </form>
         </div>
 
         <div className="mt-6 border-t border-gray-100 pt-4">
