@@ -679,9 +679,9 @@ Returns the member's `member_num` for QR code display in the Member Portal. The 
 PATCH /v1/members/me
 ```
 
-Updates the authenticated member's own editable profile fields. Accepted fields: `home_phone`, `mobile_phone`. `mobile_phone` is validated and normalised to E.164 format before storage — invalid numbers are rejected with `400 Bad Request`. Fields not present in the request body are left unchanged; `member_num`, `email`, `training_level`, `service_hours`, `dues_paid_until`, and `waiver_signed_at` are not updatable through this endpoint.
+Updates the authenticated member's own editable profile fields. Accepted fields: `home_phone`, `mobile_phone`, `first_name`, `last_name`, `date_of_birth`, `street_address`, `city`, `state`, `zip`, `notification_email`, `notify_email`, `notify_sms`, `notify_push`. Validation rules (applied only when the field value is non-null): phone fields must be E.164 format; `state` must be exactly 2 letters (case-insensitive, stored uppercased); `zip` must be a non-empty string; `date_of_birth` must be a valid ISO 8601 date (`YYYY-MM-DD`); `notification_email` must be a valid email address. All text and date fields may be explicitly set to `null` to clear the stored value. Boolean fields (`notify_*`) do not accept `null`. Fields not present in the request body are left unchanged (partial update). `member_num`, `email`, `training_level`, `service_hours`, `dues_paid_until`, and `waiver_signed_at` are not updatable through this endpoint.
 
-**Returns:** `200 OK` with `{ home_phone, mobile_phone }`, `400 Bad Request` (invalid phone format), or `403 Forbidden`.
+**Returns:** `200 OK` with `{ home_phone, mobile_phone, first_name, last_name, date_of_birth, street_address, city, state, zip, notification_email, notify_email, notify_sms, notify_push }`, `400 Bad Request` (validation failure or no updatable fields), or `403 Forbidden`.
 
 ---
 

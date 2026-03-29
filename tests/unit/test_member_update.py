@@ -21,7 +21,29 @@ _MEMBER = {"member_id": FAKE_MEMBER_ID, "sub": FAKE_SUB, "training_level": 3}
 
 _MOD_NAME = "member_me_update_handler"
 
-_UPDATE_ROW = [[{"stringValue": "+15559990000"}, {"stringValue": "+15551234567"}]]
+def _update_row(
+    home_phone=None,
+    mobile_phone="+15551234567",
+) -> list:
+    """13-column RETURNING row matching the updated handler."""
+    def _s(v):
+        return {"stringValue": v} if v is not None else {"isNull": True}
+
+    return [
+        _s(home_phone),
+        _s(mobile_phone),
+        {"stringValue": "Alice"},  # first_name
+        {"stringValue": "Smith"},  # last_name
+        {"isNull": True},           # date_of_birth
+        {"isNull": True},           # street_address
+        {"isNull": True},           # city
+        {"isNull": True},           # state
+        {"isNull": True},           # zip
+        {"isNull": True},           # notification_email
+        {"booleanValue": True},     # notify_email
+        {"booleanValue": False},    # notify_sms
+        {"booleanValue": False},    # notify_push
+    ]
 
 
 @pytest.fixture()
@@ -36,7 +58,7 @@ def mod():
 class TestMemberUpdate:
     def test_update_mobile_phone(self, mod):
         rds = make_member_rds({
-            "RETURNING home_phone": {"records": _UPDATE_ROW},
+            "UPDATE members": {"records": [_update_row(mobile_phone="+15551234567")]},
         })
         with patch.object(mod, "authenticate_member", return_value=_MEMBER), \
              patch("boto3.client", return_value=rds):
@@ -51,7 +73,7 @@ class TestMemberUpdate:
 
     def test_update_home_phone(self, mod):
         rds = make_member_rds({
-            "RETURNING home_phone": {"records": _UPDATE_ROW},
+            "UPDATE members": {"records": [_update_row(home_phone="+15559990000")]},
         })
         with patch.object(mod, "authenticate_member", return_value=_MEMBER), \
              patch("boto3.client", return_value=rds):
@@ -66,7 +88,7 @@ class TestMemberUpdate:
 
     def test_set_phone_to_null(self, mod):
         rds = make_member_rds({
-            "RETURNING home_phone": {"records": [[{"isNull": True}, {"isNull": True}]]},
+            "UPDATE members": {"records": [_update_row(mobile_phone=None)]},
         })
         with patch.object(mod, "authenticate_member", return_value=_MEMBER), \
              patch("boto3.client", return_value=rds):
@@ -112,7 +134,7 @@ class TestMemberUpdate:
 
     def test_cors_headers_present(self, mod):
         rds = make_member_rds({
-            "RETURNING home_phone": {"records": _UPDATE_ROW},
+            "UPDATE members": {"records": [_update_row()]},
         })
         with patch.object(mod, "authenticate_member", return_value=_MEMBER), \
              patch("boto3.client", return_value=rds):

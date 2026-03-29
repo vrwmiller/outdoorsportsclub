@@ -84,15 +84,23 @@ Follow these steps exactly. Do not skip any step. To reduce potential for rate-l
 
 6. **Update docs if needed** — review the full set of fixes applied. If any fix changed an API contract, request/response shape, error code, auth level, schema column, or AWS service behavior, invoke the docs agent: *"Update docs/design.md to reflect [list of specific changes from this PR]"*. The docs agent must commit its changes before you proceed. Do not push until the docs agent confirms the update is complete or confirms no update is needed.
 
-7. **Push** — run `git push` once after all batches (including any docs update) are committed.
+7. **Self-review gate** — before pushing, run two proactive checks over every changed file to catch issues before Copilot sees them on the next pass:
 
-8. **Resolve threads** — for every comment that was either fixed or rejected, resolve its review thread using the node ID map built in step 3:
+   **a. Linter** — invoke the linter agent: *"Lint these files and fix any issues: [list of changed files]"*. The linter agent must commit any fixes before you proceed.
+
+   **b. Security** — if any changed file matches `functions/**/*.py`, `db/**/*.sql`, or `infra/**/*.yaml`, invoke the security agent: *"Security review [list of matching changed files]"*. Research and fix any **High** or **Critical** findings; note **Medium** and **Low** findings in the PR description and address them in a follow-up. The security agent must commit any fixes before you proceed.
+
+   If neither agent finds anything to fix, proceed immediately — do not pause for user confirmation.
+
+8. **Push** — run `git push` once after all batches (including any docs update and self-review fixes) are committed.
+
+9. **Resolve threads** — for every comment that was either fixed or rejected, resolve its review thread using the node ID map built in step 3:
    ```
    gh api graphql -f query='mutation { resolveReviewThread(input: { threadId: "<thread_node_id>" }) { thread { isResolved } } }'
    ```
    Resolve all threads before ending.
 
-9. **Request a new Copilot review** — after all threads are resolved, tell the user:
+10. **Request a new Copilot review** — after all threads are resolved, tell the user:
 
    > All threads have been resolved. To trigger another Copilot review pass, click the **Re-request review** button (circular arrow icon) next to Copilot in the Reviewers sidebar on the PR page.
 
