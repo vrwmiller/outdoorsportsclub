@@ -114,6 +114,17 @@ def full_member_profile_row(
     dues_paid_until: str | None = "2030-12-31",
     waiver_signed_at: str | None = "2024-01-01T00:00:00Z",
     mobile_phone: str | None = "+15551234567",
+    first_name: str | None = "Alice",
+    last_name: str | None = "Smith",
+    date_of_birth: str | None = "1990-01-01",
+    street_address: str | None = "123 Main St",
+    city: str | None = "Springfield",
+    state: str | None = "IL",
+    zip: str | None = "62701",
+    notification_email: str | None = None,
+    notify_email: bool = True,
+    notify_sms: bool = False,
+    notify_push: bool = False,
 ) -> list:
     """Build a members SELECT row matching the GET /v1/members/me projection."""
     return [
@@ -123,6 +134,17 @@ def full_member_profile_row(
         {"stringValue": dues_paid_until} if dues_paid_until else {"isNull": True},
         {"stringValue": waiver_signed_at} if waiver_signed_at else {"isNull": True},
         {"stringValue": mobile_phone} if mobile_phone else {"isNull": True},
+        {"stringValue": first_name} if first_name is not None else {"isNull": True},
+        {"stringValue": last_name} if last_name is not None else {"isNull": True},
+        {"stringValue": date_of_birth} if date_of_birth is not None else {"isNull": True},
+        {"stringValue": street_address} if street_address is not None else {"isNull": True},
+        {"stringValue": city} if city is not None else {"isNull": True},
+        {"stringValue": state} if state is not None else {"isNull": True},
+        {"stringValue": zip} if zip is not None else {"isNull": True},
+        {"stringValue": notification_email} if notification_email is not None else {"isNull": True},
+        {"booleanValue": notify_email},
+        {"booleanValue": notify_sms},
+        {"booleanValue": notify_push},
     ]
 
 
