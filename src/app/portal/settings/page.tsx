@@ -1,9 +1,9 @@
-import { getCurrentUser } from "aws-amplify/auth/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getCurrentUser } from "aws-amplify/auth/server";
 import { getRunWithAmplifyServerContext } from "@/lib/amplifyServerUtils";
 
-export default async function SettingsPage() {
+export default async function SettingsPage(): Promise<JSX.Element> {
   const runWithAmplifyServerContext = getRunWithAmplifyServerContext();
   if (!runWithAmplifyServerContext) {
     redirect("/");

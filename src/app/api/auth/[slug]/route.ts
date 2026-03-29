@@ -1,6 +1,9 @@
 import { getCreateAuthRouteHandlers } from "@/lib/amplifyServerUtils";
 
-export async function GET(request: Request, context: { params: Promise<{ slug: string }> }) {
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ slug: string }> },
+): Promise<Response> {
   const createAuthRouteHandlers = getCreateAuthRouteHandlers();
   if (!createAuthRouteHandlers) {
     return Response.json(
