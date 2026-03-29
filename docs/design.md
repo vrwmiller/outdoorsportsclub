@@ -659,7 +659,7 @@ The API layer is built using **AWS Lambda** and **Amazon API Gateway**, integrat
 GET /v1/members/me
 ```
 
-Returns the authenticated member's own profile. `member_id` resolved from Cognito JWT `sub`; all fields queried from Aurora — never from JWT claims. Also reads `club_settings.annual_dues_cents` so the Member Portal can display the current dues amount before the member initiates payment.
+Returns the authenticated member's own profile. `member_id` resolved from Cognito JWT `sub`; all fields are queried from Aurora as the authoritative source, with the sole exception that `first_name` and `last_name` may fall back to Cognito claims when the corresponding database values are `null`. Also reads `club_settings.annual_dues_cents` so the Member Portal can display the current dues amount before the member initiates payment.
 
 **Returns:** `200 OK` with `{ member_num, training_level, service_hours, dues_paid_until, waiver_signed_at, mobile_phone, annual_dues_cents, first_name, last_name, date_of_birth, street_address, city, state, zip, notification_email, notify_email, notify_sms, notify_push }`. `first_name` and `last_name` are sourced from the `members` row; if either is `null` in the database, the Cognito `given_name`/`family_name` claim is used as a provisional value in the response.
 

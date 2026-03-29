@@ -192,7 +192,13 @@ def authenticate_member(event: dict) -> dict[str, Any]:
 
     Extracts the Bearer token, validates it against Cognito JWKS, then
     re-queries training_level from Aurora. Returns
-    { "member_id": str, "sub": str, "training_level": int }.
+    {
+        "member_id": str,
+        "sub": str,
+        "training_level": int,
+        "given_name": str | None,   # Cognito claim; None if not mapped
+        "family_name": str | None,  # Cognito claim; None if not mapped
+    }.
 
     Raises PermissionError if auth fails at any step.
     """

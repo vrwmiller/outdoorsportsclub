@@ -5,8 +5,8 @@ annual dues amount from club_settings so the Member Portal can display it
 before the member initiates payment.
 
 first_name and last_name fall back to the Cognito given_name/family_name
-claim when the value in the members row is NULL (provisional; persisted on
-the first PATCH /v1/members/me that saves the profile).
+claim when the value in the members row is NULL (provisional behavior;
+future PATCH /v1/members/me enhancements may persist these fields).
 
 Returns:
     200 OK  { member_num, training_level, service_hours, dues_paid_until,
@@ -126,8 +126,8 @@ def handler(event: dict, context: Any) -> dict:
             "dues_paid_until": row[3].get("stringValue") if not row[3].get("isNull") else None,
             "waiver_signed_at": row[4].get("stringValue") if not row[4].get("isNull") else None,
             "mobile_phone": row[5].get("stringValue") if not row[5].get("isNull") else None,
-            "first_name": first_name_db or member.get("given_name"),
-            "last_name": last_name_db or member.get("family_name"),
+            "first_name": first_name_db if first_name_db is not None else member.get("given_name"),
+            "last_name": last_name_db if last_name_db is not None else member.get("family_name"),
             "date_of_birth": row[8].get("stringValue") if not row[8].get("isNull") else None,
             "street_address": row[9].get("stringValue") if not row[9].get("isNull") else None,
             "city": row[10].get("stringValue") if not row[10].get("isNull") else None,
