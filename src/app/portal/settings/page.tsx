@@ -14,7 +14,7 @@ export default async function SettingsPage() {
   try {
     const user = await runWithAmplifyServerContext({
       nextServerContext: { cookies },
-      operation: (contextSpec) => getCurrentUser(contextSpec),
+      operation: (contextSpec: Parameters<typeof getCurrentUser>[0]) => getCurrentUser(contextSpec),
     });
     username = user?.username ?? null;
   } catch {
