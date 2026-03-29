@@ -4,9 +4,16 @@ Returns the authenticated member's own profile together with the current
 annual dues amount from club_settings so the Member Portal can display it
 before the member initiates payment.
 
+first_name and last_name fall back to the Cognito given_name/family_name
+claim when the value in the members row is NULL (provisional; persisted on
+the first PATCH /v1/members/me that saves the profile).
+
 Returns:
     200 OK  { member_num, training_level, service_hours, dues_paid_until,
-               waiver_signed_at, mobile_phone, annual_dues_cents }
+               waiver_signed_at, mobile_phone, annual_dues_cents,
+               first_name, last_name, date_of_birth,
+               street_address, city, state, zip,
+               notification_email, notify_email, notify_sms, notify_push }
     403 Forbidden (auth failure)
     500 Internal Server Error
 """
@@ -69,7 +76,10 @@ def handler(event: dict, context: Any) -> dict:
                 transactionId=tx["transactionId"],
                 sql=(
                     "SELECT member_num, training_level, service_hours, "
-                    "dues_paid_until, waiver_signed_at, mobile_phone "
+                    "dues_paid_until, waiver_signed_at, mobile_phone, "
+                    "first_name, last_name, date_of_birth, "
+                    "street_address, city, state, zip, "
+                    "notification_email, notify_email, notify_sms, notify_push "
                     "FROM members WHERE id = :mid::uuid"
                 ),
                 parameters=[{"name": "mid", "value": {"stringValue": member_id}}],
@@ -102,6 +112,10 @@ def handler(event: dict, context: Any) -> dict:
         row = m_result["records"][0]
         annual_dues_cents = cs_result["records"][0][0]["longValue"] if cs_result["records"] else None
 
+        # row[6]/[7]: first_name/last_name — fall back to Cognito claims if NULL.
+        first_name_db = row[6].get("stringValue") if not row[6].get("isNull") else None
+        last_name_db = row[7].get("stringValue") if not row[7].get("isNull") else None
+
         body = {
             "member_num": row[0]["stringValue"],
             "training_level": int(row[1]["longValue"]),
@@ -112,6 +126,17 @@ def handler(event: dict, context: Any) -> dict:
             "dues_paid_until": row[3].get("stringValue") if not row[3].get("isNull") else None,
             "waiver_signed_at": row[4].get("stringValue") if not row[4].get("isNull") else None,
             "mobile_phone": row[5].get("stringValue") if not row[5].get("isNull") else None,
+            "first_name": first_name_db or member.get("given_name"),
+            "last_name": last_name_db or member.get("family_name"),
+            "date_of_birth": row[8].get("stringValue") if not row[8].get("isNull") else None,
+            "street_address": row[9].get("stringValue") if not row[9].get("isNull") else None,
+            "city": row[10].get("stringValue") if not row[10].get("isNull") else None,
+            "state": row[11].get("stringValue") if not row[11].get("isNull") else None,
+            "zip": row[12].get("stringValue") if not row[12].get("isNull") else None,
+            "notification_email": row[13].get("stringValue") if not row[13].get("isNull") else None,
+            "notify_email": row[14].get("booleanValue", True),
+            "notify_sms": row[15].get("booleanValue", False),
+            "notify_push": row[16].get("booleanValue", False),
             "annual_dues_cents": annual_dues_cents,
         }
 

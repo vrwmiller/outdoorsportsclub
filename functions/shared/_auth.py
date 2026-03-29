@@ -262,7 +262,15 @@ def authenticate_member(event: dict) -> dict[str, Any]:
     member_id: str = row[0]["stringValue"]
     training_level: int = int(row[1]["longValue"])
 
-    return {"member_id": member_id, "sub": sub, "training_level": training_level}
+    return {
+        "member_id": member_id,
+        "sub": sub,
+        "training_level": training_level,
+        # Cognito name claims for profile auto-population; may be None if the
+        # User Pool attribute is not mapped or the member used email sign-up.
+        "given_name": claims.get("given_name"),
+        "family_name": claims.get("family_name"),
+    }
 
 
 def require_level(member: dict, min_level: int) -> None:
