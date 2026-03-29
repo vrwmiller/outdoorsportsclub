@@ -365,6 +365,17 @@ erDiagram
 | `dues_paid_until` | DATE | Membership standing flag. Always set to December 31 of the year in which dues are paid — membership covers the full calendar year (January 1 – December 31) regardless of payment date. |
 | `home_phone` | TEXT (Nullable) | Home telephone number. |
 | `mobile_phone` | TEXT (Nullable) | Mobile number in E.164 format (e.g., `+15551234567`); validated/normalized for **Amazon SNS** delivery of SMS range alerts. |
+| `first_name` | TEXT (Nullable) | Member's given name. |
+| `last_name` | TEXT (Nullable) | Member's family name. |
+| `date_of_birth` | DATE (Nullable) | Member's date of birth. Used for age verification where required. |
+| `street_address` | TEXT (Nullable) | Street address line (mailing address). |
+| `city` | TEXT (Nullable) | City (mailing address). |
+| `state` | CHAR(2) (Nullable) | Two-letter US state code (mailing address). |
+| `zip` | TEXT (Nullable) | ZIP or postal code (mailing address). |
+| `notification_email` | TEXT (Nullable) | Separate notification email address. Falls back to `email` when null. |
+| `notify_email` | BOOLEAN | Whether to send email notifications. Defaults to `true`. |
+| `notify_sms` | BOOLEAN | Whether to send SMS notifications. Defaults to `false`. |
+| `notify_push` | BOOLEAN | Whether to send push notifications. Defaults to `false`. |
 
 ### **5.2 Table: `ranges`**
 
