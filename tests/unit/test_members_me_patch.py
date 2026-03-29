@@ -310,6 +310,8 @@ class TestPatchValidation:
             )
 
         assert resp["statusCode"] == 400
+        body = json.loads(resp["body"])
+        assert body["error"] == "date_of_birth must be a valid YYYY-MM-DD date"
 
     def test_invalid_notification_email(self, mod):
         with patch.object(mod, "authenticate_member", return_value=_MEMBER):

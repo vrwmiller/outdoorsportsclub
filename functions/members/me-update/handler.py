@@ -104,7 +104,10 @@ def _validate_date(value: str) -> str:
         raise ValueError("date_of_birth must be a valid YYYY-MM-DD date")
     # Verify it's a real calendar date.
     year, month, day = (int(p) for p in value.split("-"))
-    date(year, month, day)  # raises ValueError on invalid date
+    try:
+        date(year, month, day)
+    except ValueError:
+        raise ValueError("date_of_birth must be a valid YYYY-MM-DD date") from None
     return value
 
 
