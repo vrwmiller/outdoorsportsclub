@@ -7,7 +7,7 @@ notify_email, notify_sms, notify_push.
 
 Validation rules:
 - home_phone, mobile_phone: E.164 format (e.g. +15551234567)
-- state: exactly 2 uppercase letters
+- state: exactly 2 letters; input is case-insensitive, stored/returned uppercased
 - zip: non-empty string when provided (not null-settable via blank string)
 - date_of_birth: ISO 8601 date string YYYY-MM-DD
 - notification_email: valid email format when non-null
@@ -79,13 +79,13 @@ _ALLOWED_COLUMNS = _TEXT_COLUMNS + _BOOL_COLUMNS
 def _validate_e164(value: str) -> str:
     """Return the value if it is a valid E.164 number, else raise ValueError."""
     if not _E164_RE.match(value):
-        raise ValueError(f"Invalid phone number format; expected E.164 (e.g. +15551234567): {value!r}")
+        raise ValueError("Invalid phone number format; expected E.164 (e.g. +15551234567)")
     return value
 
 
 def _validate_state(value: str) -> str:
     if not _STATE_RE.match(value):
-        raise ValueError(f"state must be exactly 2 letters (e.g. 'CA'): {value!r}")
+        raise ValueError("state must be exactly 2 letters (e.g. 'CA')")
     return value.upper()
 
 
@@ -97,7 +97,7 @@ def _validate_zip(value: str) -> str:
 
 def _validate_date(value: str) -> str:
     if not _DATE_RE.match(value):
-        raise ValueError(f"date_of_birth must be YYYY-MM-DD: {value!r}")
+        raise ValueError("date_of_birth must be a valid YYYY-MM-DD date")
     # Verify it's a real calendar date.
     year, month, day = (int(p) for p in value.split("-"))
     date(year, month, day)  # raises ValueError on invalid date
@@ -106,7 +106,7 @@ def _validate_date(value: str) -> str:
 
 def _validate_email(value: str) -> str:
     if not _EMAIL_RE.match(value):
-        raise ValueError(f"notification_email is not a valid email address: {value!r}")
+        raise ValueError("notification_email must be a valid email address")
     return value
 
 
@@ -136,7 +136,8 @@ def handler(event: dict, context: Any) -> dict:
             if val is None:
                 text_updates[col] = None
                 continue
-            val = str(val)
+            if not isinstance(val, str):
+                raise ValueError(f"{col} must be a string")
             if col in ("home_phone", "mobile_phone"):
                 val = _validate_e164(val)
             elif col == "state":
@@ -246,7 +247,7 @@ def handler(event: dict, context: Any) -> dict:
         # 0  home_phone, 1  mobile_phone, 2  first_name, 3  last_name,
         # 4  date_of_birth, 5  street_address, 6  city, 7  state, 8  zip,
         # 9  notification_email, 10 notify_email, 11 notify_sms, 12 notify_push
-        def _str(cell):
+        def _str(cell: dict) -> str | None:
             return cell.get("stringValue") if not cell.get("isNull") else None
 
         resp_body = {
