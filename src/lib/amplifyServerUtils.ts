@@ -1,20 +1,29 @@
 import { createServerRunner } from "@aws-amplify/adapter-nextjs";
 import { getServerAmplifyConfig } from "@/config/amplifyAuth";
 
-export function getRunWithAmplifyServerContext() {
+function getServerRunner() {
 	const config = getServerAmplifyConfig();
 	if (!config) {
 		return null;
 	}
 
-	return createServerRunner({ config }).runWithAmplifyServerContext;
+	return createServerRunner({ config });
+}
+
+export function getRunWithAmplifyServerContext() {
+	const runner = getServerRunner();
+	if (!runner) {
+		return null;
+	}
+
+	return runner.runWithAmplifyServerContext;
 }
 
 export function getCreateAuthRouteHandlers() {
-	const config = getServerAmplifyConfig();
-	if (!config) {
+	const runner = getServerRunner();
+	if (!runner) {
 		return null;
 	}
 
-	return createServerRunner({ config }).createAuthRouteHandlers;
+	return runner.createAuthRouteHandlers;
 }

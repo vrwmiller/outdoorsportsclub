@@ -6,7 +6,7 @@ export async function GET(request: Request, context: { params: Promise<{ slug: s
     return Response.json(
       {
         error:
-          "Amplify Auth is not configured. Set NEXT_PUBLIC_COGNITO_* and AMPLIFY_APP_ORIGIN.",
+          "Amplify Auth is not configured. Ensure NEXT_PUBLIC_COGNITO_* is set and either NEXT_PUBLIC_COGNITO_REDIRECT_SIGN_IN/OUT or AMPLIFY_APP_ORIGIN are configured.",
       },
       { status: 500 },
     );
