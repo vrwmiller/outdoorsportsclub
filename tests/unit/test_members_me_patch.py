@@ -182,6 +182,21 @@ class TestPatchHappyPath:
         body = json.loads(resp["body"])
         assert body["home_phone"] is None
 
+    def test_null_clears_non_phone_text_field(self, mod):
+        """Null-clearing works for text fields beyond just phone numbers."""
+        row = _patch_row(date_of_birth=None)
+        rds = _rds(row)
+        with patch.object(mod, "authenticate_member", return_value=_MEMBER), \
+             patch("boto3.client", return_value=rds):
+            resp = mod.handler(
+                member_jwt_event(body={"date_of_birth": None}, method="PATCH"),
+                FakeContext(),
+            )
+
+        assert resp["statusCode"] == 200
+        body = json.loads(resp["body"])
+        assert body["date_of_birth"] is None
+
     def test_state_normalised_to_uppercase(self, mod):
         row = _patch_row(state="CA")
         rds = _rds(row)
@@ -193,6 +208,8 @@ class TestPatchHappyPath:
             )
 
         assert resp["statusCode"] == 200
+        body = json.loads(resp["body"])
+        assert body["state"] == "CA"
 
     def test_cors_headers_present(self, mod):
         rds = _rds()

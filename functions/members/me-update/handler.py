@@ -5,14 +5,18 @@ Accepted fields: home_phone, mobile_phone, first_name, last_name,
 date_of_birth, street_address, city, state, zip, notification_email,
 notify_email, notify_sms, notify_push.
 
-Validation rules:
+Validation rules (applied only when the field value is non-null):
 - home_phone, mobile_phone: E.164 format (e.g. +15551234567)
 - state: exactly 2 letters; input is case-insensitive, stored/returned uppercased
-- zip: non-empty string when provided (not null-settable via blank string)
+- zip: non-empty string (blank string is rejected; use null to clear)
 - date_of_birth: ISO 8601 date string YYYY-MM-DD
-- notification_email: valid email format when non-null
-- notify_email, notify_sms, notify_push: boolean values only
+- notification_email: valid email format
+- notify_email, notify_sms, notify_push: boolean values only (not nullable)
 
+All text/date fields (home_phone, mobile_phone, first_name, last_name,
+date_of_birth, street_address, city, state, zip, notification_email) may be
+explicitly set to null in the request body to clear the stored value.
+Boolean fields (notify_*) do not accept null.
 Fields absent from the request body are left unchanged (partial update).
 member_num, email, training_level, service_hours, dues_paid_until, and
 waiver_signed_at are not updatable through this endpoint.
