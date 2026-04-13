@@ -78,10 +78,8 @@ FACEBOOK_APP_ID        ?=
 FACEBOOK_APP_SECRET    ?=
 CALLBACK_URL           ?= http://localhost:3000/auth/callback,https://main.d2rljf3gefhatr.amplifyapp.com/auth/callback
 LOGOUT_URL             ?= http://localhost:3000,https://main.d2rljf3gefhatr.amplifyapp.com
-ifndef ACCOUNT_SUFFIX
-ACCOUNT_SUFFIX := $(shell aws sts get-caller-identity --query Account --output text --profile $(AWS_PROFILE) 2>/dev/null | awk '{ print substr($$1, length($$1)-5) }')
-endif
-USER_POOL_DOMAIN_PREFIX ?= $(if $(ACCOUNT_SUFFIX),osc-members-$(ENV)-$(ACCOUNT_SUFFIX),)
+ACCOUNT_SUFFIX ?=
+USER_POOL_DOMAIN_PREFIX ?=
 
 .PHONY: help gen-salt package upload \
         deploy-kms deploy-secrets deploy-sns deploy-s3 deploy-aurora \
@@ -272,16 +270,25 @@ deploy-artifacts:
 		--profile $(AWS_PROFILE) --region $(REGION)
 
 deploy-cognito:
-	@if [ -z "$(USER_POOL_DOMAIN_PREFIX)" ]; then \
-		echo "ERROR: USER_POOL_DOMAIN_PREFIX is empty. Set USER_POOL_DOMAIN_PREFIX explicitly or configure AWS_PROFILE so account suffix can be derived (osc-members-<env>-<suffix>)." && exit 1; \
-	fi
 	@if [ "$(ENV)" = "prod" ] && echo "$(CALLBACK_URL)" | grep -q "localhost"; then \
 		echo "ERROR: CALLBACK_URL contains localhost — set CALLBACK_URL explicitly for ENV=prod" && exit 1; \
 	fi
 	@if [ "$(ENV)" = "prod" ] && echo "$(LOGOUT_URL)" | grep -q "localhost"; then \
 		echo "ERROR: LOGOUT_URL contains localhost — set LOGOUT_URL explicitly for ENV=prod" && exit 1; \
 	fi
-	@aws cloudformation deploy \
+	@account_suffix="$(ACCOUNT_SUFFIX)"; \
+	if [ -z "$$account_suffix" ]; then \
+		account_suffix="$$(aws sts get-caller-identity --query Account --output text --profile $(AWS_PROFILE) 2>/dev/null | awk '{ print substr($$1, length($$1)-5) }')"; \
+	fi; \
+	user_pool_domain_prefix="$(USER_POOL_DOMAIN_PREFIX)"; \
+	if [ -z "$$user_pool_domain_prefix" ] && [ -n "$$account_suffix" ]; then \
+		user_pool_domain_prefix="osc-members-$(ENV)-$$account_suffix"; \
+	fi; \
+	if [ -z "$$user_pool_domain_prefix" ]; then \
+		echo "ERROR: USER_POOL_DOMAIN_PREFIX is empty. Set USER_POOL_DOMAIN_PREFIX explicitly or configure AWS_PROFILE so account suffix can be derived (osc-members-<env>-<suffix>)." && exit 1; \
+	fi; \
+	echo "Deploying Cognito with UserPoolDomainPrefix=$$user_pool_domain_prefix"; \
+	aws cloudformation deploy \
 		--stack-name  $(STACK_COGNITO) \
 		--template-file infra/stacks/cognito.yaml \
 		--parameter-overrides Environment=$(ENV) \
@@ -292,7 +299,7 @@ deploy-cognito:
 		  FacebookAppSecret=$(FACEBOOK_APP_SECRET) \
 		  CallbackUrl=$(CALLBACK_URL) \
 		  LogoutUrl=$(LOGOUT_URL) \
-		  UserPoolDomainPrefix=$(USER_POOL_DOMAIN_PREFIX) \
+		  UserPoolDomainPrefix=$$user_pool_domain_prefix \
 		--no-fail-on-empty-changeset \
 		--profile $(AWS_PROFILE) --region $(REGION)
 
