@@ -339,7 +339,7 @@ update-code:
 			--s3-bucket osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID) \
 			--s3-key kiosk-$$fn.zip \
 			--profile $(AWS_PROFILE) --region $(REGION) \
-			--output text --query 'FunctionName'; \
+			--output text --query 'FunctionName' || exit 1; \
 	done
 	aws lambda update-function-code \
 		--function-name osc-devices-pair-$(ENV) \
@@ -355,7 +355,7 @@ update-code:
 			--s3-bucket osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID) \
 			--s3-key $$zip \
 			--profile $(AWS_PROFILE) --region $(REGION) \
-			--output text --query 'FunctionName'; \
+			--output text --query 'FunctionName' || exit 1; \
 	done
 	@for fn in $(ADMIN_HANDLERS); do \
 		aws lambda update-function-code \
@@ -363,7 +363,7 @@ update-code:
 			--s3-bucket osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID) \
 			--s3-key admin-$$fn.zip \
 			--profile $(AWS_PROFILE) --region $(REGION) \
-			--output text --query 'FunctionName'; \
+			--output text --query 'FunctionName' || exit 1; \
 	done
 
 # =============================================================================
