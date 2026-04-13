@@ -37,6 +37,12 @@ AWS_PROFILE     ?= outdoorsportsclub
 REGION          ?= us-east-1
 CORS_ALLOW_ORIGIN ?= http://localhost:3000
 
+# Shared handler lists keep package/update-code in sync.
+KIOSK_HANDLERS = checkin checkout waiver guest-payment consumable-purchase dues range-lanes waitlist-cancel
+MEMBER_HANDLERS = me me-badge me-update
+ADMIN_HANDLERS = ranges-occupancy settings-get lanes-update members-reset-auth members-level members-service-hours ranges-status settings-update devices-pairing-code lanes-create lanes-checkout
+MEMBER_UPDATE_CODE_MAP = me-get:member-me.zip badge:member-me-badge.zip me-patch:member-me-update.zip
+
 # Optional on re-runs: when unset, CloudFormation reuses the previous value for
 # the DeviceTokenSalt parameter (UsePreviousValue behaviour). Required on first
 # deploy. Generate with: make gen-salt
@@ -72,6 +78,7 @@ FACEBOOK_APP_ID        ?=
 FACEBOOK_APP_SECRET    ?=
 CALLBACK_URL           ?= http://localhost:3000/auth/callback,https://main.d2rljf3gefhatr.amplifyapp.com/auth/callback
 LOGOUT_URL             ?= http://localhost:3000,https://main.d2rljf3gefhatr.amplifyapp.com
+ACCOUNT_SUFFIX ?=
 USER_POOL_DOMAIN_PREFIX ?=
 
 .PHONY: help gen-salt package upload \
@@ -123,7 +130,7 @@ gen-salt:
 package:
 	@mkdir -p $(BUILD_DIR)
 	@echo "Packaging kiosk handlers..."
-	@for handler in checkin checkout waiver guest-payment consumable-purchase dues range-lanes waitlist-cancel; do \
+	@for handler in $(KIOSK_HANDLERS); do \
 		cp functions/kiosk/_auth.py functions/kiosk/$$handler/_auth.py; \
 		(cd functions/kiosk/$$handler && zip -qr ../../../$(BUILD_DIR)/kiosk-$$handler.zip .); \
 		rm functions/kiosk/$$handler/_auth.py; \
@@ -142,7 +149,7 @@ package:
 		-r functions/requirements.txt \
 		-t $(BUILD_DIR)/deps
 	@echo "Packaging member handlers..."
-	@for handler in me me-badge me-update; do \
+	@for handler in $(MEMBER_HANDLERS); do \
 		cp functions/shared/_auth.py functions/members/$$handler/_auth.py; \
 		(cd functions/members/$$handler && zip -qr ../../../$(BUILD_DIR)/member-$$handler.zip .); \
 		(cd $(BUILD_DIR)/deps && zip -qgr ../member-$$handler.zip .); \
@@ -150,7 +157,7 @@ package:
 		echo "  packaged member-$$handler.zip"; \
 	done
 	@echo "Packaging admin handlers..."
-	@for handler in ranges-occupancy settings-get lanes-update members-reset-auth members-level members-service-hours ranges-status settings-update devices-pairing-code lanes-create lanes-checkout; do \
+	@for handler in $(ADMIN_HANDLERS); do \
 		cp functions/shared/_auth.py functions/admin/$$handler/_auth.py; \
 		(cd functions/admin/$$handler && zip -qr ../../../$(BUILD_DIR)/admin-$$handler.zip .); \
 		(cd $(BUILD_DIR)/deps && zip -qgr ../admin-$$handler.zip .); \
@@ -269,7 +276,19 @@ deploy-cognito:
 	@if [ "$(ENV)" = "prod" ] && echo "$(LOGOUT_URL)" | grep -q "localhost"; then \
 		echo "ERROR: LOGOUT_URL contains localhost — set LOGOUT_URL explicitly for ENV=prod" && exit 1; \
 	fi
-	@aws cloudformation deploy \
+	@account_suffix="$(ACCOUNT_SUFFIX)"; \
+	if [ -z "$$account_suffix" ]; then \
+		account_suffix="$$(aws sts get-caller-identity --query Account --output text --profile $(AWS_PROFILE) 2>/dev/null | awk '{ print substr($$1, length($$1)-5) }')"; \
+	fi; \
+	user_pool_domain_prefix="$(USER_POOL_DOMAIN_PREFIX)"; \
+	if [ -z "$$user_pool_domain_prefix" ] && [ -n "$$account_suffix" ]; then \
+		user_pool_domain_prefix="osc-members-$(ENV)-$$account_suffix"; \
+	fi; \
+	if [ -z "$$user_pool_domain_prefix" ]; then \
+		echo "ERROR: USER_POOL_DOMAIN_PREFIX is empty. Set USER_POOL_DOMAIN_PREFIX explicitly or configure AWS_PROFILE so account suffix can be derived (osc-members-<env>-<suffix>)." && exit 1; \
+	fi; \
+	echo "Deploying Cognito with UserPoolDomainPrefix=$$user_pool_domain_prefix"; \
+	aws cloudformation deploy \
 		--stack-name  $(STACK_COGNITO) \
 		--template-file infra/stacks/cognito.yaml \
 		--parameter-overrides Environment=$(ENV) \
@@ -280,7 +299,7 @@ deploy-cognito:
 		  FacebookAppSecret=$(FACEBOOK_APP_SECRET) \
 		  CallbackUrl=$(CALLBACK_URL) \
 		  LogoutUrl=$(LOGOUT_URL) \
-		  UserPoolDomainPrefix=$(USER_POOL_DOMAIN_PREFIX) \
+		  UserPoolDomainPrefix=$$user_pool_domain_prefix \
 		--no-fail-on-empty-changeset \
 		--profile $(AWS_PROFILE) --region $(REGION)
 
@@ -323,13 +342,13 @@ update-code:
 	$(eval ACCOUNT_ID := $(shell aws sts get-caller-identity \
 		--query Account --output text --profile $(AWS_PROFILE)))
 	@echo "Updating Lambda function code from s3://osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID)/ ..."
-	@for fn in checkin checkout waiver guest-payment consumable-purchase dues range-lanes waitlist-cancel; do \
+	@for fn in $(KIOSK_HANDLERS); do \
 		aws lambda update-function-code \
 			--function-name osc-kiosk-$$fn-$(ENV) \
 			--s3-bucket osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID) \
 			--s3-key kiosk-$$fn.zip \
 			--profile $(AWS_PROFILE) --region $(REGION) \
-			--output text --query 'FunctionName'; \
+			--output text --query 'FunctionName' || exit 1; \
 	done
 	aws lambda update-function-code \
 		--function-name osc-devices-pair-$(ENV) \
@@ -337,6 +356,24 @@ update-code:
 		--s3-key devices-pair.zip \
 		--profile $(AWS_PROFILE) --region $(REGION) \
 		--output text --query 'FunctionName'
+	@for mapping in $(MEMBER_UPDATE_CODE_MAP); do \
+		fn=$${mapping%%:*}; \
+		zip=$${mapping##*:}; \
+		aws lambda update-function-code \
+			--function-name osc-member-$$fn-$(ENV) \
+			--s3-bucket osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID) \
+			--s3-key $$zip \
+			--profile $(AWS_PROFILE) --region $(REGION) \
+			--output text --query 'FunctionName' || exit 1; \
+	done
+	@for fn in $(ADMIN_HANDLERS); do \
+		aws lambda update-function-code \
+			--function-name osc-admin-$$fn-$(ENV) \
+			--s3-bucket osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID) \
+			--s3-key admin-$$fn.zip \
+			--profile $(AWS_PROFILE) --region $(REGION) \
+			--output text --query 'FunctionName' || exit 1; \
+	done
 
 # =============================================================================
 # Migrations — query stack outputs for the cluster/secret ARNs, then run.
