@@ -78,7 +78,9 @@ FACEBOOK_APP_ID        ?=
 FACEBOOK_APP_SECRET    ?=
 CALLBACK_URL           ?= http://localhost:3000/auth/callback,https://main.d2rljf3gefhatr.amplifyapp.com/auth/callback
 LOGOUT_URL             ?= http://localhost:3000,https://main.d2rljf3gefhatr.amplifyapp.com
-ACCOUNT_SUFFIX ?= $(shell aws sts get-caller-identity --query Account --output text --profile $(AWS_PROFILE) 2>/dev/null | awk '{ print substr($$1, length($$1)-5) }')
+ifndef ACCOUNT_SUFFIX
+ACCOUNT_SUFFIX := $(shell aws sts get-caller-identity --query Account --output text --profile $(AWS_PROFILE) 2>/dev/null | awk '{ print substr($$1, length($$1)-5) }')
+endif
 USER_POOL_DOMAIN_PREFIX ?= $(if $(ACCOUNT_SUFFIX),osc-members-$(ENV)-$(ACCOUNT_SUFFIX),)
 
 .PHONY: help gen-salt package upload \
