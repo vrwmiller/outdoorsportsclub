@@ -72,7 +72,7 @@ FACEBOOK_APP_ID        ?=
 FACEBOOK_APP_SECRET    ?=
 CALLBACK_URL           ?= http://localhost:3000/auth/callback,https://main.d2rljf3gefhatr.amplifyapp.com/auth/callback
 LOGOUT_URL             ?= http://localhost:3000,https://main.d2rljf3gefhatr.amplifyapp.com
-USER_POOL_DOMAIN_PREFIX ?=
+USER_POOL_DOMAIN_PREFIX ?= osc-members-$(ENV)
 
 .PHONY: help gen-salt package upload \
         deploy-kms deploy-secrets deploy-sns deploy-s3 deploy-aurora \
@@ -337,6 +337,27 @@ update-code:
 		--s3-key devices-pair.zip \
 		--profile $(AWS_PROFILE) --region $(REGION) \
 		--output text --query 'FunctionName'
+	@for fn in me-get badge me-patch; do \
+		case $$fn in \
+			me-get) zip=member-me.zip ;; \
+			badge) zip=member-me-badge.zip ;; \
+			me-patch) zip=member-me-update.zip ;; \
+		esac; \
+		aws lambda update-function-code \
+			--function-name osc-member-$$fn-$(ENV) \
+			--s3-bucket osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID) \
+			--s3-key $$zip \
+			--profile $(AWS_PROFILE) --region $(REGION) \
+			--output text --query 'FunctionName'; \
+	done
+	@for fn in ranges-occupancy settings-get lanes-update members-reset-auth members-level members-service-hours ranges-status settings-update devices-pairing-code lanes-create lanes-checkout; do \
+		aws lambda update-function-code \
+			--function-name osc-admin-$$fn-$(ENV) \
+			--s3-bucket osc-lambda-artifacts-$(ENV)-$(ACCOUNT_ID) \
+			--s3-key admin-$$fn.zip \
+			--profile $(AWS_PROFILE) --region $(REGION) \
+			--output text --query 'FunctionName'; \
+	done
 
 # =============================================================================
 # Migrations — query stack outputs for the cluster/secret ARNs, then run.
