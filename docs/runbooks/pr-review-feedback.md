@@ -1,6 +1,6 @@
 # Runbook: Processing Copilot PR Review Feedback
 
-**Audience:** Developers and Webmaster.
+**Audience:** Developers and **Webmaster**.
 
 This runbook defines how to handle Copilot reviewer feedback on pull requests.
 
