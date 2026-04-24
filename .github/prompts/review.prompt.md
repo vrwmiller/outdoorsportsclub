@@ -5,6 +5,8 @@ description: Read all review comments on the current PR, validate each against a
 
 Follow these steps exactly. Do not skip any step. To reduce potential for rate-limiting, add a random 2–5 second sleep immediately before you prompt the user for approval to execute a command.
 
+Use plain, professional language throughout this workflow. Do not use emojis in classifications, replies, summaries, or any generated text.
+
 1. **Identify the PR** — run `gh pr view --json number,headRefName` to get the PR number and branch name. If the current branch has no open PR, stop and tell the user.
 
 2. **Gather authoritative context** — before reading any comments, establish the ground truth you will use to validate reviewer claims:
@@ -44,11 +46,13 @@ Follow these steps exactly. Do not skip any step. To reduce potential for rate-l
 
 4. **Classify every comment** — print a numbered list of every distinct comment with its ID. Group by file. For each comment, check the claim against the current file content and the authoritative documents from step 2. Assign exactly one classification:
 
-   * **✅ Valid** — the claim is correct; a change is warranted. State what will be changed.
-   * **❌ Rejected** — the claim contradicts the actual file content, a documented design decision, or an instruction file convention. Name the specific document and section that contradicts it. Do not act on it.
-   * **⚠️ Ambiguous** — cannot be determined from available documents. Describe what is unclear and pause for user input before proceeding.
+   For comments from Copilot, treat the suggestion as high-signal but not automatically correct. First verify whether the claim is correct and within scope based on the files and authoritative documents from step 2. Classify as **Valid** only when that verification shows the claim is correct and a change is warranted. If the claim is contradicted by files or docs, classify it as **Rejected**; if evidence is insufficient, classify it as **Ambiguous**. Even for a correct suggestion, reject it if applying it would (a) break or interfere with application operations, (b) degrade UX for the intended flow, or (c) introduce a security weakness or vulnerability.
 
-   Do not ask the user about ✅ Valid or ❌ Rejected comments — proceed directly for those.
+   * **Valid** — the claim is correct; a change is warranted. State what will be changed.
+   * **Rejected** — the claim contradicts the actual file content, a documented design decision, or an instruction file convention. Name the specific document and section that contradicts it. Do not act on it.
+   * **Ambiguous** — cannot be determined from available documents. Describe what is unclear and pause for user input before proceeding.
+
+   Do not ask the user about Valid or Rejected comments — proceed directly for those.
 
 5. **Process in batches of 5–6** — work through Valid comments in groups. For each batch:
 
