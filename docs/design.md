@@ -706,7 +706,10 @@ Personal-device path for annual dues payment via **Stripe.js** (card element —
 | `POST` | `/v1/kiosk/guest-payment` | **Device Token** |
 | `POST` | `/v1/kiosk/waiver` | **Device Token** |
 
-**Initial API Gateway rollout scope (ODQ #29):** The following routes require **Stripe Terminal SDK** integration and are not wired to **API Gateway** until ODQ #29 is resolved: `POST /v1/kiosk/dues`, `POST /v1/kiosk/consumable-purchase`, and the NFC/Card payment steps within `POST /v1/kiosk/guest-payment` (the **Cash** path of `guest-payment` is functional without Stripe, but the full endpoint is deferred to the same milestone). All other kiosk routes — `DELETE /v1/kiosk/wait-list/{entry_id}`, `GET /v1/kiosk/range/lanes`, `POST /v1/kiosk/check-in`, `POST /v1/kiosk/check-out`, and `POST /v1/kiosk/waiver` — are ready for immediate API Gateway configuration.
+**Initial API Gateway rollout scope (ODQ 29):**
+
+* Deferred from initial **API Gateway** wiring until ODQ 29 is resolved: `POST /v1/kiosk/dues`, `POST /v1/kiosk/consumable-purchase`, and `POST /v1/kiosk/guest-payment`. For `POST /v1/kiosk/guest-payment`, the handler logic supports a cash-only path without **Stripe**, but the route remains intentionally unwired to **API Gateway** until the same milestone resolves the full payment flow.
+* Ready for immediate **API Gateway** configuration: `DELETE /v1/kiosk/wait-list/{entry_id}`, `GET /v1/kiosk/range/lanes`, `POST /v1/kiosk/check-in`, `POST /v1/kiosk/check-out`, and `POST /v1/kiosk/waiver`.
 
 ---
 
