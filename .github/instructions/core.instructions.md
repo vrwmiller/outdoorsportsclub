@@ -55,8 +55,8 @@ Key rules:
   invoke the system agent for a security review and fix any High or Critical findings
 * Before opening a PR touching `functions/**/*.py` or `tests/**/*.py`: run `pytest tests/ --tb=short -q` and confirm it passes
 * Before opening a PR touching `infra/**/*.yaml`: run `cfn-lint` and confirm no errors
-* Before opening a PR touching `src/**/*.ts`, `src/**/*.tsx`: run `npm run build` and confirm it passes
-* Before opening a PR touching `docs/**/*.md` or `README.md`: run `pymarkdown scan -r docs/ README.md` and confirm no errors
+* Before opening a PR touching `src/**/*.ts`, `src/**/*.tsx`, or `src/**/*.css`: run `npm run build` and confirm it passes
+* Before opening a PR touching `**/*.md`: run `pymarkdown scan -r docs/ README.md` and confirm no errors
 
 ---
 

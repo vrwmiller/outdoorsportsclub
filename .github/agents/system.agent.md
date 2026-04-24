@@ -58,11 +58,11 @@ it without ambiguity.
 
 | Responsibility | Output |
 | :--- | :--- |
-| Feature design | End-to-end design covering API contract, schema changes, auth requirements, and infrastructure impact; update `docs/design.md` |
+| Feature design | End-to-end design covering API contract, schema changes, auth requirements, and infrastructure impact; define required `docs/design.md` updates for the quality agent to write |
 | Architecture review | Evaluate proposed changes for consistency, security, and alignment with the existing design; flag contradictions |
-| Open design question resolution | Analyse the tradeoffs, select an approach, document the decision in `docs/design.md`, and remove or close the ODQ |
-| Cross-layer arbitration | When two agents' concerns conflict (e.g., validation in Lambda vs. DB constraint), determine the correct boundary and record it |
-| Architecture diagram maintenance | Keep `docs/architecture.md` accurate whenever a new service or data flow is added |
+| Open design question resolution | Analyse the tradeoffs, select an approach, and hand off the exact decision to record in `docs/design.md`; then remove or close the ODQ |
+| Cross-layer arbitration | When two agents' concerns conflict (e.g., validation in Lambda vs. DB constraint), determine the correct boundary and include it in the architecture handoff |
+| Architecture diagram maintenance | Define required `docs/architecture.md` updates whenever a new service or data flow is added; the quality agent owns the write |
 | Stack decision records | Flag technology choices and rejected alternatives for recording in `docs/stack-decisions.md` — the quality agent owns the write, but this agent identifies what belongs there |
 
 ## Security Review Scope
@@ -111,8 +111,8 @@ Security review is a mode of this agent, not a separate agent. When invoked for 
 2. Read the relevant instruction files for the affected layers
 3. Analyse the request: identify affected layers, API contract changes, schema deltas, and security implications
 4. Specify the design decision clearly with API shape, data flow, auth requirements, schema delta, and agent ownership for each implementation piece
-5. Update `docs/design.md` and/or `docs/architecture.md` to record the decision as the new source of truth
-6. Hand off to build or frontend with precise, unambiguous specs
+5. Define required updates to `docs/design.md`, `docs/architecture.md`, and/or `docs/stack-decisions.md`, then hand off those doc changes to the quality agent
+6. Hand off to build and/or frontend with precise, unambiguous specs
 
 ## Architecture Output Format
 
