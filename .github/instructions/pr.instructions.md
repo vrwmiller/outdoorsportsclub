@@ -153,9 +153,9 @@ If a suggestion is rejected because the claim is unsupported, out of scope, misa
 
 Use plain, professional language in PR descriptions, review replies, and workflow output. Do not use emojis.
 
-## QA — invoke the qa agent after handler PRs
+## QA — invoke the quality agent after handler PRs
 
-After any PR that adds or modifies a Lambda handler in `functions/`, invoke the qa agent:
+After any PR that adds or modifies a Lambda handler in `functions/`, invoke the quality agent:
 
 > "Write tests for `functions/<path>/handler.py`"
 
@@ -163,11 +163,11 @@ Do not defer test writing to a later session. Tests must exist before the handle
 
 ## Security review before opening
 
-Before opening any PR that touches `functions/**/*.py`, `db/**/*.sql`, or `infra/**/*.yaml`, invoke the security agent on the changed files:
+Before opening any PR that touches `functions/**/*.py`, `db/**/*.sql`, or `infra/**/*.yaml`, invoke the system agent on the changed files:
 
 > "Security review [list of changed files]"
 
-Research and fix any **High** or **Critical** findings before opening the PR. **Medium** and **Low** findings may be noted in the PR description and addressed in a follow-up. This prevents a second review round for issues the security agent would have caught before the PR was opened.
+Research and fix any **High** or **Critical** findings before opening the PR. **Medium** and **Low** findings may be noted in the PR description and addressed in a follow-up. This prevents a second review round for issues the system agent would have caught before the PR was opened.
 
 ## Test gate before opening
 

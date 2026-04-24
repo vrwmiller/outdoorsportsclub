@@ -12,7 +12,7 @@ Use plain, professional language throughout this workflow. Do not use emojis in 
 2. **Gather authoritative context** — before reading any comments, establish the ground truth you will use to validate reviewer claims:
    * List the files changed in the PR: `gh pr view <number> --json files --jq '.files[].path'`
    * Read each changed file in full.
-   * Invoke the architect agent: *"What sections of docs/design.md, docs/architecture.md, docs/stack-decisions.md, and which .github/instructions files are authoritative for these changed files: [list]?"*
+   * Invoke the system agent: *"What sections of docs/design.md, docs/architecture.md, docs/stack-decisions.md, and which .github/instructions files are authoritative for these changed files: [list]?"*
    * Read every document the architect identifies in full before proceeding.
 
    The reviewer is expected to have sound software engineering knowledge but may not know this codebase. Their suggestions about general patterns are likely correct; their claims about project-specific decisions, existing conventions, or what the code already does must be verified against the files and docs you just read.
@@ -86,13 +86,13 @@ Use plain, professional language throughout this workflow. Do not use emojis in 
 
    Repeat until all Valid comments are processed.
 
-6. **Update docs if needed** — review the full set of fixes applied. If any fix changed an API contract, request/response shape, error code, auth level, schema column, or AWS service behavior, invoke the docs agent: *"Update docs/design.md to reflect [list of specific changes from this PR]"*. The docs agent must commit its changes before you proceed. Do not push until the docs agent confirms the update is complete or confirms no update is needed.
+6. **Update docs if needed** — review the full set of fixes applied. If any fix changed an API contract, request/response shape, error code, auth level, schema column, or AWS service behavior, invoke the quality agent: *"Update docs/design.md to reflect [list of specific changes from this PR]"*. The quality agent must commit its changes before you proceed. Do not push until the quality agent confirms the update is complete or confirms no update is needed.
 
 7. **Self-review gate** — before pushing, run two proactive checks over every changed file to catch issues before Copilot sees them on the next pass:
 
-   **a. Linter** — invoke the linter agent: *"Lint these files and fix any issues: [list of changed files]"*. The linter agent must commit any fixes before you proceed.
+   **a. Linter** — invoke the quality agent: *"Lint these files and fix any issues: [list of changed files]"*. The quality agent must commit any fixes before you proceed.
 
-   **b. Security** — if any changed file matches `functions/**/*.py`, `db/**/*.sql`, or `infra/**/*.yaml`, invoke the security agent: *"Security review [list of matching changed files]"*. Research and fix any **High** or **Critical** findings; note **Medium** and **Low** findings in the PR description and address them in a follow-up. The security agent must commit any fixes before you proceed.
+   **b. Security** — if any changed file matches `functions/**/*.py`, `db/**/*.sql`, or `infra/**/*.yaml`, invoke the system agent: *"Security review [list of matching changed files]"*. Research and fix any **High** or **Critical** findings; note **Medium** and **Low** findings in the PR description and address them in a follow-up. The system agent must commit any fixes before you proceed.
 
    If neither agent finds anything to fix, proceed immediately — do not pause for user confirmation.
 
