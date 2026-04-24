@@ -143,6 +143,14 @@ After opening a PR, run the review workflow to process Copilot reviewer comments
 
 This workflow fetches all inline and PR-level comments, classifies them (Valid / Invalid / Speculative), applies fixes, commits, replies, and resolves threads. Run it whenever `copilot-pull-request-reviewer` has posted comments.
 
+Copilot reviewer suggestions are the default path. Prefer accepting and implementing them unless one of these is true:
+
+- The suggestion conflicts with real application operations, runtime behavior, or deployment constraints
+- The suggestion degrades user experience for the intended flow
+- The suggestion introduces a concrete security weakness or vulnerability
+
+If a suggestion is rejected, reply with the specific evidence (file path plus section or behavior) that justifies the rejection.
+
 ## QA — invoke the qa agent after handler PRs
 
 After any PR that adds or modifies a Lambda handler in `functions/`, invoke the qa agent:

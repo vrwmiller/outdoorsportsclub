@@ -44,6 +44,8 @@ Follow these steps exactly. Do not skip any step. To reduce potential for rate-l
 
 4. **Classify every comment** — print a numbered list of every distinct comment with its ID. Group by file. For each comment, check the claim against the current file content and the authoritative documents from step 2. Assign exactly one classification:
 
+   For comments from Copilot, prefer the suggestion by default. Classify as **✅ Valid** unless there is concrete evidence that applying it would (a) break or interfere with application operations, (b) degrade UX for the intended flow, or (c) introduce a security weakness or vulnerability.
+
    * **✅ Valid** — the claim is correct; a change is warranted. State what will be changed.
    * **❌ Rejected** — the claim contradicts the actual file content, a documented design decision, or an instruction file convention. Name the specific document and section that contradicts it. Do not act on it.
    * **⚠️ Ambiguous** — cannot be determined from available documents. Describe what is unclear and pause for user input before proceeding.
