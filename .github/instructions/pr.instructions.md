@@ -141,7 +141,7 @@ After opening a PR, run the review workflow to process Copilot reviewer comments
 
 > Run `.github/prompts/review.prompt.md` on PR #N
 
-This workflow fetches all inline and PR-level comments, classifies them (Valid / Invalid / Speculative), applies fixes, commits, replies, and resolves threads. Run it whenever `copilot-pull-request-reviewer` has posted comments.
+This workflow fetches all inline and PR-level comments, classifies them (Valid / Rejected / Ambiguous), applies fixes, commits, replies, and resolves threads. Run it whenever `copilot-pull-request-reviewer` has posted comments.
 
 Copilot reviewer suggestions are the default path. Prefer accepting and implementing them unless one of these is true:
 

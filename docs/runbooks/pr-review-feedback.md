@@ -6,23 +6,27 @@ This runbook defines how to handle Copilot reviewer feedback on pull requests.
 
 ---
 
-## Default policy
+## Policy reference
 
-Copilot reviewer suggestions are the default path. Prefer accepting and implementing suggestions unless one of these conditions is true:
+Do not restate acceptance and rejection policy in this runbook.
 
-* The suggestion conflicts with real application operations, runtime behavior, or deployment constraints
-* The suggestion degrades user experience for the intended flow
-* The suggestion introduces a concrete security weakness or vulnerability
+Use the review section in `.github/instructions/pr.instructions.md` and the workflow in `.github/prompts/review.prompt.md` as the canonical source of truth for:
+
+* when to accept or reject Copilot reviewer suggestions
+* what evidence is required when replying to or rejecting a suggestion
+* how to process review comments and resolve threads
 
 ---
 
-## Rejection standard
+## Procedure
 
-When rejecting a Copilot suggestion, provide specific evidence in the reply:
-
-* Reference the exact file path and section, or the concrete runtime behavior that contradicts the suggestion
-* Keep the reply factual and concise
-* Do not reject based on preference alone
+1. Open the pull request and fetch all Copilot review comments, including inline comments and PR-level comments.
+2. Read each comment and classify it using the canonical policy references above.
+3. For accepted comments, make the smallest change needed to address the feedback without expanding scope.
+4. For rejected comments, reply with specific evidence that cites the exact file path and section or the concrete runtime behavior that contradicts the suggestion.
+5. Re-run the required checks for the files you changed and confirm the pull request is still ready for review.
+6. Reply to each review thread with the fix summary or rejection evidence, then resolve the thread when the response is complete.
+7. If Copilot posts another review round, repeat this procedure until all valid comments are addressed.
 
 ---
 

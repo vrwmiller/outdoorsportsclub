@@ -708,7 +708,7 @@ Personal-device path for annual dues payment via **Stripe.js** (card element —
 
 **Initial API Gateway rollout scope (ODQ 29):**
 
-* Deferred from initial **API Gateway** wiring until ODQ 29 is resolved: `POST /v1/kiosk/dues`, `POST /v1/kiosk/consumable-purchase`, and `POST /v1/kiosk/guest-payment`. For `POST /v1/kiosk/guest-payment`, the handler logic supports a cash-only path without **Stripe**, but the route remains intentionally unwired to **API Gateway** until the same milestone resolves the full payment flow.
+* Deferred from initial **API Gateway** wiring pending **Webmaster** approval of the payment rollout: `POST /v1/kiosk/dues`, `POST /v1/kiosk/consumable-purchase`, and `POST /v1/kiosk/guest-payment`. For `POST /v1/kiosk/guest-payment`, the handler logic supports a cash-only path without **Stripe**, but the route remains intentionally unwired to **API Gateway** until the payment rollout is approved and the full payment flow is ready.
 * Ready for immediate **API Gateway** configuration: `DELETE /v1/kiosk/wait-list/{entry_id}`, `GET /v1/kiosk/range/lanes`, `POST /v1/kiosk/check-in`, `POST /v1/kiosk/check-out`, and `POST /v1/kiosk/waiver`.
 
 ---
