@@ -151,6 +151,8 @@ Copilot reviewer suggestions are the default path. Prefer accepting and implemen
 
 If a suggestion is rejected, reply with the specific evidence (file path plus section or behavior) that justifies the rejection.
 
+Use plain, professional language in PR descriptions, review replies, and workflow output. Do not use emojis.
+
 ## QA — invoke the qa agent after handler PRs
 
 After any PR that adds or modifies a Lambda handler in `functions/`, invoke the qa agent:
