@@ -143,13 +143,13 @@ After opening a PR, run the review workflow to process Copilot reviewer comments
 
 This workflow fetches all inline and PR-level comments, classifies them (Valid / Rejected / Ambiguous), applies fixes, commits, replies, and resolves threads. Run it whenever `copilot-pull-request-reviewer` has posted comments.
 
-Copilot reviewer suggestions are the default path. Prefer accepting and implementing them unless one of these is true:
+Copilot reviewer suggestions are the default path, but accept and implement them only after validating that the underlying claim is correct, within the PR scope, and aligned with documented project decisions and conventions. Prefer accepting them once that validation is complete unless one of these is true:
 
 - The suggestion conflicts with real application operations, runtime behavior, or deployment constraints
 - The suggestion degrades user experience for the intended flow
 - The suggestion introduces a concrete security weakness or vulnerability
 
-If a suggestion is rejected, reply with the specific evidence (file path plus section or behavior) that justifies the rejection.
+If a suggestion is rejected because the claim is unsupported, out of scope, misaligned with documented decisions and conventions, or otherwise conflicts with the criteria above, reply with the specific evidence (file path plus section or behavior) that justifies the rejection.
 
 Use plain, professional language in PR descriptions, review replies, and workflow output. Do not use emojis.
 

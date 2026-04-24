@@ -8,7 +8,7 @@ This runbook defines how to handle Copilot reviewer feedback on pull requests.
 
 ## Policy reference
 
-Do not restate acceptance and rejection policy in this runbook.
+Do not restate the acceptance and rejection policy in this runbook.
 
 Use the review section in `.github/instructions/pr.instructions.md` and the workflow in `.github/prompts/review.prompt.md` as the canonical source of truth for:
 
@@ -32,4 +32,4 @@ Use the review section in `.github/instructions/pr.instructions.md` and the work
 
 ## Workflow note
 
-Use the PR review workflow in `.github/prompts/review.prompt.md` and the review section in `.github/instructions/pr.instructions.md` as the authoritative implementation procedure.
+This runbook is a concise procedure checklist. Use `.github/prompts/review.prompt.md` for the detailed workflow and `.github/instructions/pr.instructions.md` for the governing policy.
