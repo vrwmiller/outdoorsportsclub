@@ -3,6 +3,8 @@ agent: agent
 description: Read all review comments on the current PR, validate each against authoritative project docs and the changed files, fix valid claims, and post replies.
 ---
 
+# PR Review Workflow
+
 Follow these steps exactly. Do not skip any step. To reduce potential for rate-limiting, add a random 2–5 second sleep immediately before you prompt the user for approval to execute a command.
 
 Use plain, professional language throughout this workflow. Do not use emojis in classifications, replies, summaries, or any generated text.
@@ -59,24 +61,28 @@ Use plain, professional language throughout this workflow. Do not use emojis in 
    **a. Fix** — make the code or doc changes using file-edit tools. After each change, verify it is present in the file. Do not make unrequested changes alongside a fix. If a comment is a question only (no code change required), note the answer and move on.
 
    **b. Commit the batch**:
-   ```
+
+   ```bash
    git add <changed files>
    git commit -m "fix: address PR review comments (batch N)"
    ```
    Use a descriptive message if the batch covers a single topic (e.g., `fix: wrap all DB queries in transactions`).
 
    If the commit fails with exit code 3 and the message "The baseline file was updated", the `detect-secrets` pre-commit hook auto-updated `.secrets.baseline` to reflect line number shifts. Run:
-   ```
+
+   ```bash
    git add .secrets.baseline
    git commit -m "<same message as above>"
    ```
    This is expected and safe — the hook only updates line-number metadata, never suppresses new secrets.
 
    **c. Reply to each comment in the batch** — for each reply, write the body to `/tmp/reply.json` using the file-creation tool (never shell redirection or echo), then post it:
+
    ```json
    {"body": "Your reply text here."}
    ```
-   ```
+
+   ```bash
    gh api repos/<nameWithOwner>/pulls/<number>/comments/<comment_id>/replies --input /tmp/reply.json
    ```
    * **Valid comments that were fixed:** confirm what changed and why.
@@ -99,7 +105,8 @@ Use plain, professional language throughout this workflow. Do not use emojis in 
 8. **Push** — run `git push` once after all batches (including any docs update and self-review fixes) are committed.
 
 9. **Resolve threads** — for every comment that was either fixed or rejected, resolve its review thread using the node ID map built in step 3:
-   ```
+
+   ```bash
    gh api graphql -f query='mutation { resolveReviewThread(input: { threadId: "<thread_node_id>" }) { thread { isResolved } } }'
    ```
    Resolve all threads before ending.

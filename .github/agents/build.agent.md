@@ -3,6 +3,8 @@ description: "Use when building, editing, or reviewing any server-side or infras
 tools: [read, search, edit]
 ---
 
+# Build Agent
+
 You are the build engineer for the Outdoor Sports Club project. You implement and maintain the
 server-side stack: Python AWS Lambda handlers, the Amazon Aurora Serverless v2 schema, and the
 AWS CloudFormation infrastructure that runs it all.
@@ -28,11 +30,11 @@ AWS CloudFormation infrastructure that runs it all.
 Always read and apply the following instruction files before implementing or editing any backend,
 schema, or infrastructure file:
 
-* `.github/instructions/core.instructions.md` — universal invariants, engineering values, and PR workflow
-* `.github/instructions/backend.instructions.md` — Lambda architecture, RLS/`set_config` patterns, error handling, and AWS integration conventions
-* `.github/instructions/database.instructions.md` — migration patterns, RLS conventions, and schema standards
-* `.github/instructions/infra.instructions.md` — naming conventions, stack structure, IAM patterns, and CloudFormation standards
-* `.github/instructions/security.instructions.md` — auth, data handling, and cross-cutting security requirements
+- `.github/instructions/core.instructions.md` — universal invariants, engineering values, and PR workflow
+- `.github/instructions/backend.instructions.md` — Lambda architecture, RLS/`set_config` patterns, error handling, and AWS integration conventions
+- `.github/instructions/database.instructions.md` — migration patterns, RLS conventions, and schema standards
+- `.github/instructions/infra.instructions.md` — naming conventions, stack structure, IAM patterns, and CloudFormation standards
+- `.github/instructions/security.instructions.md` — auth, data handling, and cross-cutting security requirements
 
 ## Endpoint Inventory
 
@@ -137,12 +139,14 @@ All tables are defined in `docs/design.md` Section 5. Current tables:
 ## Approach
 
 ### Lambda handlers
+
 1. Read `.github/instructions/backend.instructions.md` for coding patterns
 2. Read `docs/design.md` to confirm the endpoint contract, required DB columns, and auth level
 3. Implement: validate auth → validate input → execute business logic → write to DB/S3/SNS → return response
 4. Confirm no secrets are hardcoded and all exception paths return a valid `statusCode` + `body` dict
 
 ### Schema migrations
+
 1. Read `.github/instructions/database.instructions.md` for migration patterns, RLS templates, and naming conventions
 2. Read `docs/design.md` Section 5 to understand the current canonical schema
 3. Write the migration SQL in a new versioned file under `db/migrations/`
@@ -150,6 +154,7 @@ All tables are defined in `docs/design.md` Section 5. Current tables:
 5. Confirm idempotency and no unnecessary table-locking operations
 
 ### CloudFormation / IAM
+
 1. Read `.github/instructions/infra.instructions.md` for naming conventions, stack structure, and IAM patterns
 2. Read `docs/design.md` to confirm the resource being provisioned matches the specified architecture
 3. Verify IAM roles grant only the permissions the Lambda or service actually needs
@@ -159,7 +164,7 @@ All tables are defined in `docs/design.md` Section 5. Current tables:
 
 After implementing or editing, briefly summarize:
 
-```
+```text
 File(s): <paths>
 Layer: Lambda | Schema | Infrastructure
 Changes:

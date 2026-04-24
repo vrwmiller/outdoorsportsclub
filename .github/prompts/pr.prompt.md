@@ -3,6 +3,8 @@ agent: agent
 description: Ensure uncommitted changes are on a feature branch, then commit, push, and open a PR into main.
 ---
 
+# Commit and Open PR Workflow
+
 Follow these steps exactly. Do not skip any step.
 
 1. **Check status** — run `git status` and `git branch --show-current` to understand the current state. Capture the current branch name for use in later steps.

@@ -26,7 +26,7 @@ Commit history is the project's record of thought process. A reviewer reading th
 
 ### Commit message format
 
-```
+```text
 <type>(<scope>): short imperative summary
 
 Optional body: one or two sentences expanding on motivation or
@@ -51,7 +51,7 @@ Scope is the layer or module: `infra`, `build`, `types`, `dashboard`, `handler`,
 
 Do **not** do this:
 
-```
+```text
 feat: implement Phase 2 API Gateway and dashboard  ← one giant commit with 5 files changed
 ```
 
@@ -77,7 +77,7 @@ Only use `git reset --hard` when you are certain local changes are safe to disca
 
 Use the same convention as commit messages:
 
-```
+```text
 feat: short description of what was added
 fix: short description of what was corrected
 chore: tooling, infra, or non-functional changes
@@ -94,7 +94,7 @@ A short paragraph is sufficient:
 
 ### For larger changes, use this template
 
-```
+```markdown
 ## Summary
 One or two sentences describing the overall change.
 

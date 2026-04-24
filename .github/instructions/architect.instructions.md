@@ -27,20 +27,21 @@ Always read and apply the following instruction files:
 ```
 
 Rules:
-* `description` must be a single string — no YAML arrays or multi-line values
-* `tools` must include `read` and `search` at minimum; `edit` for agents that write files
-* Every agent must have an `## Instructions` section that names the instruction file(s) it must apply
-* Every agent **must** include a reference to `.github/instructions/core.instructions.md` — this single file covers the cross-cutting design invariants, engineering values, and PR workflow that previously required three separate listings
+
+- `description` must be a single string — no YAML arrays or multi-line values
+- `tools` must include `read` and `search` at minimum; `edit` for agents that write files
+- Every agent must have an `## Instructions` section that names the instruction file(s) it must apply
+- Every agent **must** include a reference to `.github/instructions/core.instructions.md` — this single file covers the cross-cutting design invariants, engineering values, and PR workflow that previously required three separate listings
 
 ## PR Workflow (applies to all agents)
 
 All branch, commit, and PR operations for every agent must follow `.github/instructions/pr.instructions.md`. The key rules are summarised in `.github/instructions/core.instructions.md`. Key rules:
 
-* Never commit directly to `main`
-* Branch names: `feat/<topic>`, `fix/<topic>`, `chore/<topic>` — lowercase, hyphens only
-* PR titles follow commit message convention: `feat:`, `fix:`, or `chore:` prefix
-* Use `--body-file` with `gh pr create` / `gh pr edit` — never inline multi-line body in the shell
-* Write PR body files using the file-creation tool, not shell heredocs
+- Never commit directly to `main`
+- Branch names: `feat/<topic>`, `fix/<topic>`, `chore/<topic>` — lowercase, hyphens only
+- PR titles follow commit message convention: `feat:`, `fix:`, or `chore:` prefix
+- Use `--body-file` with `gh pr create` / `gh pr edit` — never inline multi-line body in the shell
+- Write PR body files using the file-creation tool, not shell heredocs
 
 ## Cross-Cutting Design Invariants
 
