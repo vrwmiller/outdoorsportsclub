@@ -15,7 +15,7 @@ Use plain, professional language throughout this workflow. Do not use emojis in 
    * List the files changed in the PR: `gh pr view <number> --json files --jq '.files[].path'`
    * Read each changed file in full.
    * Invoke the system agent: *"What sections of docs/design.md, docs/architecture.md, docs/stack-decisions.md, and which .github/instructions files are authoritative for these changed files: [list]?"*
-   * Read every document the architect identifies in full before proceeding.
+   * Read every document the system agent identifies in full before proceeding.
 
    The reviewer is expected to have sound software engineering knowledge but may not know this codebase. Their suggestions about general patterns are likely correct; their claims about project-specific decisions, existing conventions, or what the code already does must be verified against the files and docs you just read.
 
