@@ -22,7 +22,7 @@ Parameters:
 
   DeploymentVersion:
     Type: String
-    Default: "1"
+    Default: "2"
     Description: >-
       Increment this value to force a new API Gateway deployment when method or
       integration changes would not otherwise cause CloudFormation to replace
@@ -554,6 +554,49 @@ Resources:
             method.response.header.Access-Control-Allow-Origin: true
 
   # ---------------------------------------------------------------------------
+  # Lambda permissions — allow API Gateway to invoke each kiosk function
+  # ---------------------------------------------------------------------------
+  KioskCheckInPostPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-kiosk-checkin-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/v1/kiosk/check-in"
+
+  KioskCheckOutPostPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-kiosk-checkout-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/v1/kiosk/check-out"
+
+  KioskWaiverPostPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-kiosk-waiver-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/v1/kiosk/waiver"
+
+  KioskRangeLanesGetPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-kiosk-range-lanes-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/GET/v1/kiosk/range/lanes"
+
+  KioskWaitListEntryDeletePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-kiosk-waitlist-cancel-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/DELETE/v1/kiosk/wait-list/*"
+
+  # ---------------------------------------------------------------------------
   # Deployment + Stage
   # ---------------------------------------------------------------------------
   ApiDeployment:
@@ -563,9 +606,19 @@ Resources:
       - MemberMeOptionsMethod
       - DevicesPairPostMethod
       - DevicesPairOptionsMethod
+      - KioskCheckInPostMethod
+      - KioskCheckInOptionsMethod
+      - KioskCheckOutPostMethod
+      - KioskCheckOutOptionsMethod
+      - KioskWaiverPostMethod
+      - KioskWaiverOptionsMethod
+      - KioskRangeLanesGetMethod
+      - KioskRangeLanesOptionsMethod
+      - KioskWaitListEntryDeleteMethod
+      - KioskWaitListEntryOptionsMethod
     Properties:
       RestApiId: !Ref RestApi
-      Description: !Sub "v${DeploymentVersion} — GET /v1/members/me, POST /v1/devices/pair (${Environment})"
+      Description: !Sub "v${DeploymentVersion} — GET /v1/members/me, POST /v1/devices/pair, kiosk check-in/check-out/waiver/range-lanes/waitlist-cancel (${Environment})"
 
   ApiStage:
     Type: AWS::ApiGateway::Stage
