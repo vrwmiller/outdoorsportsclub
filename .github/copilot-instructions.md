@@ -33,7 +33,7 @@ If code, comments, or suggestions conflict with these documents:
 - Follow existing naming conventions, file structure, and patterns
 - Write minimal, focused changes — avoid unrelated modifications
 - Do not add comments unless they clarify non-obvious logic
-- Do not add logging, debugging code, or TODOs unless requested
+- Do not add debug/trace logging, temporary debugging code, or TODOs unless requested; add required structured error or audit logging when repository instructions require it
 - Prefer explicit, readable logic over abstraction
 
 ---
@@ -59,9 +59,9 @@ If code, comments, or suggestions conflict with these documents:
 - Do not introduce:
   - hardcoded secrets
   - overly permissive IAM policies
-  - wildcard (`*`) access in production contexts
+  - wildcard (`*`) access in production contexts, except for the approved **Amazon SNS** direct-to-phone SMS pattern: `Action: sns:Publish`, `Resource: "*"`, with `Condition: StringEquals: { sns:DestinationType: PhoneNumber }`
 - Validate input handling and authentication logic where relevant
-- Prefer least-privilege and explicit access control
+- Prefer least-privilege and explicit access control, including condition-scoping any approved exception
 
 ---
 
