@@ -13,31 +13,36 @@ Use plain, professional language. Do not use emojis.
 
    The reviewer may not know this codebase. Treat suggestions about general patterns as high-signal; verify project-specific claims against the files and docs before accepting them.
 
-3. **Fetch review data** — use a single GraphQL query to retrieve all review threads, comment bodies, and thread node IDs in one call:
+   **Obtain repo metadata** — run `gh repo view --json nameWithOwner --jq '.nameWithOwner'` and split the result into `<owner>` and `<repo>` (e.g., `vrwmiller/outdoorsportsclub` → owner=`vrwmiller`, repo=`outdoorsportsclub`). You will need these values in step 3.
+
+3. **Fetch review data** — use a paginated GraphQL query to retrieve all review threads, comment bodies, and thread node IDs:
 
    ```bash
    gh api graphql -f query='
-     query($owner: String!, $name: String!, $pr: Int!) {
+     query($owner: String!, $name: String!, $pr: Int!, $threadCursor: String, $commentCursor: String) {
        repository(owner: $owner, name: $name) {
          pullRequest(number: $pr) {
            comments(first: 100) {
+             pageInfo { hasNextPage endCursor }
              nodes { databaseId body author { login } }
            }
-           reviewThreads(first: 100) {
+           reviewThreads(first: 100, after: $threadCursor) {
+             pageInfo { hasNextPage endCursor }
              nodes {
                id
                isResolved
-               comments(first: 10) {
+               comments(first: 100, after: $commentCursor) {
+                 pageInfo { hasNextPage endCursor }
                  nodes { databaseId body author { login } path line }
                }
              }
            }
          }
        }
-     }' -f owner='<owner>' -f name='<repo>' -F pr=<N>
+     }' -f owner='<owner>' -f name='<repo>' -F pr=<N> --paginate
    ```
 
-   Build a map of `comment databaseId → thread node id` from the results — you will need it in step 7. Do not use the `outdated` field to skip comments; track each comment ID explicitly.
+   Build a map of `reviewThreads.nodes.comments.nodes.databaseId → reviewThreads.nodes.id` from the results — you will need it in step 9 when resolving threads. Keep `pullRequest.comments.nodes.databaseId` as a separate set of top-level PR conversation comments; those comments do not belong to a review thread and are not used in this workflow. Do not use the `outdated` field to skip comments; track each comment ID explicitly.
 
 4. **Classify every comment** — print each comment with its ID, grouped by file. Check the claim against the file content and authoritative context from step 2. Assign exactly one classification:
 
@@ -51,20 +56,20 @@ Use plain, professional language. Do not use emojis.
 
 5. **Apply fixes** — for each Valid comment, make the change using file-edit tools. Verify each change is present after applying it. Do not make unrequested changes. If a comment is a question only, note the answer and move on.
 
-   Commit all fixes together:
+   **Commit in logical groups** — commit fixes grouped by logical topic (e.g., all schema changes together, all handler changes together), not as a single monolithic commit. Use clear, scoped commit messages following the format in `.github/instructions/pr.instructions.md`:
 
    ```bash
-   git add <changed files>
-   git commit -m "fix: address PR review comments"
+   git add <changed files for this logical topic>
+   git commit -m "fix(<scope>): short description"
    ```
 
-   Use a descriptive subject if the changes cover a single clear topic. If the commit fails with exit code 3 and the message "The baseline file was updated", the `detect-secrets` hook updated `.secrets.baseline` — run:
+   If a commit fails with exit code 3 and the message "The baseline file was updated", the `detect-secrets` hook updated `.secrets.baseline` — run:
 
    ```bash
    git add .secrets.baseline && git commit -m "<same message>"
    ```
 
-6. **Reply to every comment** — for each reply, write the body using the file-creation tool (never shell redirection), then post it:
+6. **Reply to every inline review comment** — for each inline review comment in `reviewThreads`, write the body using the file-creation tool (never shell redirection), then post it:
 
    ```json
    {"body": "Your reply text."}
@@ -79,6 +84,8 @@ Use plain, professional language. Do not use emojis.
    - Question only: answer directly; no code change needed.
    - Keep replies concise and factual.
 
+   Note: This workflow addresses inline review comments only. Top-level PR conversation comments (from `pullRequest.comments`) are not replied to in this workflow.
+
 7. **Self-review gate** — before pushing, check the full set of changes:
 
    - **Docs**: if any fix changed an API contract, response shape, error code, auth level, schema column, or AWS service behavior, invoke the quality agent: *"Update docs/design.md to reflect [list of changes]"*. Wait for it to commit.
@@ -89,7 +96,7 @@ Use plain, professional language. Do not use emojis.
 
 8. **Push** — run `git push` once after all fixes and self-review commits are complete.
 
-9. **Resolve threads** — resolve every thread that was fixed or rejected using the node IDs from step 3:
+9. **Resolve threads** — resolve every thread that was fixed or rejected using the thread node IDs from step 3 (`reviewThreads.nodes.id`):
 
    ```bash
    gh api graphql -f query='mutation { resolveReviewThread(input: { threadId: "<thread_node_id>" }) { thread { isResolved } } }'
