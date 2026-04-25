@@ -127,7 +127,9 @@ curl -s -o /dev/null -w "%{http_code}" \
 # DELETE /v1/kiosk/wait-list/{entry_id} — expect 200 or 404 (not 502)
 curl -s -o /dev/null -w "%{http_code}" \
   -X DELETE \
+  -H "Content-Type: application/json" \
   -H "x-device-token: $DEVICE_TOKEN" \
+  -d '{"member_num": "TEST-INVALID"}' \
   "$API_BASE/v1/kiosk/wait-list/$ENTRY_ID"
 
 # Revoked-device rejection check — swap in a known-revoked token; expect 403
