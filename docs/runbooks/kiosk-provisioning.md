@@ -85,3 +85,57 @@ A revoked `device_token` cannot be reactivated. To bring a replacement tablet on
 1. Follow **Step 1** to generate a new pairing code — use the same `location_tag` if this is a direct hardware replacement
 2. Follow **Steps 2 and 3** on the replacement tablet
 3. Confirm the revoked device row is no longer active (it remains in `devices` with `status = Revoked` for audit purposes)
+
+---
+
+## 6. API smoke test after a new API Gateway deployment
+
+Run these commands from any machine with `curl` and the API base URL after deploying changes to `infra/stacks/api-gateway.yaml`. Replace `$API_BASE`, `$DEVICE_TOKEN`, and `$ENTRY_ID` with real values for the `dev` stack.
+
+```bash
+API_BASE="https://<rest-api-id>.execute-api.us-east-1.amazonaws.com/dev"
+
+# GET /v1/kiosk/range/lanes — expect 200 with lane list or 403 on bad token
+curl -s -o /dev/null -w "%{http_code}" \
+  -H "x-device-token: $DEVICE_TOKEN" \
+  "$API_BASE/v1/kiosk/range/lanes"
+
+# POST /v1/kiosk/check-in — expect 200, 202, or 403 (not 404 or 502)
+curl -s -o /dev/null -w "%{http_code}" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "x-device-token: $DEVICE_TOKEN" \
+  -d '{"member_num": "TEST-INVALID", "guest_count": 0}' \
+  "$API_BASE/v1/kiosk/check-in"
+
+# POST /v1/kiosk/check-out — expect 200 or 404 (not 502)
+curl -s -o /dev/null -w "%{http_code}" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "x-device-token: $DEVICE_TOKEN" \
+  -d '{"member_num": "TEST-INVALID"}' \
+  "$API_BASE/v1/kiosk/check-out"
+
+# POST /v1/kiosk/waiver — expect 400 on bad payload or 403 on bad token (5xx is a failure to investigate)
+curl -s -o /dev/null -w "%{http_code}" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "x-device-token: $DEVICE_TOKEN" \
+  -d '{}' \
+  "$API_BASE/v1/kiosk/waiver"
+
+# DELETE /v1/kiosk/wait-list/{entry_id} — expect 200 or 404 (not 502)
+curl -s -o /dev/null -w "%{http_code}" \
+  -X DELETE \
+  -H "Content-Type: application/json" \
+  -H "x-device-token: $DEVICE_TOKEN" \
+  -d '{"member_num": "TEST-INVALID"}' \
+  "$API_BASE/v1/kiosk/wait-list/$ENTRY_ID"
+
+# Revoked-device rejection check — swap in a known-revoked token; expect 403
+curl -s -o /dev/null -w "%{http_code}" \
+  -H "x-device-token: REVOKED-TOKEN" \
+  "$API_BASE/v1/kiosk/range/lanes"
+```
+
+A `502 Bad Gateway` on any route means API Gateway cannot reach the Lambda. Check that the Lambda `Permission` resource was deployed, then confirm the exact function name in `infra/stacks/lambda.yaml` rather than guessing from the route path — route path segments do not always match the function name directly (for example, `/v1/kiosk/check-in` maps to `osc-kiosk-checkin-<env>` and `/v1/kiosk/check-out` maps to `osc-kiosk-checkout-<env>`). See [ci-deployment-failure.md](ci-deployment-failure.md) for general troubleshooting steps.

@@ -22,7 +22,7 @@ Parameters:
 
   DeploymentVersion:
     Type: String
-    Default: "1"
+    Default: "2"
     Description: >-
       Increment this value to force a new API Gateway deployment when method or
       integration changes would not otherwise cause CloudFormation to replace
@@ -259,6 +259,343 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/v1/devices/pair"
 
+  # ===========================================================================
+  # Kiosk routes — /v1/kiosk/**
+  # Device Token auth is validated inside each Lambda; no API Gateway authorizer.
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # Resources — /v1/kiosk resource tree
+  # ---------------------------------------------------------------------------
+  KioskResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref V1Resource
+      PathPart: kiosk
+
+  KioskCheckInResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref KioskResource
+      PathPart: check-in
+
+  KioskCheckOutResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref KioskResource
+      PathPart: check-out
+
+  KioskWaiverResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref KioskResource
+      PathPart: waiver
+
+  KioskRangeResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref KioskResource
+      PathPart: range
+
+  KioskRangeLanesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref KioskRangeResource
+      PathPart: lanes
+
+  KioskWaitListResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref KioskResource
+      PathPart: wait-list
+
+  KioskWaitListEntryResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref KioskWaitListResource
+      PathPart: "{entry_id}"
+
+  # ---------------------------------------------------------------------------
+  # POST /v1/kiosk/check-in — no gateway authorizer; device token validated in Lambda
+  # ---------------------------------------------------------------------------
+  KioskCheckInPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref KioskCheckInResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:osc-kiosk-checkin-${Environment}/invocations"
+          - {}
+
+  # ---------------------------------------------------------------------------
+  # OPTIONS /v1/kiosk/check-in — CORS preflight, no auth
+  # ---------------------------------------------------------------------------
+  KioskCheckInOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref KioskCheckInResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Authorization,Content-Type,x-device-token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
+            ResponseTemplates:
+              application/json: "{}"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # ---------------------------------------------------------------------------
+  # POST /v1/kiosk/check-out — no gateway authorizer; device token validated in Lambda
+  # ---------------------------------------------------------------------------
+  KioskCheckOutPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref KioskCheckOutResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:osc-kiosk-checkout-${Environment}/invocations"
+          - {}
+
+  # ---------------------------------------------------------------------------
+  # OPTIONS /v1/kiosk/check-out — CORS preflight, no auth
+  # ---------------------------------------------------------------------------
+  KioskCheckOutOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref KioskCheckOutResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Authorization,Content-Type,x-device-token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
+            ResponseTemplates:
+              application/json: "{}"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # ---------------------------------------------------------------------------
+  # POST /v1/kiosk/waiver — no gateway authorizer; device token validated in Lambda
+  # ---------------------------------------------------------------------------
+  KioskWaiverPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref KioskWaiverResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:osc-kiosk-waiver-${Environment}/invocations"
+          - {}
+
+  # ---------------------------------------------------------------------------
+  # OPTIONS /v1/kiosk/waiver — CORS preflight, no auth
+  # ---------------------------------------------------------------------------
+  KioskWaiverOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref KioskWaiverResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Authorization,Content-Type,x-device-token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
+            ResponseTemplates:
+              application/json: "{}"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # ---------------------------------------------------------------------------
+  # GET /v1/kiosk/range/lanes — no gateway authorizer; device token validated in Lambda
+  # ---------------------------------------------------------------------------
+  KioskRangeLanesGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref KioskRangeLanesResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:osc-kiosk-range-lanes-${Environment}/invocations"
+          - {}
+
+  # ---------------------------------------------------------------------------
+  # OPTIONS /v1/kiosk/range/lanes — CORS preflight, no auth
+  # ---------------------------------------------------------------------------
+  KioskRangeLanesOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref KioskRangeLanesResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Authorization,Content-Type,x-device-token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
+            ResponseTemplates:
+              application/json: "{}"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # ---------------------------------------------------------------------------
+  # DELETE /v1/kiosk/wait-list/{entry_id} — no gateway authorizer; device token validated in Lambda
+  # ---------------------------------------------------------------------------
+  KioskWaitListEntryDeleteMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref KioskWaitListEntryResource
+      HttpMethod: DELETE
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:osc-kiosk-waitlist-cancel-${Environment}/invocations"
+          - {}
+
+  # ---------------------------------------------------------------------------
+  # OPTIONS /v1/kiosk/wait-list/{entry_id} — CORS preflight, no auth
+  # ---------------------------------------------------------------------------
+  KioskWaitListEntryOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref KioskWaitListEntryResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Authorization,Content-Type,x-device-token'"
+              method.response.header.Access-Control-Allow-Methods: "'DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
+            ResponseTemplates:
+              application/json: "{}"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # ---------------------------------------------------------------------------
+  # Lambda permissions — allow API Gateway to invoke each kiosk function
+  # ---------------------------------------------------------------------------
+  KioskCheckInPostPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-kiosk-checkin-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/v1/kiosk/check-in"
+
+  KioskCheckOutPostPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-kiosk-checkout-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/v1/kiosk/check-out"
+
+  KioskWaiverPostPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-kiosk-waiver-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/v1/kiosk/waiver"
+
+  KioskRangeLanesGetPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-kiosk-range-lanes-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/GET/v1/kiosk/range/lanes"
+
+  KioskWaitListEntryDeletePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-kiosk-waitlist-cancel-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/DELETE/v1/kiosk/wait-list/*"
+
   # ---------------------------------------------------------------------------
   # Deployment + Stage
   # ---------------------------------------------------------------------------
@@ -269,9 +606,24 @@ Resources:
       - MemberMeOptionsMethod
       - DevicesPairPostMethod
       - DevicesPairOptionsMethod
+      - KioskCheckInPostMethod
+      - KioskCheckInOptionsMethod
+      - KioskCheckInPostPermission
+      - KioskCheckOutPostMethod
+      - KioskCheckOutOptionsMethod
+      - KioskCheckOutPostPermission
+      - KioskWaiverPostMethod
+      - KioskWaiverOptionsMethod
+      - KioskWaiverPostPermission
+      - KioskRangeLanesGetMethod
+      - KioskRangeLanesOptionsMethod
+      - KioskRangeLanesGetPermission
+      - KioskWaitListEntryDeleteMethod
+      - KioskWaitListEntryOptionsMethod
+      - KioskWaitListEntryDeletePermission
     Properties:
       RestApiId: !Ref RestApi
-      Description: !Sub "v${DeploymentVersion} — GET /v1/members/me, POST /v1/devices/pair (${Environment})"
+      Description: !Sub "v${DeploymentVersion} — GET /v1/members/me, POST /v1/devices/pair, kiosk check-in/check-out/waiver/range-lanes/waitlist-cancel (${Environment})"
 
   ApiStage:
     Type: AWS::ApiGateway::Stage
