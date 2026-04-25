@@ -18,12 +18,15 @@ These rules are global and apply across all languages, files, and workflows.
 
 ## Source of Truth
 
+- `.github/instructions/core.instructions.md` — universal invariants, engineering values, and PR workflow; applies to all files
+- Applicable `.github/instructions/*.instructions.md` files — domain-specific rules for the file type being edited
 - `docs/design.md` — canonical source for API contracts, schema, and system behavior
 - `docs/architecture.md` — system structure and data flow
 - `docs/stack-decisions.md` — locked technology choices and tradeoffs
 
-If code, comments, or suggestions conflict with these documents:
-- Treat the documentation as authoritative
+If code, comments, or suggestions conflict with these sources:
+- Treat applicable `.github/instructions/` files as authoritative for repository-wide workflow, security, and implementation constraints
+- Treat the docs as authoritative for design details that do not conflict with repository instruction files
 - Flag the inconsistency instead of guessing
 
 ---

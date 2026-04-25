@@ -138,4 +138,4 @@ curl -s -o /dev/null -w "%{http_code}" \
   "$API_BASE/v1/kiosk/range/lanes"
 ```
 
-A `502 Bad Gateway` on any route means API Gateway cannot reach the Lambda — check that the Lambda `Permission` resource was deployed and the function name matches `osc-kiosk-<handler>-<env>`. See [ci-deployment-failure.md](ci-deployment-failure.md) for general troubleshooting steps.
+A `502 Bad Gateway` on any route means API Gateway cannot reach the Lambda. Check that the Lambda `Permission` resource was deployed, then confirm the exact function name in `infra/stacks/lambda.yaml` rather than guessing from the route path — route path segments do not always match the function name directly (for example, `/v1/kiosk/check-in` maps to `osc-kiosk-checkin-<env>` and `/v1/kiosk/check-out` maps to `osc-kiosk-checkout-<env>`). See [ci-deployment-failure.md](ci-deployment-failure.md) for general troubleshooting steps.
