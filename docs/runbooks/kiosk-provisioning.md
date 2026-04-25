@@ -95,7 +95,7 @@ Run these commands from any machine with `curl` and the API base URL after deplo
 ```bash
 API_BASE="https://<rest-api-id>.execute-api.us-east-1.amazonaws.com/dev"
 
-# GET /v1/kiosk/range/lanes — expect 200 with lane list or 401 on bad token
+# GET /v1/kiosk/range/lanes — expect 200 with lane list or 403 on bad token
 curl -s -o /dev/null -w "%{http_code}" \
   -H "x-device-token: $DEVICE_TOKEN" \
   "$API_BASE/v1/kiosk/range/lanes"
@@ -116,7 +116,7 @@ curl -s -o /dev/null -w "%{http_code}" \
   -d '{"member_num": "TEST-INVALID"}' \
   "$API_BASE/v1/kiosk/check-out"
 
-# POST /v1/kiosk/waiver — expect 400 or 500 (not 502; bad payload is acceptable here)
+# POST /v1/kiosk/waiver — expect 400 on bad payload or 403 on bad token (5xx is a failure to investigate)
 curl -s -o /dev/null -w "%{http_code}" \
   -X POST \
   -H "Content-Type: application/json" \
@@ -130,7 +130,7 @@ curl -s -o /dev/null -w "%{http_code}" \
   -H "x-device-token: $DEVICE_TOKEN" \
   "$API_BASE/v1/kiosk/wait-list/$ENTRY_ID"
 
-# Revoked-device rejection check — swap in a known-revoked token; expect 401 or 403
+# Revoked-device rejection check — swap in a known-revoked token; expect 403
 curl -s -o /dev/null -w "%{http_code}" \
   -H "x-device-token: REVOKED-TOKEN" \
   "$API_BASE/v1/kiosk/range/lanes"

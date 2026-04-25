@@ -357,7 +357,7 @@ Resources:
         IntegrationResponses:
           - StatusCode: "200"
             ResponseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,x-device-token'"
+              method.response.header.Access-Control-Allow-Headers: "'Authorization,Content-Type,x-device-token'"
               method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
               method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
             ResponseTemplates:
@@ -403,7 +403,7 @@ Resources:
         IntegrationResponses:
           - StatusCode: "200"
             ResponseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,x-device-token'"
+              method.response.header.Access-Control-Allow-Headers: "'Authorization,Content-Type,x-device-token'"
               method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
               method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
             ResponseTemplates:
@@ -449,7 +449,7 @@ Resources:
         IntegrationResponses:
           - StatusCode: "200"
             ResponseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,x-device-token'"
+              method.response.header.Access-Control-Allow-Headers: "'Authorization,Content-Type,x-device-token'"
               method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
               method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
             ResponseTemplates:
@@ -495,7 +495,7 @@ Resources:
         IntegrationResponses:
           - StatusCode: "200"
             ResponseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,x-device-token'"
+              method.response.header.Access-Control-Allow-Headers: "'Authorization,Content-Type,x-device-token'"
               method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
               method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
             ResponseTemplates:
@@ -541,7 +541,7 @@ Resources:
         IntegrationResponses:
           - StatusCode: "200"
             ResponseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,x-device-token'"
+              method.response.header.Access-Control-Allow-Headers: "'Authorization,Content-Type,x-device-token'"
               method.response.header.Access-Control-Allow-Methods: "'DELETE,OPTIONS'"
               method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
             ResponseTemplates:
