@@ -19,7 +19,7 @@ Use plain, professional language. Do not use emojis.
 
    ```bash
    gh api graphql -f query='
-     query($owner: String!, $name: String!, $pr: Int!, $threadCursor: String, $commentCursor: String) {
+     query($owner: String!, $name: String!, $pr: Int!, $threadCursor: String) {
        repository(owner: $owner, name: $name) {
          pullRequest(number: $pr) {
            reviewThreads(first: 100, after: $threadCursor) {
@@ -27,18 +27,17 @@ Use plain, professional language. Do not use emojis.
              nodes {
                id
                isResolved
-               comments(first: 100, after: $commentCursor) {
-                 pageInfo { hasNextPage endCursor }
+               comments(first: 100) {
                  nodes { databaseId body author { login } path line }
                }
              }
            }
          }
        }
-     }' -f owner='<owner>' -f name='<repo>' -F pr=<N> --paginate
+     }' -f owner='<owner>' -f name='<repo>' -F pr=<number> --paginate
    ```
 
-   Build a map of `reviewThreads.nodes.comments.nodes.databaseId → reviewThreads.nodes.id` from the results — you will need it in step 9 when resolving threads. Do not use the `outdated` field to skip comments; track each comment ID explicitly.
+   Build a map of `reviewThreads.nodes.comments.nodes.databaseId → reviewThreads.nodes.id` from the results — you will need it in step 9 when resolving threads. Note: comments per thread are fetched up to 100; threads with more than 100 comments will be truncated. Do not use the `outdated` field to skip comments; track each comment ID explicitly.
 
 4. **Classify every comment** — print each comment with its ID, grouped by file. Check the claim against the file content and authoritative context from step 2. Assign exactly one classification:
 
