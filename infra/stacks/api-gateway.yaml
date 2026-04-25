@@ -608,14 +608,19 @@ Resources:
       - DevicesPairOptionsMethod
       - KioskCheckInPostMethod
       - KioskCheckInOptionsMethod
+      - KioskCheckInPostPermission
       - KioskCheckOutPostMethod
       - KioskCheckOutOptionsMethod
+      - KioskCheckOutPostPermission
       - KioskWaiverPostMethod
       - KioskWaiverOptionsMethod
+      - KioskWaiverPostPermission
       - KioskRangeLanesGetMethod
       - KioskRangeLanesOptionsMethod
+      - KioskRangeLanesGetPermission
       - KioskWaitListEntryDeleteMethod
       - KioskWaitListEntryOptionsMethod
+      - KioskWaitListEntryDeletePermission
     Properties:
       RestApiId: !Ref RestApi
       Description: !Sub "v${DeploymentVersion} — GET /v1/members/me, POST /v1/devices/pair, kiosk check-in/check-out/waiver/range-lanes/waitlist-cancel (${Environment})"
