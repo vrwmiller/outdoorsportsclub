@@ -21,25 +21,27 @@ You are the <role> for the Outdoor Sports Club project. <One-sentence purpose.>
 ...
 
 ## Instructions
-Always read and apply `.github/instructions/<name>.instructions.md` before implementing or editing any file in this agent's domain. Also follow `.github/instructions/pr.instructions.md` for all branch, commit, and PR operations.
+Always read and apply the following instruction files:
+* `.github/instructions/core.instructions.md` — universal invariants, engineering values, and PR workflow
+* `.github/instructions/<domain>.instructions.md` — domain-specific conventions for this agent
 ```
 
 Rules:
-* `description` must be a single string — no YAML arrays or multi-line values
-* `tools` must include `read` and `search` at minimum; `edit` for agents that write files
-* Every agent must have an `## Instructions` section that names the instruction file(s) it must apply
-* Every agent **must** include a reference to `.github/instructions/values.instructions.md` — the engineering values apply to all agents
-* Every agent **must** include a reference to `.github/instructions/pr.instructions.md` — the PR workflow applies to all agents that create branches or commits
+
+- `description` must be a single string — no YAML arrays or multi-line values
+- `tools` must include `read` and `search` at minimum; `edit` for agents that write files
+- Every agent must have an `## Instructions` section that names the instruction file(s) it must apply
+- Every agent **must** include a reference to `.github/instructions/core.instructions.md` — this single file covers the cross-cutting design invariants, engineering values, and PR workflow that previously required three separate listings
 
 ## PR Workflow (applies to all agents)
 
-All branch, commit, and PR operations for every agent must follow `.github/instructions/pr.instructions.md`. Key rules:
+All branch, commit, and PR operations for every agent must follow `.github/instructions/pr.instructions.md`. The key rules are summarised in `.github/instructions/core.instructions.md`. Key rules:
 
-* Never commit directly to `main`
-* Branch names: `feat/<topic>`, `fix/<topic>`, `chore/<topic>` — lowercase, hyphens only
-* PR titles follow commit message convention: `feat:`, `fix:`, or `chore:` prefix
-* Use `--body-file` with `gh pr create` / `gh pr edit` — never inline multi-line body in the shell
-* Write PR body files using the file-creation tool, not shell heredocs
+- Never commit directly to `main`
+- Branch names: `feat/<topic>`, `fix/<topic>`, `chore/<topic>` — lowercase, hyphens only
+- PR titles follow commit message convention: `feat:`, `fix:`, or `chore:` prefix
+- Use `--body-file` with `gh pr create` / `gh pr edit` — never inline multi-line body in the shell
+- Write PR body files using the file-creation tool, not shell heredocs
 
 ## Cross-Cutting Design Invariants
 
@@ -74,4 +76,5 @@ Each instruction file governs a specific file scope. When creating or editing fi
 | `qa.instructions.md` | `tests/**/*.py`, `src/**/*.test.tsx`, `e2e/**/*.ts`, `.github/workflows/*.yml` |
 | `security.instructions.md` | `functions/**/*.py`, `db/**/*.sql`, `infra/**/*.yaml`, `src/**/*.ts`, `src/**/*.tsx` |
 | `values.instructions.md` | `**` (all files — engineering values apply to every agent and every layer) |
+| `core.instructions.md` | `**` (all files — universal invariants, engineering values, and PR workflow baseline) |
 | `architect.instructions.md` | `.github/agents/**/*.md`, `.github/instructions/**/*.md` |

@@ -3,6 +3,8 @@ agent: agent
 description: Read all review comments on the current PR, validate each against authoritative project docs and the changed files, fix valid claims, and post replies.
 ---
 
+# PR Review Workflow
+
 Follow these steps exactly. Do not skip any step. To reduce potential for rate-limiting, add a random 2–5 second sleep immediately before you prompt the user for approval to execute a command.
 
 Use plain, professional language throughout this workflow. Do not use emojis in classifications, replies, summaries, or any generated text.
@@ -12,8 +14,8 @@ Use plain, professional language throughout this workflow. Do not use emojis in 
 2. **Gather authoritative context** — before reading any comments, establish the ground truth you will use to validate reviewer claims:
    * List the files changed in the PR: `gh pr view <number> --json files --jq '.files[].path'`
    * Read each changed file in full.
-   * Invoke the architect agent: *"What sections of docs/design.md, docs/architecture.md, docs/stack-decisions.md, and which .github/instructions files are authoritative for these changed files: [list]?"*
-   * Read every document the architect identifies in full before proceeding.
+   * Invoke the system agent: *"What sections of docs/design.md, docs/architecture.md, docs/stack-decisions.md, and which .github/instructions files are authoritative for these changed files: [list]?"*
+   * Read every document the system agent identifies in full before proceeding.
 
    The reviewer is expected to have sound software engineering knowledge but may not know this codebase. Their suggestions about general patterns are likely correct; their claims about project-specific decisions, existing conventions, or what the code already does must be verified against the files and docs you just read.
 
@@ -59,24 +61,28 @@ Use plain, professional language throughout this workflow. Do not use emojis in 
    **a. Fix** — make the code or doc changes using file-edit tools. After each change, verify it is present in the file. Do not make unrequested changes alongside a fix. If a comment is a question only (no code change required), note the answer and move on.
 
    **b. Commit the batch**:
-   ```
+
+   ```bash
    git add <changed files>
    git commit -m "fix: address PR review comments (batch N)"
    ```
    Use a descriptive message if the batch covers a single topic (e.g., `fix: wrap all DB queries in transactions`).
 
    If the commit fails with exit code 3 and the message "The baseline file was updated", the `detect-secrets` pre-commit hook auto-updated `.secrets.baseline` to reflect line number shifts. Run:
-   ```
+
+   ```bash
    git add .secrets.baseline
    git commit -m "<same message as above>"
    ```
    This is expected and safe — the hook only updates line-number metadata, never suppresses new secrets.
 
    **c. Reply to each comment in the batch** — for each reply, write the body to `/tmp/reply.json` using the file-creation tool (never shell redirection or echo), then post it:
+
    ```json
    {"body": "Your reply text here."}
    ```
-   ```
+
+   ```bash
    gh api repos/<nameWithOwner>/pulls/<number>/comments/<comment_id>/replies --input /tmp/reply.json
    ```
    * **Valid comments that were fixed:** confirm what changed and why.
@@ -86,20 +92,21 @@ Use plain, professional language throughout this workflow. Do not use emojis in 
 
    Repeat until all Valid comments are processed.
 
-6. **Update docs if needed** — review the full set of fixes applied. If any fix changed an API contract, request/response shape, error code, auth level, schema column, or AWS service behavior, invoke the docs agent: *"Update docs/design.md to reflect [list of specific changes from this PR]"*. The docs agent must commit its changes before you proceed. Do not push until the docs agent confirms the update is complete or confirms no update is needed.
+6. **Update docs if needed** — review the full set of fixes applied. If any fix changed an API contract, request/response shape, error code, auth level, schema column, or AWS service behavior, invoke the quality agent: *"Update docs/design.md to reflect [list of specific changes from this PR]"*. The quality agent must commit its changes before you proceed. Do not push until the quality agent confirms the update is complete or confirms no update is needed.
 
 7. **Self-review gate** — before pushing, run two proactive checks over every changed file to catch issues before Copilot sees them on the next pass:
 
-   **a. Linter** — invoke the linter agent: *"Lint these files and fix any issues: [list of changed files]"*. The linter agent must commit any fixes before you proceed.
+   **a. Linter** — invoke the quality agent: *"Lint these files and fix any issues: [list of changed files]"*. The quality agent must commit any fixes before you proceed.
 
-   **b. Security** — if any changed file matches `functions/**/*.py`, `db/**/*.sql`, or `infra/**/*.yaml`, invoke the security agent: *"Security review [list of matching changed files]"*. Research and fix any **High** or **Critical** findings; note **Medium** and **Low** findings in the PR description and address them in a follow-up. The security agent must commit any fixes before you proceed.
+   **b. Security** — if any changed file matches `functions/**/*.py`, `db/**/*.sql`, or `infra/**/*.yaml`, invoke the system agent: *"Security review [list of matching changed files]"*. Research and fix any **High** or **Critical** findings; note **Medium** and **Low** findings in the PR description and address them in a follow-up. The system agent must commit any fixes before you proceed.
 
    If neither agent finds anything to fix, proceed immediately — do not pause for user confirmation.
 
 8. **Push** — run `git push` once after all batches (including any docs update and self-review fixes) are committed.
 
 9. **Resolve threads** — for every comment that was either fixed or rejected, resolve its review thread using the node ID map built in step 3:
-   ```
+
+   ```bash
    gh api graphql -f query='mutation { resolveReviewThread(input: { threadId: "<thread_node_id>" }) { thread { isResolved } } }'
    ```
    Resolve all threads before ending.

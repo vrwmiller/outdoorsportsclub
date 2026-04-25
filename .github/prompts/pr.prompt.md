@@ -3,6 +3,8 @@ agent: agent
 description: Ensure uncommitted changes are on a feature branch, then commit, push, and open a PR into main.
 ---
 
+# Commit and Open PR Workflow
+
 Follow these steps exactly. Do not skip any step.
 
 1. **Check status** — run `git status` and `git branch --show-current` to understand the current state. Capture the current branch name for use in later steps.
@@ -13,7 +15,7 @@ Follow these steps exactly. Do not skip any step.
 
 3. **Stage files** — run `git add` for all modified or new files that are relevant to the current change. Do not stage unrelated files. Do not stage `.env*`, secrets, or credentials.
 
-4. **Security pre-flight** — check whether any staged file is under `functions/`, `db/`, or `infra/`. If so, invoke the security agent on those files before committing: *"Security review [list of staged files]"*. Fix any **High** or **Critical** findings before proceeding. Note **Medium** and **Low** findings in the PR description Security considerations section — they may be addressed in a follow-up. If no staged files match those paths, skip to step 5.
+4. **Security pre-flight** — check whether any staged file is under `functions/`, `db/`, or `infra/`. If so, invoke the system agent on those files before committing: *"Security review [list of staged files]"*. Fix any **High** or **Critical** findings before proceeding. Note **Medium** and **Low** findings in the PR description Security considerations section — they may be addressed in a follow-up. If no staged files match those paths, skip to step 5.
 
 5. **Commit** — write a concise commit message following the convention: `feat:`, `fix:`, or `chore:` prefix. Run `git commit -m "<message>"`.
 
