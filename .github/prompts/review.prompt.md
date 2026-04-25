@@ -19,10 +19,10 @@ Use plain, professional language. Do not use emojis.
 
    ```bash
    gh api graphql -f query='
-     query($owner: String!, $name: String!, $pr: Int!, $threadCursor: String) {
+     query($owner: String!, $name: String!, $pr: Int!, $endCursor: String) {
        repository(owner: $owner, name: $name) {
          pullRequest(number: $pr) {
-           reviewThreads(first: 100, after: $threadCursor) {
+           reviewThreads(first: 100, after: $endCursor) {
              pageInfo { hasNextPage endCursor }
              nodes {
                id
@@ -41,9 +41,9 @@ Use plain, professional language. Do not use emojis.
 
 4. **Classify every comment** — print each comment with its ID, grouped by file. Check the claim against the file content and authoritative context from step 2. Assign exactly one classification:
 
-   - **Valid** — the claim is correct; a change is warranted. State what will be changed.
+   - **Valid** — the claim is correct; a change is warranted. State what will be changed. A question-only comment that requires no code change is also classified Valid.
    - **Rejected** — the claim contradicts file content, a documented decision, or a project convention. Name the specific document and section.
-   - **Ambiguous** — cannot be determined from available context. Describe what is unclear and pause for user input.
+   - **Ambiguous** — cannot be determined from available context. Describe what is unclear and pause for user input before proceeding.
 
    For Copilot comments: classify as Valid only after verifying the claim is correct and within scope. Reject if applying it would break application behavior, degrade UX, or introduce a security weakness.
 
@@ -76,10 +76,12 @@ Use plain, professional language. Do not use emojis.
 
    - Fixed: confirm what changed and why.
    - Rejected: cite the document, section, or pattern that contradicts the claim.
-   - Question only: answer directly; no code change needed.
+   - Question only (Valid, no code change): answer directly.
    - Keep replies concise and factual.
 
-   Note: This workflow addresses inline review comments only. Top-level PR conversation comments (from `pullRequest.comments`) are not replied to in this workflow.
+   Skip Ambiguous comments — do not reply until the user provides clarification.
+
+   Note: This workflow addresses inline review comments only. Top-level PR conversation or timeline comments are not replied to in this workflow.
 
 7. **Self-review gate** — before pushing, check the full set of changes:
 
