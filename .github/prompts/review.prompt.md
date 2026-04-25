@@ -22,10 +22,6 @@ Use plain, professional language. Do not use emojis.
      query($owner: String!, $name: String!, $pr: Int!, $threadCursor: String, $commentCursor: String) {
        repository(owner: $owner, name: $name) {
          pullRequest(number: $pr) {
-           comments(first: 100) {
-             pageInfo { hasNextPage endCursor }
-             nodes { databaseId body author { login } }
-           }
            reviewThreads(first: 100, after: $threadCursor) {
              pageInfo { hasNextPage endCursor }
              nodes {
@@ -42,7 +38,7 @@ Use plain, professional language. Do not use emojis.
      }' -f owner='<owner>' -f name='<repo>' -F pr=<N> --paginate
    ```
 
-   Build a map of `reviewThreads.nodes.comments.nodes.databaseId → reviewThreads.nodes.id` from the results — you will need it in step 9 when resolving threads. Keep `pullRequest.comments.nodes.databaseId` as a separate set of top-level PR conversation comments; those comments do not belong to a review thread and are not used in this workflow. Do not use the `outdated` field to skip comments; track each comment ID explicitly.
+   Build a map of `reviewThreads.nodes.comments.nodes.databaseId → reviewThreads.nodes.id` from the results — you will need it in step 9 when resolving threads. Do not use the `outdated` field to skip comments; track each comment ID explicitly.
 
 4. **Classify every comment** — print each comment with its ID, grouped by file. Check the claim against the file content and authoritative context from step 2. Assign exactly one classification:
 
@@ -76,7 +72,7 @@ Use plain, professional language. Do not use emojis.
    ```
 
    ```bash
-   gh api repos/<nameWithOwner>/pulls/<number>/comments/<comment_id>/replies --input /tmp/reply.json && rm /tmp/reply.json
+   gh api repos/<owner>/<repo>/pulls/<number>/comments/<comment_id>/replies --input /tmp/reply.json && rm /tmp/reply.json
    ```
 
    - Fixed: confirm what changed and why.
