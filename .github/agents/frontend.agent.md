@@ -37,7 +37,7 @@ Always read and apply the following instruction files before implementing or edi
 | Surface | Role in the app | Primary Users | Key Screens |
 | :--- | :--- | :--- | :--- |
 | **Home Page** | Primary public interface | All visitors (unauthenticated) | Club info, news, event calendar, Login / Sign-up entry point |
-| **Member Portal** | Secondary — post-login | Members (Level 1–3), Guests (Level 0) | Dashboard, QR Badge, Service Hours, Dues Payment, Waiver Signing |
+| **Member Portal** | Secondary — post-login | Members (Level 1–3), Guests (Level 0) | Dashboard, QR Badge, Service Hours, Dues Payment, Waiver Status |
 | **Admin Portal** | Secondary — post-login (Level 4+) | RSO / Instructor (Level 4), Administrator (Level 5), Webmaster (Level 6) | Member Management, Range Open/Close, Device Pairing, Auth Recovery, Finance |
 | **Kiosk View** | Default view on paired tablets | Range-side tablets (Device Token auth) | QR Scan Check-In, QR Scan Check-Out, Guest Payment (NFC), Consumable Purchase, Waiver Capture |
 
