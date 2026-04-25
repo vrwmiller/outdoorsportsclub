@@ -77,7 +77,7 @@ Security review is a mode of this agent, not a separate agent. When invoked for 
 - Review frontend code for RBAC gating, token storage, API key exposure, and redirect handling
 - Produce concrete failure scenarios with severity classification — not generic warnings
 - Label speculation explicitly with `[SPECULATION]`
-- Do not implement fixes — report findings; the build or frontend agent evaluates and incorporates
+- Do not implement fixes — report findings; the build or frontend agent evaluates and incorporates fixes as appropriate.
 
 ## Security Review Severity
 

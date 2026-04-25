@@ -48,7 +48,7 @@ without updating `docs/design.md` first.
 | `GET` | `/v1/members/me` | Return member profile queried from Aurora; include `annual_dues_cents` from `club_settings` |
 | `GET` | `/v1/members/me/badge` | Return `member_num` for QR code rendering in the Member Portal |
 | `PATCH` | `/v1/members/me` | Update `home_phone` and `mobile_phone` (E.164 normalisation); reject all other fields |
-| `POST` | `/v1/members/me/dues` | Create Stripe PaymentIntent (Stripe.js path); return `client_secret`; webhook sets `dues_paid_until` |
+| `POST` | `/v1/members/me/dues` | Deferred/on hold — do not implement yet. Stripe dues endpoint remains blocked by `docs/design.md` ODQ 29 (Issue #85). |
 
 ### Kiosk endpoints (Device Token auth)
 
@@ -58,9 +58,9 @@ without updating `docs/design.md` first.
 | `GET` | `/v1/kiosk/range/lanes` | Return current lane occupancy for the device's own range (resolved from Device Token `range_id`) |
 | `POST` | `/v1/kiosk/check-in` | Validate QR token → check `training_level`, waiver, dues, guest count, lane availability → assign lane or insert wait list entry → write `Range-Checkin` to `activity_logs` |
 | `POST` | `/v1/kiosk/check-out` | Validate open check-in → clear lane → write `Range-Checkout` → advance wait list; publish SNS SMS if next member has `mobile_phone` |
-| `POST` | `/v1/kiosk/consumable-purchase` | Cash / Stripe Terminal payment → write line items to `consumable_purchases` |
-| `POST` | `/v1/kiosk/dues` | Kiosk dues payment (Cash, NFC, or Card); Cash writes directly; NFC/Card confirmed by `payment_intent.succeeded` webhook |
-| `POST` | `/v1/kiosk/guest-payment` | Look up or create guest → check waiver and annual limit → Cash / Stripe Terminal payment → write `Guest-Payment` to `activity_logs` |
+| `POST` | `/v1/kiosk/consumable-purchase` | Deferred/unwired until **Webmaster** approval of Stripe readiness (ODQ 29 / Issue #85). |
+| `POST` | `/v1/kiosk/dues` | Deferred/unwired until **Webmaster** approval of Stripe readiness (ODQ 29 / Issue #85). |
+| `POST` | `/v1/kiosk/guest-payment` | Deferred/unwired until **Webmaster** approval of Stripe readiness (ODQ 29 / Issue #85). |
 | `POST` | `/v1/kiosk/waiver` | Receive base64-encoded PDF → upload to `S3_WAIVER_BUCKET` → write `Waiver-Signed` to `activity_logs` with `waiver_s3_key`; member path updates `members.waiver_signed_at`/`waiver_version`; guest path updates `guests.waiver_signed_at`/`waiver_s3_key` |
 
 ### Administrative endpoints (Cognito JWT auth)
