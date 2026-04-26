@@ -144,12 +144,12 @@ A `502 Bad Gateway` on any route means API Gateway cannot reach the Lambda. Chec
 
 ## 7. Temporary desktop token bootstrap (until Admin Portal UI is shipped)
 
-If the Admin Portal UI for device provisioning is not yet available, a Webmaster can bootstrap a temporary test device token directly from a desktop using the API routes.
+If the Admin Portal UI for device provisioning is not yet available, a Webmaster can bootstrap a temporary test device token directly from a desktop using the API routes. Use this only in `dev` for short-lived smoke testing with synthetic device records; routine kiosk provisioning and revocation still belong in the Admin Portal flow above.
 
 1. Acquire a valid Level 6 Cognito ID token and export it as `ADMIN_ID_TOKEN`
 2. Create a pairing code via `POST /v1/admin/devices/pairing-code`
 3. Exchange that code via `POST /v1/devices/pair` to receive `device_token`
-4. Use the token for kiosk route smoke tests, then revoke the device from the Admin Portal when available
+4. Use the token for kiosk route smoke tests, then mark the temporary device row `Revoked` directly in Aurora using the `device_id` returned by step 2; once the Admin Portal device management UI exists, use that UI instead
 
 ```bash
 API_BASE="https://<rest-api-id>.execute-api.us-east-1.amazonaws.com/dev"
@@ -165,6 +165,7 @@ PAIRING_RESPONSE=$(curl -s \
   "$API_BASE/v1/admin/devices/pairing-code")
 
 PAIRING_CODE=$(echo "$PAIRING_RESPONSE" | jq -r '.pairing_code')
+DEVICE_ID=$(echo "$PAIRING_RESPONSE" | jq -r '.device_id')
 
 # 2) Exchange pairing code for device token
 PAIR_RESPONSE=$(curl -s \
@@ -180,6 +181,16 @@ curl -s -o /dev/null -w "%{http_code}" \
   -H "x-device-token: $DEVICE_TOKEN" \
   "$API_BASE/v1/kiosk/range/lanes"
 ```
+
+After smoke testing, revoke the temporary device row directly in Aurora until the Admin Portal device management UI ships:
+
+```sql
+UPDATE devices
+SET status = 'Revoked'
+WHERE id = '<device_id-from-PAIRING_RESPONSE>';
+```
+
+For the shell example above, substitute the value captured in `DEVICE_ID`.
 
 Expected outcomes:
 
