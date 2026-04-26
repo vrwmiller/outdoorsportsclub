@@ -14,7 +14,7 @@ describe("KioskStatusOverlay", () => {
       />,
     );
 
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     expect(screen.getByText("Check-In Confirmed")).toBeInTheDocument();
     expect(screen.getByText("Training level validated")).toBeInTheDocument();
 

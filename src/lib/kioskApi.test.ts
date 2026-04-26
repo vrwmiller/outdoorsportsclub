@@ -5,15 +5,41 @@ import {
 } from "@/lib/kioskApi";
 
 describe("kioskApi", () => {
-  const originalEnv = process.env;
+  const originalApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const originalDeviceToken = process.env.NEXT_PUBLIC_DEVICE_TOKEN;
+  const originalFetch = global.fetch;
 
   beforeEach(() => {
     jest.resetAllMocks();
-    process.env = { ...originalEnv };
+    if (originalApiBaseUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_API_BASE_URL;
+    } else {
+      process.env.NEXT_PUBLIC_API_BASE_URL = originalApiBaseUrl;
+    }
+
+    if (originalDeviceToken === undefined) {
+      delete process.env.NEXT_PUBLIC_DEVICE_TOKEN;
+    } else {
+      process.env.NEXT_PUBLIC_DEVICE_TOKEN = originalDeviceToken;
+    }
+
+    global.fetch = originalFetch;
   });
 
   afterAll(() => {
-    process.env = originalEnv;
+    if (originalApiBaseUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_API_BASE_URL;
+    } else {
+      process.env.NEXT_PUBLIC_API_BASE_URL = originalApiBaseUrl;
+    }
+
+    if (originalDeviceToken === undefined) {
+      delete process.env.NEXT_PUBLIC_DEVICE_TOKEN;
+    } else {
+      process.env.NEXT_PUBLIC_DEVICE_TOKEN = originalDeviceToken;
+    }
+
+    global.fetch = originalFetch;
   });
 
   it("throws when API base URL is missing", async () => {
@@ -82,6 +108,24 @@ describe("kioskApi", () => {
     await expect(getKioskRangeLanes()).rejects.toMatchObject({
       status: 403,
       message: "Device token revoked",
+    });
+  });
+
+  it("maps masked Forbidden auth responses to kiosk pairing guidance", async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "https://example.test";
+    process.env.NEXT_PUBLIC_DEVICE_TOKEN = "device-token-abc";
+
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: "Forbidden" }),
+    });
+
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(getKioskRangeLanes()).rejects.toMatchObject({
+      status: 403,
+      message: "Device token rejected. Re-pair this kiosk device.",
     });
   });
 });
