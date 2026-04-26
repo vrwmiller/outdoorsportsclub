@@ -139,3 +139,50 @@ curl -s -o /dev/null -w "%{http_code}" \
 ```
 
 A `502 Bad Gateway` on any route means API Gateway cannot reach the Lambda. Check that the Lambda `Permission` resource was deployed, then confirm the exact function name in `infra/stacks/lambda.yaml` rather than guessing from the route path — route path segments do not always match the function name directly (for example, `/v1/kiosk/check-in` maps to `osc-kiosk-checkin-<env>` and `/v1/kiosk/check-out` maps to `osc-kiosk-checkout-<env>`). See [ci-deployment-failure.md](ci-deployment-failure.md) for general troubleshooting steps.
+
+---
+
+## 7. Temporary desktop token bootstrap (until Admin Portal UI is shipped)
+
+If the Admin Portal UI for device provisioning is not yet available, a Webmaster can bootstrap a temporary test device token directly from a desktop using the API routes.
+
+1. Acquire a valid Level 6 Cognito ID token and export it as `ADMIN_ID_TOKEN`
+2. Create a pairing code via `POST /v1/admin/devices/pairing-code`
+3. Exchange that code via `POST /v1/devices/pair` to receive `device_token`
+4. Use the token for kiosk route smoke tests, then revoke the device from the Admin Portal when available
+
+```bash
+API_BASE="https://<rest-api-id>.execute-api.us-east-1.amazonaws.com/dev"
+RANGE_ID="<uuid-for-target-range>"
+LOCATION_TAG="Desktop-Temp-Kiosk-$(date +%s)"
+
+# 1) Create pairing code as Level 6 Webmaster
+PAIRING_RESPONSE=$(curl -s \
+  -X POST \
+  -H "Authorization: Bearer $ADMIN_ID_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"location_tag\":\"$LOCATION_TAG\",\"range_id\":\"$RANGE_ID\"}" \
+  "$API_BASE/v1/admin/devices/pairing-code")
+
+PAIRING_CODE=$(echo "$PAIRING_RESPONSE" | jq -r '.pairing_code')
+
+# 2) Exchange pairing code for device token
+PAIR_RESPONSE=$(curl -s \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d "{\"pairing_code\":\"$PAIRING_CODE\"}" \
+  "$API_BASE/v1/devices/pair")
+
+DEVICE_TOKEN=$(echo "$PAIR_RESPONSE" | jq -r '.device_token')
+
+# 3) Example kiosk smoke request with the temporary device token
+curl -s -o /dev/null -w "%{http_code}" \
+  -H "x-device-token: $DEVICE_TOKEN" \
+  "$API_BASE/v1/kiosk/range/lanes"
+```
+
+Expected outcomes:
+
+* `POST /v1/admin/devices/pairing-code` returns `201` with `pairing_code`
+* `POST /v1/devices/pair` returns `200` with `device_token`
+* `GET /v1/kiosk/range/lanes` returns `200` (valid token) or `403` (revoked token)
