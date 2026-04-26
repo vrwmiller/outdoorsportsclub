@@ -197,7 +197,7 @@ def handler(event: dict, context: Any) -> dict:
                 sql=(
                     "INSERT INTO devices "
                     "(location_tag, range_id, status, pairing_code, pairing_code_expires_at) "
-                    "VALUES (:tag, :rid, 'Pending-Pairing', :code, :expires_at::TIMESTAMPTZ) "
+                    "VALUES (:tag, :rid::uuid, 'Pending-Pairing', :code, :expires_at::TIMESTAMPTZ) "
                     "RETURNING id"
                 ),
                 parameters=[
