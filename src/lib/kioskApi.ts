@@ -28,7 +28,7 @@ function getApiBaseUrl(): string {
 function getDeviceToken(override?: string): string {
   const token = override ?? process.env.NEXT_PUBLIC_DEVICE_TOKEN;
   if (!token) {
-    throw new KioskApiError("Device token is not configured.", 401);
+    throw new KioskApiError("Device token is not configured.", 500);
   }
   return token;
 }

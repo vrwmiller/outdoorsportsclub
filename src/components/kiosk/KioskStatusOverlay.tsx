@@ -32,6 +32,7 @@ export default function KioskStatusOverlay({
         <p id={titleId} className="text-5xl font-bold tracking-tight">{title}</p>
         <p id={detailId} className="mt-4 text-2xl opacity-95">{detail}</p>
         <button
+          autoFocus
           type="button"
           onClick={onDismiss}
           className="mt-10 min-h-12 min-w-12 rounded-xl bg-white px-8 py-4 text-xl font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2"

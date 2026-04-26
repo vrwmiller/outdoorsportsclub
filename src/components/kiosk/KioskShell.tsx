@@ -59,11 +59,14 @@ export default function KioskShell() {
 
   const laneSummary = useMemo(() => {
     if (!lanesData) {
-      return { available: 0, occupied: 0 };
+      return { available: 0, occupied: 0, closed: 0 };
     }
 
     const available = lanesData.lanes.filter((lane) => lane.status === "Available").length;
-    return { available, occupied: lanesData.lanes.length - available };
+    const occupied = lanesData.lanes.filter((lane) => lane.status === "Occupied").length;
+    const closed = lanesData.lanes.filter((lane) => lane.status === "Closed").length;
+
+    return { available, occupied, closed };
   }, [lanesData]);
 
   return (
@@ -134,7 +137,7 @@ export default function KioskShell() {
               {lanesData.name} · {lanesData.is_open ? "Open" : "Closed"}
             </p>
             <p className="mt-1 text-sm text-gray-500">
-              {laneSummary.available} available · {laneSummary.occupied} occupied
+              {laneSummary.available} available · {laneSummary.occupied} occupied · {laneSummary.closed} closed
             </p>
 
             <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">

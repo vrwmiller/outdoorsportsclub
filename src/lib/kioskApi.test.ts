@@ -58,7 +58,7 @@ describe("kioskApi", () => {
 
     await expect(fetchKioskJson("/v1/kiosk/range/lanes")).rejects.toMatchObject({
       name: "KioskApiError",
-      status: 401,
+      status: 500,
     });
   });
 

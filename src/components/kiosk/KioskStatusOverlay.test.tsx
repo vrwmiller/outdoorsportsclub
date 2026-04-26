@@ -17,6 +17,7 @@ describe("KioskStatusOverlay", () => {
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
     expect(screen.getByText("Check-In Confirmed")).toBeInTheDocument();
     expect(screen.getByText("Training level validated")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue" })).toHaveFocus();
 
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
