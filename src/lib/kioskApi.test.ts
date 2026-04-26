@@ -104,10 +104,49 @@ describe("kioskApi", () => {
 
     global.fetch = fetchMock as unknown as typeof fetch;
 
-    await expect(getKioskRangeLanes()).rejects.toBeInstanceOf(KioskApiError);
-    await expect(getKioskRangeLanes()).rejects.toMatchObject({
+    const request = getKioskRangeLanes();
+
+    await expect(request).rejects.toBeInstanceOf(KioskApiError);
+    await expect(request).rejects.toMatchObject({
       status: 403,
       message: "Device token revoked",
+    });
+  });
+
+  it("normalizes URL construction when API base URL has a trailing slash", async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "https://example.test/";
+    process.env.NEXT_PUBLIC_DEVICE_TOKEN = "device-token-abc";
+
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ range_id: "r1", name: "Rifle-Pistol", is_open: true, lanes: [] }),
+    });
+
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await getKioskRangeLanes();
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://example.test/v1/kiosk/range/lanes");
+  });
+
+  it("maps timed-out requests to a timeout kiosk error", async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "https://example.test";
+    process.env.NEXT_PUBLIC_DEVICE_TOKEN = "device-token-abc";
+
+    const fetchMock = jest.fn().mockImplementation((_: string, init?: RequestInit) =>
+      new Promise((_, reject) => {
+        const signal = init?.signal;
+        signal?.addEventListener("abort", () => {
+          reject(new DOMException("The operation was aborted.", "AbortError"));
+        });
+      }));
+
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(fetchKioskJson("/v1/kiosk/range/lanes", { timeoutMs: 1 })).rejects.toMatchObject({
+      status: 504,
+      message: "Kiosk request timed out. Please try again.",
     });
   });
 

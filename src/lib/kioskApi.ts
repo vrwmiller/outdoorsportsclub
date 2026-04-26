@@ -1,10 +1,12 @@
 import type { KioskRangeLanesResponse } from "@/types/api";
 
 const DEVICE_TOKEN_HEADER = "x-device-token";
+const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 
 interface KioskRequestOptions extends Omit<RequestInit, "headers"> {
   deviceTokenOverride?: string;
   headers?: HeadersInit;
+  timeoutMs?: number;
 }
 
 export class KioskApiError extends Error {
@@ -12,6 +14,7 @@ export class KioskApiError extends Error {
 
   constructor(message: string, status: number) {
     super(message);
+    Object.setPrototypeOf(this, new.target.prototype);
     this.name = "KioskApiError";
     this.status = status;
   }
@@ -48,22 +51,46 @@ export async function fetchKioskJson<T>(
 ): Promise<T> {
   const apiBase = getApiBaseUrl();
   const deviceToken = getDeviceToken(options.deviceTokenOverride);
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
   const headers = new Headers(options.headers);
   headers.set(DEVICE_TOKEN_HEADER, deviceToken);
   headers.set("Accept", "application/json");
 
-  if (options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
+  const { deviceTokenOverride: _, headers: __, timeoutMs: ___, ...fetchInit } = options;
+  const timeoutController = new AbortController();
+  let didTimeout = false;
+
+  const timeoutId = setTimeout(() => {
+    didTimeout = true;
+    timeoutController.abort();
+  }, timeoutMs);
+
+  if (fetchInit.signal) {
+    fetchInit.signal.addEventListener("abort", () => timeoutController.abort(), { once: true });
   }
 
-  const { deviceTokenOverride: _, headers: __, ...fetchInit } = options;
+  let response: Response;
 
-  const response = await fetch(`${apiBase}${path}`, {
-    ...fetchInit,
-    headers,
-    cache: "no-store",
-  });
+  try {
+    response = await fetch(new URL(path, apiBase).toString(), {
+      ...fetchInit,
+      headers,
+      cache: "no-store",
+      signal: timeoutController.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      const status = didTimeout ? 504 : 499;
+      const message = didTimeout
+        ? "Kiosk request timed out. Please try again."
+        : "Kiosk request was cancelled.";
+      throw new KioskApiError(message, status);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const bodyError = await parseErrorBody(response);

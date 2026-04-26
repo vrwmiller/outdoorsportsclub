@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+
 interface KioskStatusOverlayProps {
   variant: "success" | "denied";
   title: string;
@@ -13,8 +15,8 @@ export default function KioskStatusOverlay({
   detail,
   onDismiss,
 }: KioskStatusOverlayProps) {
-  const titleId = "kiosk-status-overlay-title";
-  const detailId = "kiosk-status-overlay-detail";
+  const titleId = useId();
+  const detailId = useId();
   const theme =
     variant === "success"
       ? "bg-green-700 text-white"
