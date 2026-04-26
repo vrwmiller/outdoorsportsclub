@@ -36,10 +36,9 @@ export interface MemberProfile {
 export interface KioskRangeLane {
   lane_id: string;
   lane_number: number;
-  status: "Available" | "Occupied" | string;
-  current_member_id: string | null;
+  status: "Available" | "Occupied" | "Closed";
   member_num: string | null;
-  guest_count: number | null;
+  guest_count: number;
   checked_in_at: string | null;
 }
 

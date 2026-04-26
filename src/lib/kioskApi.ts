@@ -65,8 +65,15 @@ export async function fetchKioskJson<T>(
 
   if (!response.ok) {
     const bodyError = await parseErrorBody(response);
+    const isKioskAuthForbidden =
+      response.status === 403 && (!bodyError || bodyError === "Forbidden");
+
+    const message = isKioskAuthForbidden
+      ? "Device token rejected. Re-pair this kiosk device."
+      : (bodyError ?? `Kiosk request failed (${response.status}).`);
+
     throw new KioskApiError(
-      bodyError ?? `Kiosk request failed (${response.status}).`,
+      message,
       response.status,
     );
   }

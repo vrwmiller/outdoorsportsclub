@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { KioskRangeLanesResponse } from "@/types/api";
 import { KioskApiError, getKioskRangeLanes } from "@/lib/kioskApi";
@@ -26,23 +26,36 @@ export default function KioskShell() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [overlay, setOverlay] = useState<OverlayState>(null);
+  const requestSequence = useRef<number>(0);
+  const showPreviewControls = process.env.NEXT_PUBLIC_KIOSK_ENABLE_PREVIEW_OVERLAY === "true";
 
   const loadLanes = useCallback(async () => {
+    if (isLoading) {
+      return;
+    }
+
+    const requestId = ++requestSequence.current;
     setIsLoading(true);
     setError(null);
     try {
       const data = await getKioskRangeLanes();
-      setLanesData(data);
+      if (requestId === requestSequence.current) {
+        setLanesData(data);
+      }
     } catch (err) {
-      if (err instanceof KioskApiError) {
-        setError(err.message);
-      } else {
-        setError("Could not load kiosk range lanes. Please try again.");
+      if (requestId === requestSequence.current) {
+        if (err instanceof KioskApiError) {
+          setError(err.message);
+        } else {
+          setError("Could not load kiosk range lanes. Please try again.");
+        }
       }
     } finally {
-      setIsLoading(false);
+      if (requestId === requestSequence.current) {
+        setIsLoading(false);
+      }
     }
-  }, []);
+  }, [isLoading]);
 
   const laneSummary = useMemo(() => {
     if (!lanesData) {
@@ -67,39 +80,44 @@ export default function KioskShell() {
         <button
           type="button"
           onClick={loadLanes}
-          className="min-h-12 min-w-12 rounded-xl bg-green-700 px-4 py-3 text-xl font-semibold text-white hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-600"
+          disabled={isLoading}
+          className="min-h-12 min-w-12 rounded-xl bg-green-700 px-4 py-3 text-2xl font-semibold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-70 focus:outline-none focus:ring-2 focus:ring-green-600"
         >
           {isLoading ? "Loading..." : "Refresh Range Lanes"}
         </button>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              setOverlay({
-                variant: "success",
-                title: "Check-In Confirmed",
-                detail: "Training level validated. Lane assignment complete.",
-              })
-            }
-            className="min-h-12 min-w-12 rounded-xl bg-gray-100 px-3 py-3 text-base font-semibold text-gray-900 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-green-600"
-          >
-            Preview Success
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              setOverlay({
-                variant: "denied",
-                title: "Check-In Denied",
-                detail: "Level 3 Required",
-              })
-            }
-            className="min-h-12 min-w-12 rounded-xl bg-gray-100 px-3 py-3 text-base font-semibold text-gray-900 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-green-600"
-          >
-            Preview Denied
-          </button>
-        </div>
+        {showPreviewControls ? (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setOverlay({
+                  variant: "success",
+                  title: "Check-In Confirmed",
+                  detail: "Training level validated. Lane assignment complete.",
+                })
+              }
+              className="min-h-12 min-w-12 rounded-xl bg-gray-100 px-3 py-3 text-base font-semibold text-gray-900 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-green-600"
+            >
+              Preview Success
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setOverlay({
+                  variant: "denied",
+                  title: "Check-In Denied",
+                  detail: "Level 3 Required",
+                })
+              }
+              className="min-h-12 min-w-12 rounded-xl bg-gray-100 px-3 py-3 text-base font-semibold text-gray-900 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-green-600"
+            >
+              Preview Denied
+            </button>
+          </div>
+        ) : (
+          <div />
+        )}
       </section>
 
       {error ? (
