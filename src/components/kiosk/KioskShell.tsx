@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import type { KioskRangeLanesResponse } from "@/types/api";
+import type { KioskRangeLane, KioskRangeLanesResponse } from "@/types/api";
 import { KioskApiError, getKioskRangeLanes } from "@/lib/kioskApi";
 import KioskStatusOverlay from "@/components/kiosk/KioskStatusOverlay";
 
@@ -14,7 +14,7 @@ type OverlayState =
     }
   | null;
 
-function laneStatusClass(status: string): string {
+function laneStatusClass(status: KioskRangeLane["status"]): string {
   if (status === "Available") {
     return "bg-green-100 text-green-900";
   }
@@ -147,7 +147,7 @@ export default function KioskShell() {
                     </span>
                   </div>
                   <p className="mt-2 text-sm text-gray-600">
-                    Member: {lane.member_num ?? "-"} · Guests: {lane.guest_count ?? 0}
+                    Member: {lane.member_num ?? "-"} · Guests: {lane.guest_count}
                   </p>
                 </li>
               ))}

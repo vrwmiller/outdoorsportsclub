@@ -57,8 +57,10 @@ export async function fetchKioskJson<T>(
     headers.set("Content-Type", "application/json");
   }
 
+  const { deviceTokenOverride: _, headers: __, ...fetchInit } = options;
+
   const response = await fetch(`${apiBase}${path}`, {
-    ...options,
+    ...fetchInit,
     headers,
     cache: "no-store",
   });
