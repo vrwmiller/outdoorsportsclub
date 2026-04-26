@@ -22,7 +22,7 @@ Parameters:
 
   DeploymentVersion:
     Type: String
-    Default: "2"
+    Default: "3"
     Description: >-
       Increment this value to force a new API Gateway deployment when method or
       integration changes would not otherwise cause CloudFormation to replace
@@ -258,6 +258,88 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/v1/devices/pair"
+
+  # ---------------------------------------------------------------------------
+  # Resources — /v1/admin/devices/pairing-code
+  # ---------------------------------------------------------------------------
+  AdminResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref V1Resource
+      PathPart: admin
+
+  AdminDevicesResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref AdminResource
+      PathPart: devices
+
+  AdminDevicesPairingCodeResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !Ref AdminDevicesResource
+      PathPart: pairing-code
+
+  # ---------------------------------------------------------------------------
+  # POST /v1/admin/devices/pairing-code — Cognito auth, Lambda proxy
+  # ---------------------------------------------------------------------------
+  AdminDevicesPairingCodePostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref AdminDevicesPairingCodeResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref CognitoAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:osc-admin-devices-pairing-code-${Environment}/invocations"
+          - {}
+
+  # ---------------------------------------------------------------------------
+  # OPTIONS /v1/admin/devices/pairing-code — CORS preflight, no auth
+  # ---------------------------------------------------------------------------
+  AdminDevicesPairingCodeOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref AdminDevicesPairingCodeResource
+      HttpMethod: OPTIONS
+      AuthorizationType: NONE
+      Integration:
+        Type: MOCK
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: "200"
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: !Sub "'${CorsAllowOrigin}'"
+            ResponseTemplates:
+              application/json: "{}"
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  # ---------------------------------------------------------------------------
+  # Lambda permission — allow API Gateway to invoke admin devices-pairing-code
+  # ---------------------------------------------------------------------------
+  AdminDevicesPairingCodePostPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub "osc-admin-devices-pairing-code-${Environment}"
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/POST/v1/admin/devices/pairing-code"
 
   # ===========================================================================
   # Kiosk routes — /v1/kiosk/**
@@ -606,6 +688,9 @@ Resources:
       - MemberMeOptionsMethod
       - DevicesPairPostMethod
       - DevicesPairOptionsMethod
+      - AdminDevicesPairingCodePostMethod
+      - AdminDevicesPairingCodeOptionsMethod
+      - AdminDevicesPairingCodePostPermission
       - KioskCheckInPostMethod
       - KioskCheckInOptionsMethod
       - KioskCheckInPostPermission
@@ -623,7 +708,7 @@ Resources:
       - KioskWaitListEntryDeletePermission
     Properties:
       RestApiId: !Ref RestApi
-      Description: !Sub "v${DeploymentVersion} — GET /v1/members/me, POST /v1/devices/pair, kiosk check-in/check-out/waiver/range-lanes/waitlist-cancel (${Environment})"
+      Description: !Sub "v${DeploymentVersion} — GET /v1/members/me, POST /v1/devices/pair, POST /v1/admin/devices/pairing-code, kiosk check-in/check-out/waiver/range-lanes/waitlist-cancel (${Environment})"
 
   ApiStage:
     Type: AWS::ApiGateway::Stage
