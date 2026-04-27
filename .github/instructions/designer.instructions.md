@@ -61,7 +61,7 @@ Use these tokens consistently across all surfaces:
 ## API Wiring
 
 * All API base URLs come from `process.env.NEXT_PUBLIC_API_BASE_URL` — never hardcoded
-* Device Token for kiosk requests comes from `process.env.NEXT_PUBLIC_DEVICE_TOKEN` — never embedded in source
+* Device Token for kiosk requests must come from per-device runtime provisioning and be stored in an httpOnly cookie; frontend calls must go through a Next.js route handler proxy that injects `x-device-token` server-side
 * Every `fetch` / API call must handle three states: **loading**, **success**, and **error**
 * Display a user-visible error message (not just a console log) on every failure path
 * Use the endpoint contracts defined in `docs/design.md` Section 7 exactly — do not invent new routes
