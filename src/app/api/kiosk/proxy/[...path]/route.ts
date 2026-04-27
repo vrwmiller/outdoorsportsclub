@@ -4,6 +4,7 @@ import { KIOSK_DEVICE_TOKEN_COOKIE, getKioskApiBaseUrl } from "@/lib/kioskSessio
 
 const DEVICE_TOKEN_HEADER = "x-device-token";
 const KIOSK_ROUTE_PREFIX = ["v1", "kiosk"];
+const KIOSK_PATHNAME_PREFIX = "/v1/kiosk";
 
 function isAllowedKioskPath(pathSegments: string[]): boolean {
   if (pathSegments.length < KIOSK_ROUTE_PREFIX.length) {
@@ -11,6 +12,14 @@ function isAllowedKioskPath(pathSegments: string[]): boolean {
   }
 
   return KIOSK_ROUTE_PREFIX.every((segment, index) => pathSegments[index] === segment);
+}
+
+function hasSafePathSegments(pathSegments: string[]): boolean {
+  return pathSegments.every((segment) => segment !== "" && segment !== "." && segment !== "..");
+}
+
+function isAllowedUpstreamPathname(pathname: string): boolean {
+  return pathname === KIOSK_PATHNAME_PREFIX || pathname.startsWith(`${KIOSK_PATHNAME_PREFIX}/`);
 }
 
 function buildUpstreamUrl(pathSegments: string[]): string {
@@ -34,6 +43,9 @@ export async function GET(
   if (!path || path.length === 0) {
     return NextResponse.json({ error: "Proxy path is required." }, { status: 400 });
   }
+  if (!hasSafePathSegments(path)) {
+    return NextResponse.json({ error: "Proxy path is invalid." }, { status: 400 });
+  }
   if (!isAllowedKioskPath(path)) {
     return NextResponse.json({ error: "Proxy path is not allowed." }, { status: 403 });
   }
@@ -49,6 +61,9 @@ export async function GET(
   }
   const requestUrl = new URL(request.url);
   upstreamUrl.search = requestUrl.search;
+  if (!isAllowedUpstreamPathname(upstreamUrl.pathname)) {
+    return NextResponse.json({ error: "Proxy path is not allowed." }, { status: 403 });
+  }
 
   const upstreamHeaders = new Headers({
     Accept: "application/json",

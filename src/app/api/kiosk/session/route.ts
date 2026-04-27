@@ -12,8 +12,24 @@ const KIOSK_COOKIE_PATH = "/api/kiosk";
 function isSameOriginRequest(request: Request): boolean {
   const requestOrigin = new URL(request.url).origin;
   const originHeader = request.headers.get("origin");
-  if (originHeader && originHeader !== requestOrigin) {
-    return false;
+  if (originHeader) {
+    if (originHeader !== requestOrigin) {
+      return false;
+    }
+  } else {
+    const refererHeader = request.headers.get("referer");
+    if (!refererHeader) {
+      return false;
+    }
+    let refererOrigin: string;
+    try {
+      refererOrigin = new URL(refererHeader).origin;
+    } catch {
+      return false;
+    }
+    if (refererOrigin !== requestOrigin) {
+      return false;
+    }
   }
 
   const fetchSite = request.headers.get("sec-fetch-site");
