@@ -38,7 +38,15 @@ export async function GET(
     return NextResponse.json({ error: "Proxy path is not allowed." }, { status: 403 });
   }
 
-  const upstreamUrl = new URL(buildUpstreamUrl(path));
+  let upstreamUrl: URL;
+  try {
+    upstreamUrl = new URL(buildUpstreamUrl(path));
+  } catch {
+    return NextResponse.json(
+      { error: "Kiosk API base URL is not configured." },
+      { status: 500 },
+    );
+  }
   const requestUrl = new URL(request.url);
   upstreamUrl.search = requestUrl.search;
 
