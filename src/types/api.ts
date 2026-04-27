@@ -32,3 +32,20 @@ export interface MemberProfile {
   notify_sms: boolean;
   notify_push: boolean;
 }
+
+export interface KioskRangeLane {
+  lane_id: string;
+  lane_number: number;
+  status: "Available" | "Occupied" | "Closed";
+  member_num: string | null;
+  guest_count: number;
+  checked_in_at: string | null;
+}
+
+/** Response shape of GET /v1/kiosk/range/lanes */
+export interface KioskRangeLanesResponse {
+  range_id: string;
+  name: string;
+  is_open: boolean;
+  lanes: KioskRangeLane[];
+}
