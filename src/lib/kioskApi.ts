@@ -1,10 +1,9 @@
 import type { KioskRangeLanesResponse } from "@/types/api";
 
-const DEVICE_TOKEN_HEADER = "x-device-token";
+const KIOSK_PROXY_BASE_PATH = "/api/kiosk/proxy";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 
 interface KioskRequestOptions extends Omit<RequestInit, "headers"> {
-  deviceTokenOverride?: string;
   headers?: HeadersInit;
   timeoutMs?: number;
 }
@@ -20,27 +19,9 @@ export class KioskApiError extends Error {
   }
 }
 
-function getApiBaseUrl(): string {
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!apiBase) {
-    throw new KioskApiError("API base URL is not configured.", 500);
-  }
-  return apiBase;
-}
-
-function buildRequestUrl(apiBase: string, path: string): string {
-  const normalizedBase = apiBase.endsWith("/") ? apiBase.slice(0, -1) : apiBase;
-  const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
-
-  return `${normalizedBase}/${normalizedPath}`;
-}
-
-function getDeviceToken(override?: string): string {
-  const token = override ?? process.env.NEXT_PUBLIC_DEVICE_TOKEN;
-  if (!token) {
-    throw new KioskApiError("Device token is not configured.", 500);
-  }
-  return token;
+function buildProxyPath(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${KIOSK_PROXY_BASE_PATH}${normalizedPath}`;
 }
 
 async function parseErrorBody(response: Response): Promise<string | null> {
@@ -56,15 +37,12 @@ export async function fetchKioskJson<T>(
   path: string,
   options: KioskRequestOptions = {},
 ): Promise<T> {
-  const apiBase = getApiBaseUrl();
-  const deviceToken = getDeviceToken(options.deviceTokenOverride);
   const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
 
   const headers = new Headers(options.headers);
-  headers.set(DEVICE_TOKEN_HEADER, deviceToken);
   headers.set("Accept", "application/json");
 
-  const { deviceTokenOverride: _, headers: __, timeoutMs: ___, ...fetchInit } = options;
+  const { headers: _, timeoutMs: __, ...fetchInit } = options;
   const timeoutController = new AbortController();
   let didTimeout = false;
 
@@ -83,7 +61,7 @@ export async function fetchKioskJson<T>(
   let response: Response;
 
   try {
-    response = await fetch(buildRequestUrl(apiBase, path), {
+    response = await fetch(buildProxyPath(path), {
       ...fetchInit,
       headers,
       cache: "no-store",
@@ -120,11 +98,8 @@ export async function fetchKioskJson<T>(
   return (await response.json()) as T;
 }
 
-export async function getKioskRangeLanes(
-  deviceTokenOverride?: string,
-): Promise<KioskRangeLanesResponse> {
+export async function getKioskRangeLanes(): Promise<KioskRangeLanesResponse> {
   return fetchKioskJson<KioskRangeLanesResponse>("/v1/kiosk/range/lanes", {
     method: "GET",
-    deviceTokenOverride,
   });
 }
