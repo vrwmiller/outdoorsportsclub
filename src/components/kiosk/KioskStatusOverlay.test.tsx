@@ -29,11 +29,12 @@ describe("KioskStatusOverlay", () => {
         variant="denied"
         title="Check-In Denied"
         detail="Level 3 Required"
-        onDismiss={() => {}}
       />,
     );
 
     expect(screen.getByText("Check-In Denied")).toBeInTheDocument();
     expect(screen.getByText("Level 3 Required")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
+    expect(screen.getByText("Awaiting RSO authentication")).toBeInTheDocument();
   });
 });
