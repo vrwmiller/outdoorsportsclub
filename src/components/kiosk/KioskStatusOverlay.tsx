@@ -17,6 +17,7 @@ type KioskStatusOverlayProps =
 
 export default function KioskStatusOverlay(props: KioskStatusOverlayProps) {
   const { variant, title, detail } = props;
+  const isModal = variant === "success";
   const titleId = useId();
   const detailId = useId();
   const theme =
@@ -27,10 +28,11 @@ export default function KioskStatusOverlay(props: KioskStatusOverlayProps) {
   return (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center p-6 ${theme}`}
-      role="alertdialog"
-      aria-modal="true"
+      role={isModal ? "alertdialog" : "alert"}
+      aria-modal={isModal ? "true" : undefined}
       aria-labelledby={titleId}
       aria-describedby={detailId}
+      aria-live={isModal ? undefined : "assertive"}
     >
       <div className="w-full max-w-2xl text-center">
         <p id={titleId} className="text-5xl font-bold tracking-tight">{title}</p>

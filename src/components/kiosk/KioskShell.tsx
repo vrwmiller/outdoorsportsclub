@@ -31,13 +31,15 @@ export default function KioskShell() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [overlay, setOverlay] = useState<OverlayState>(null);
+  const inFlightRequest = useRef<boolean>(false);
   const requestSequence = useRef<number>(0);
   const showPreviewControls = process.env.NEXT_PUBLIC_KIOSK_ENABLE_PREVIEW_OVERLAY === "true";
 
   const loadLanes = useCallback(async () => {
-    if (isLoading) {
+    if (inFlightRequest.current) {
       return;
     }
+    inFlightRequest.current = true;
 
     const requestId = ++requestSequence.current;
     setIsLoading(true);
@@ -59,8 +61,9 @@ export default function KioskShell() {
       if (requestId === requestSequence.current) {
         setIsLoading(false);
       }
+      inFlightRequest.current = false;
     }
-  }, [isLoading]);
+  }, []);
 
   const laneSummary = useMemo(() => {
     if (!lanesData) {
