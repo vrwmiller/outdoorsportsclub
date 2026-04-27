@@ -8,7 +8,12 @@ import KioskStatusOverlay from "@/components/kiosk/KioskStatusOverlay";
 
 type OverlayState =
   | {
-      variant: "success" | "denied";
+      variant: "success";
+      title: string;
+      detail: string;
+    }
+  | {
+      variant: "denied";
       title: string;
       detail: string;
     }
@@ -191,12 +196,20 @@ export default function KioskShell() {
       </nav>
 
       {overlay ? (
-        <KioskStatusOverlay
-          variant={overlay.variant}
-          title={overlay.title}
-          detail={overlay.detail}
-          onDismiss={() => setOverlay(null)}
-        />
+        overlay.variant === "success" ? (
+          <KioskStatusOverlay
+            variant={overlay.variant}
+            title={overlay.title}
+            detail={overlay.detail}
+            onDismiss={() => setOverlay(null)}
+          />
+        ) : (
+          <KioskStatusOverlay
+            variant={overlay.variant}
+            title={overlay.title}
+            detail={overlay.detail}
+          />
+        )
       ) : null}
     </main>
   );
