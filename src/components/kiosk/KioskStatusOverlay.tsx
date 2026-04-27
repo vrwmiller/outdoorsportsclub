@@ -2,19 +2,21 @@
 
 import { useId } from "react";
 
-interface KioskStatusOverlayProps {
-  variant: "success" | "denied";
-  title: string;
-  detail: string;
-  onDismiss?: () => void;
-}
+type KioskStatusOverlayProps =
+  | {
+      variant: "success";
+      title: string;
+      detail: string;
+      onDismiss: () => void;
+    }
+  | {
+      variant: "denied";
+      title: string;
+      detail: string;
+    };
 
-export default function KioskStatusOverlay({
-  variant,
-  title,
-  detail,
-  onDismiss,
-}: KioskStatusOverlayProps) {
+export default function KioskStatusOverlay(props: KioskStatusOverlayProps) {
+  const { variant, title, detail } = props;
   const titleId = useId();
   const detailId = useId();
   const theme =
@@ -33,11 +35,11 @@ export default function KioskStatusOverlay({
       <div className="w-full max-w-2xl text-center">
         <p id={titleId} className="text-5xl font-bold tracking-tight">{title}</p>
         <p id={detailId} className="mt-4 text-2xl opacity-95">{detail}</p>
-        {variant === "success" ? (
+        {props.variant === "success" ? (
           <button
             autoFocus
             type="button"
-            onClick={onDismiss}
+            onClick={props.onDismiss}
             className="mt-10 min-h-12 min-w-12 rounded-xl bg-white px-8 py-4 text-xl font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2"
           >
             Continue
