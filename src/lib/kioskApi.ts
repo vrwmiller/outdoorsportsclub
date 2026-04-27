@@ -28,6 +28,13 @@ function getApiBaseUrl(): string {
   return apiBase;
 }
 
+function buildRequestUrl(apiBase: string, path: string): string {
+  const normalizedBase = apiBase.endsWith("/") ? apiBase.slice(0, -1) : apiBase;
+  const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
+
+  return `${normalizedBase}/${normalizedPath}`;
+}
+
 function getDeviceToken(override?: string): string {
   const token = override ?? process.env.NEXT_PUBLIC_DEVICE_TOKEN;
   if (!token) {
@@ -67,13 +74,16 @@ export async function fetchKioskJson<T>(
   }, timeoutMs);
 
   if (fetchInit.signal) {
+    if (fetchInit.signal.aborted) {
+      timeoutController.abort();
+    }
     fetchInit.signal.addEventListener("abort", () => timeoutController.abort(), { once: true });
   }
 
   let response: Response;
 
   try {
-    response = await fetch(new URL(path, apiBase).toString(), {
+    response = await fetch(buildRequestUrl(apiBase, path), {
       ...fetchInit,
       headers,
       cache: "no-store",

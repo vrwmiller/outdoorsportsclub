@@ -130,6 +130,23 @@ describe("kioskApi", () => {
     expect(url).toBe("https://example.test/v1/kiosk/range/lanes");
   });
 
+  it("preserves API Gateway stage segments in the configured base URL", async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "https://example.test/prod";
+    process.env.NEXT_PUBLIC_DEVICE_TOKEN = "device-token-abc";
+
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ range_id: "r1", name: "Rifle-Pistol", is_open: true, lanes: [] }),
+    });
+
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await getKioskRangeLanes();
+
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://example.test/prod/v1/kiosk/range/lanes");
+  });
+
   it("maps timed-out requests to a timeout kiosk error", async () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://example.test";
     process.env.NEXT_PUBLIC_DEVICE_TOKEN = "device-token-abc";
@@ -147,6 +164,25 @@ describe("kioskApi", () => {
     await expect(fetchKioskJson("/v1/kiosk/range/lanes", { timeoutMs: 1 })).rejects.toMatchObject({
       status: 504,
       message: "Kiosk request timed out. Please try again.",
+    });
+  });
+
+  it("honors an already-aborted caller signal before starting the request", async () => {
+    process.env.NEXT_PUBLIC_API_BASE_URL = "https://example.test";
+    process.env.NEXT_PUBLIC_DEVICE_TOKEN = "device-token-abc";
+
+    const controller = new AbortController();
+    controller.abort();
+
+    const fetchMock = jest.fn().mockRejectedValue(
+      new DOMException("The operation was aborted.", "AbortError"),
+    );
+
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await expect(fetchKioskJson("/v1/kiosk/range/lanes", { signal: controller.signal })).rejects.toMatchObject({
+      status: 499,
+      message: "Kiosk request was cancelled.",
     });
   });
 
