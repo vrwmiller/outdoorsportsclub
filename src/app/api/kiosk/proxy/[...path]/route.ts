@@ -25,8 +25,8 @@ export async function GET(
   const token = (await cookies()).get(KIOSK_DEVICE_TOKEN_COOKIE)?.value;
   if (!token) {
     return NextResponse.json(
-      { error: "Kiosk device token is not configured. Pair this kiosk device first." },
-      { status: 401 },
+      { error: "Forbidden" },
+      { status: 403 },
     );
   }
 

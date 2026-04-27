@@ -75,20 +75,28 @@ describe("kioskApi", () => {
   });
 
   it("maps timed-out requests to a timeout kiosk error", async () => {
-    const fetchMock = jest.fn().mockImplementation((_: string, init?: RequestInit) =>
-      new Promise((_, reject) => {
-        const signal = init?.signal;
-        signal?.addEventListener("abort", () => {
-          reject(new DOMException("The operation was aborted.", "AbortError"));
-        });
-      }));
+    jest.useFakeTimers();
+    try {
+      const fetchMock = jest.fn().mockImplementation((_: string, init?: RequestInit) =>
+        new Promise((_, reject) => {
+          const signal = init?.signal;
+          signal?.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted.", "AbortError"));
+          });
+        }));
 
-    global.fetch = fetchMock as unknown as typeof fetch;
+      global.fetch = fetchMock as unknown as typeof fetch;
 
-    await expect(fetchKioskJson("/v1/kiosk/range/lanes", { timeoutMs: 1 })).rejects.toMatchObject({
-      status: 504,
-      message: "Kiosk request timed out. Please try again.",
-    });
+      const request = fetchKioskJson("/v1/kiosk/range/lanes", { timeoutMs: 1000 });
+      jest.advanceTimersByTime(1000);
+
+      await expect(request).rejects.toMatchObject({
+        status: 504,
+        message: "Kiosk request timed out. Please try again.",
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("honors an already-aborted caller signal before starting the request", async () => {
