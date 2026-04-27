@@ -11,7 +11,6 @@ describe("kioskApi", () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-    localStorage.clear();
     if (originalApiBaseUrl === undefined) {
       delete process.env.NEXT_PUBLIC_API_BASE_URL;
     } else {

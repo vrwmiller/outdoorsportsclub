@@ -3,13 +3,6 @@ import type { KioskRangeLanesResponse } from "@/types/api";
 const DEVICE_TOKEN_HEADER = "x-device-token";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 
-/**
- * localStorage key where the pairing flow stores the per-device token after
- * POST /v1/devices/pair completes. Import this in the pairing flow to ensure
- * both sides use the same key.
- */
-export const DEVICE_TOKEN_STORAGE_KEY = "kiosk_device_token";
-
 interface KioskRequestOptions extends Omit<RequestInit, "headers"> {
   deviceTokenOverride?: string;
   headers?: HeadersInit;
@@ -43,11 +36,7 @@ function buildRequestUrl(apiBase: string, path: string): string {
 }
 
 function getDeviceToken(override?: string): string {
-  const storedToken =
-    typeof window !== "undefined"
-      ? (localStorage.getItem(DEVICE_TOKEN_STORAGE_KEY) ?? undefined)
-      : undefined;
-  const token = override ?? storedToken ?? process.env.NEXT_PUBLIC_DEVICE_TOKEN;
+  const token = override ?? process.env.NEXT_PUBLIC_DEVICE_TOKEN;
   if (!token) {
     throw new KioskApiError("Device token is not configured.", 500);
   }
